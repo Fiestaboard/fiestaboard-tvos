@@ -17,12 +17,15 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
     /// Confirms a candidate host is really a FiestaBoard. Injectable so tests
     /// and previews can skip the network.
     private let probe: @Sendable (URL) async -> Bool
+    private let browseServices: Bool
 
-    public init(probe: (@Sendable (URL) async -> Bool)? = nil) {
+    public init(probe: (@Sendable (URL) async -> Bool)? = nil,
+                browseServices: Bool = true) {
         self.probe = probe ?? { url in
             // /auth/status is public on every instance and cheap.
             (try? await FiestaClient(baseURL: url).authStatus()) != nil
         }
+        self.browseServices = browseServices
     }
 
     public func boards() -> AsyncStream<[DiscoveredBoard]> {
@@ -34,6 +37,10 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
     }
 
     private func startBrowsing() {
+        guard browseServices else {
+            probeLegacyFiestaPi()
+            return
+        }
         let parameters = NWParameters()
         parameters.includePeerToPeer = false
         let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_http._tcp", domain: nil),
@@ -58,6 +65,18 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
         }
 
         browser.start(queue: queue)
+        probeLegacyFiestaPi()
+    }
+
+    /// Existing FiestaPi images publish fiestapi.local through host Avahi but
+    /// do not publish an HTTP service from their bridge container. Check that
+    /// known hostname when service browsing has not found a FiestaBoard.
+    private func probeLegacyFiestaPi() {
+        queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.continuation != nil, self.found.isEmpty,
+                  let url = URL(string: "http://fiestapi.local:4420") else { return }
+            Task { await self.confirm(url: url, name: "FiestaPi", onlyIfEmpty: true) }
+        }
     }
 
     /// Bonjour gives a service endpoint; a URL needs a hostname and port, so
@@ -106,9 +125,16 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
         }
     }
 
-    private func confirm(url: URL, name: String) async {
+    private func confirm(url: URL, name: String, onlyIfEmpty: Bool = false) async {
         guard await probe(url) else { return }
         queue.async {
+            guard self.continuation != nil else { return }
+            if onlyIfEmpty && !self.found.isEmpty { return }
+            // A newly updated FiestaPi may announce its service after the
+            // hostname fallback appeared. Replace that fallback entry.
+            if name.caseInsensitiveCompare("FiestaBoard on fiestapi") == .orderedSame {
+                self.found.removeValue(forKey: "http://fiestapi.local:4420")
+            }
             let board = DiscoveredBoard(id: url.absoluteString, name: name, host: url)
             guard self.found[board.id] != board else { return }
             self.found[board.id] = board

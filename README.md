@@ -13,7 +13,8 @@ To connect from the simulator, enter the Mac's LAN address and FiestaBoard's
 mapped port in the manual address field, for example `192.168.0.50:4420`.
 The app adds the public `/api` prefix itself. A FiestaBoard running in Docker
 bridge mode may not appear in Bonjour discovery, so use the manual address
-field in that setup.
+field in that setup. Existing FiestaPi images are also checked through their
+`fiestapi.local` host name while newer images advertise a Bonjour HTTP service.
 
 The taco icon and static Top Shelf fallback can be regenerated with
 `swift scripts/generate-brand-assets.swift`. When the app loads the panel list,

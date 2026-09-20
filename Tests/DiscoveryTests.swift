@@ -4,6 +4,24 @@ import XCTest
 
 final class DiscoveryTests: XCTestCase {
 
+    func testDiscoversExistingFiestaPiByItsBonjourHostname() async {
+        let discovery = BonjourDiscovery(probe: { $0.host() == "fiestapi.local" },
+                                         browseServices: false)
+        let found = expectation(description: "FiestaPi hostname is probed during discovery")
+        let stream = Task {
+            for await boards in discovery.boards() {
+                if boards.contains(where: { $0.host.host() == "fiestapi.local" }) {
+                    found.fulfill()
+                    break
+                }
+            }
+        }
+
+        await fulfillment(of: [found], timeout: 5)
+        discovery.stop()
+        stream.cancel()
+    }
+
     private func candidate(name: String = "FiestaBoard",
                            host: String = "fiestaboard.local",
                            port: Int = 4420,
