@@ -8,7 +8,9 @@ final class ViewerModel {
 
     var snapshot: PanelSnapshot = .empty
     var overlayVisible = false
+    var resizeOfferVisible = false
     var sizing: BoardSizing = .fit
+    var boardMissing: Bool { snapshot.panel?.boardMissing == true }
 
     private let app: AppModel
     private let ref: String
@@ -87,4 +89,12 @@ final class ViewerModel {
         // Within 25% is close enough that fit leaves no distracting margin.
         return abs(boardAspect - screenAspect) / screenAspect < 0.25
     }
+
+    func considerResizeOffer(for screen: CGSize) {
+        guard snapshot.panel != nil, !boardMissing, !snapshot.deleted,
+              !gridSuitsScreen(screen), app.offeredResizeRefs.insert(ref).inserted else { return }
+        resizeOfferVisible = true
+    }
+
+    func dismissResizeOffer() { resizeOfferVisible = false }
 }

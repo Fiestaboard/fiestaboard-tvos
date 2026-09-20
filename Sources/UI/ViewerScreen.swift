@@ -19,6 +19,8 @@ struct ViewerScreen: View {
 
                 if model?.snapshot.deleted == true {
                     deletedState
+                } else if model?.boardMissing == true {
+                    missingBoardState
                 } else if let layout = try? model?.layout(for: proxy.size) {
                     BoardCanvas(layout: layout,
                                 background: model?.snapshot.panel?.backgroundColor ?? .black,
@@ -31,6 +33,10 @@ struct ViewerScreen: View {
 
                 if model?.snapshot.connection == .stale { OfflineDot() }
 
+                if model?.resizeOfferVisible == true {
+                    resizeOffer
+                }
+
                 if model?.overlayVisible == true {
                     ViewerOverlay(panelName: model?.snapshot.panel?.name ?? "Panel",
                                   onPanels: { model?.stop(); app.showPanels() },
@@ -40,6 +46,10 @@ struct ViewerScreen: View {
             // Auto-dim uses the TV's own clock, matching the web viewer.
             .opacity(model?.snapshot.dimmed == true ? 0.35 : 1.0)
             .animation(.easeInOut(duration: 1.0), value: model?.snapshot.dimmed)
+            .onChange(of: [model?.snapshot.rows ?? 0, model?.snapshot.cols ?? 0]) { _, _ in
+                model?.considerResizeOffer(for: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, _ in model?.considerResizeOffer(for: proxy.size) }
         }
         .ignoresSafeArea()
         .onAppear {
@@ -68,5 +78,39 @@ struct ViewerScreen: View {
             FiestaButton("Back to panels") { model?.stop(); app.showPanels() }
                 .frame(width: 420)
         }
+    }
+
+    private var missingBoardState: some View {
+        VStack(spacing: 16) {
+            Text("This panel's board is missing")
+                .font(Fiesta.Text.heading)
+                .foregroundStyle(Fiesta.Colors.foreground)
+            Text("Reconnect the board in FiestaBoard, then return to this panel.")
+                .font(Fiesta.Text.body)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
+            FiestaButton("Back to panels") { model?.stop(); app.showPanels() }
+                .frame(width: 420)
+        }
+    }
+
+    private var resizeOffer: some View {
+        VStack(spacing: 18) {
+            Text("This panel's grid doesn't suit this TV")
+                .font(Fiesta.Text.heading)
+                .foregroundStyle(Fiesta.Colors.foreground)
+            Text("You can preview a new grid before resizing the panel.")
+                .font(Fiesta.Text.body)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
+            HStack(spacing: 20) {
+                FiestaButton("Resize for this TV") {
+                    model?.dismissResizeOffer()
+                    model?.stop()
+                    app.showSettings()
+                }
+                FiestaButton("Later") { model?.dismissResizeOffer() }
+            }
+        }
+        .padding(32)
+        .background(Fiesta.Colors.surface)
     }
 }

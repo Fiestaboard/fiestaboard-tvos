@@ -6,34 +6,44 @@ import Observation
 final class SettingsModel {
 
     static let presetDiagonals: [Double] = [32, 43, 50, 55, 65, 75, 85]
+    private static let tvAspectW = 16.0
+    private static let tvAspectH = 9.0
 
     var panels: [Panel] = []
     var isLoading = false
     var errorMessage: String?
     var warningMessage: String?
     var resizeDiagonal: Double = 65
+    var customDiagonalText = ""
     var sizing: BoardSizing = .fit
+    var defaultPanelRef: String?
+    private var calibrations: [String: Double] = [:]
 
     private let app: AppModel
 
     init(app: AppModel) {
         self.app = app
+        defaultPanelRef = app.connection.saved?.defaultPanelRef
         if let raw = UserDefaults.standard.string(forKey: "fiestaboard.sizing"),
            let stored = BoardSizing(rawValue: raw) {
             sizing = stored
         }
     }
 
-    var defaultPanelRef: String? { app.connection.saved?.defaultPanelRef }
-
     var boardName: String { app.connection.saved?.displayName ?? "Not connected" }
 
     var boardAddress: String { app.connection.saved?.host.absoluteString ?? "" }
 
+    private var customDiagonalIsValid: Bool {
+        customDiagonalText.isEmpty || (Double(customDiagonalText).map { $0 > 0 } ?? false)
+    }
+
     /// The grid `resizeDiagonal` would produce, computed locally so the
     /// change can be seen before the server reshapes anything.
     var previewGrid: String {
-        guard let grid = try? BoardGeometry.computeAutofitGrid(diagonal: resizeDiagonal) else {
+        guard customDiagonalIsValid else { return "—" }
+        guard let grid = try? BoardGeometry.computeAutofitGrid(
+            diagonal: resizeDiagonal, aspectW: Self.tvAspectW, aspectH: Self.tvAspectH) else {
             return "—"
         }
         return "\(grid.notesWide * BoardGeometry.noteCols) × \(grid.notesTall * BoardGeometry.noteRows)"
@@ -54,6 +64,7 @@ final class SettingsModel {
 
     func setDefaultPanel(_ ref: String?) {
         app.connection.setDefaultPanel(ref: ref)
+        defaultPanelRef = ref
     }
 
     func setSizing(_ sizing: BoardSizing) {
@@ -61,12 +72,49 @@ final class SettingsModel {
         UserDefaults.standard.set(sizing.rawValue, forKey: "fiestaboard.sizing")
     }
 
+    func selectPreset(_ inches: Double) {
+        resizeDiagonal = inches
+        customDiagonalText = ""
+    }
+
+    func setCustomDiagonal(_ raw: String) {
+        customDiagonalText = raw
+        if let value = Double(raw), value > 0 { resizeDiagonal = value }
+    }
+
+    func calibration(for panel: Panel) -> Double {
+        calibrations[panel.id] ?? min(1.15, max(0.85, panel.calibrationScale))
+    }
+
+    func setCalibration(_ value: Double, for panel: Panel) {
+        calibrations[panel.id] = min(1.15, max(0.85, value))
+    }
+
+    func saveCalibration(panel: Panel) async {
+        errorMessage = nil
+        do {
+            let scale = calibration(for: panel)
+            _ = try await app.connection.authorized {
+                try await $0.updatePanel(id: panel.id, calibration: scale)
+            }
+        } catch FiestaError.unauthorized {
+            app.route = .signIn
+        } catch {
+            errorMessage = "Couldn't save the calibration."
+        }
+    }
+
     func resize(panel: Panel) async {
         errorMessage = nil
         warningMessage = nil
+        guard customDiagonalIsValid else {
+            errorMessage = "Enter a positive screen size in inches."
+            return
+        }
         do {
             let result = try await app.connection.authorized {
-                try await $0.updatePanel(id: panel.id, diagonal: resizeDiagonal)
+                try await $0.updatePanel(id: panel.id, diagonal: resizeDiagonal,
+                                         aspectW: Self.tvAspectW, aspectH: Self.tvAspectH)
             }
             if !result.incompatibleReferences.isEmpty {
                 let count = result.incompatibleReferences.count

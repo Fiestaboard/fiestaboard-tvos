@@ -50,6 +50,17 @@ final class ViewerScreenTests: XCTestCase {
         XCTAssertFalse(model.gridSuitsScreen(screen))
     }
 
+    func testMismatchOfferAppearsOnceForAPortraitPanel() {
+        let model = ViewerModel(app: makeApp(), ref: "1")
+        model.snapshot = snapshot(rows: 21, cols: 15)
+        model.considerResizeOffer(for: screen)
+        XCTAssertTrue(model.resizeOfferVisible)
+
+        model.dismissResizeOffer()
+        model.considerResizeOffer(for: screen)
+        XCTAssertFalse(model.resizeOfferVisible)
+    }
+
     func testNoPanelYetProducesNoLayout() {
         let model = ViewerModel(app: makeApp(), ref: "1")
         model.snapshot = .empty
@@ -85,6 +96,18 @@ final class ViewerScreenTests: XCTestCase {
         let model = ViewerModel(app: app, ref: "1")
         model.snapshot = PanelSnapshot(panel: nil, cells: [], rows: 0, cols: 0,
                                        connection: .live, dimmed: false, deleted: true)
+        RenderHarness.render(ViewerScreen(ref: "1", model: model).environment(app))
+    }
+
+    func testMissingBackingBoardHasAnActionableState() throws {
+        let app = makeApp()
+        let model = ViewerModel(app: app, ref: "1")
+        let json = Fixtures.panelJSON.replacingOccurrences(of: "\"board_missing\":false",
+                                                            with: "\"board_missing\":true")
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(json.utf8))
+        model.snapshot = PanelSnapshot(panel: panel, cells: [], rows: 12, cols: 30,
+                                       connection: .live, dimmed: false, deleted: false)
+        XCTAssertTrue(model.boardMissing)
         RenderHarness.render(ViewerScreen(ref: "1", model: model).environment(app))
     }
 

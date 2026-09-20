@@ -31,6 +31,23 @@ final class BoardCanvasTests: XCTestCase {
         RenderHarness.render(BoardCanvas(layout: layout(cells: grid), background: .black, animated: true))
     }
 
+    func testFlipTransitionShowsBothFacesAtIntermediateTimes() {
+        let started = Date(timeIntervalSince1970: 0)
+        let flip = BoardFlipTransition(from: [.character("A")], to: [.character("B")],
+                                       columns: 1, startedAt: started)
+        let first = flip.sample(index: 0, at: started.addingTimeInterval(0.04))
+        XCTAssertEqual(first.cell, .character("A"))
+        XCTAssertLessThan(first.scaleY, 1)
+
+        let second = flip.sample(index: 0, at: started.addingTimeInterval(0.14))
+        XCTAssertEqual(second.cell, .character("B"))
+        XCTAssertLessThan(second.scaleY, 1)
+
+        let settled = flip.sample(index: 0, at: started.addingTimeInterval(0.30))
+        XCTAssertEqual(settled.cell, .character("B"))
+        XCTAssertEqual(settled.scaleY, 1)
+    }
+
     /// A color tile must paint its pigment across the whole flap. Sampling
     /// the tile centre is what catches a geometry regression that no unit
     /// test on BoardLayout can see.
@@ -47,6 +64,22 @@ final class BoardCanvasTests: XCTestCase {
         XCTAssertEqual(Int(centre.r), 0xeb, accuracy: 12, "red channel")
         XCTAssertEqual(Int(centre.g), 0x40, accuracy: 12, "green channel")
         XCTAssertEqual(Int(centre.b), 0x34, accuracy: 12, "blue channel")
+    }
+
+    func testWhiteHardwareUsesLightFlapsAndInvertsWhiteAndBlackCodes() throws {
+        for (cell, shouldBeLight) in [(BoardCell.blank, true),
+                                      (.color(.white), false),
+                                      (.color(.black), true)] {
+            let board = layout(cells: [[cell]], tileHeight: 200)
+            let image = RenderHarness.image(BoardCanvas(layout: board, background: .white),
+                                            size: CGSize(width: board.width, height: board.height))
+            let pixel = try XCTUnwrap(image.pixel(x: Int(board.width / 2), y: Int(board.height / 2)))
+            if shouldBeLight {
+                XCTAssertGreaterThan(Int(pixel.r), 0xc0)
+            } else {
+                XCTAssertLessThan(Int(pixel.r), 0x60)
+            }
+        }
     }
 
     /// The gutter between two tiles must show the board behind them, which
@@ -75,5 +108,11 @@ final class BoardCanvasTests: XCTestCase {
         for color in BoardColor.allCases {
             XCTAssertFalse(color.hex.isEmpty)
         }
+    }
+
+    func testTheBoardFontRegistersFromTheBundle() {
+        BoardFont.registerIfNeeded()
+        XCTAssertNotNil(UIFont(name: BoardFont.familyName, size: 24),
+                        "Spline Sans Mono must load from the bundle — the system fallback is a degradation, not the target")
     }
 }

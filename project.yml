@@ -21,12 +21,14 @@ targets:
       - path: Sources/UI
       - path: Spec
         type: folder
+      - path: Resources
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: FiestaBoard for Apple TV
         NSLocalNetworkUsageDescription: FiestaBoard finds your board on this network so your TV can show its panels.
         NSBonjourServices: ["_http._tcp"]
+        UIAppFonts: [SplineSansMono.ttf]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:

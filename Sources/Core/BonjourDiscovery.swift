@@ -76,13 +76,7 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
                     connection.cancel()
                     return
                 }
-                let hostString: String
-                switch host {
-                case .name(let n, _): hostString = n
-                case .ipv4(let address): hostString = "\(address)".components(separatedBy: "%").first ?? "\(address)"
-                case .ipv6(let address): hostString = "\(address)".components(separatedBy: "%").first ?? "\(address)"
-                @unknown default: hostString = name
-                }
+                let hostString = Self.hostString(from: host)
                 connection.cancel()
 
                 let candidate = DiscoveryCandidate(name: name,
@@ -99,6 +93,17 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
             }
         }
         connection.start(queue: queue)
+    }
+
+    /// Keep the interface suffix on link-local IPv6 addresses. Without it,
+    /// the URL probe has no route even though Bonjour resolved the service.
+    static func hostString(from host: NWEndpoint.Host) -> String {
+        switch host {
+        case .name(let name, _): return name
+        case .ipv4(let address): return "\(address)"
+        case .ipv6(let address): return "\(address)"
+        @unknown default: return "\(host)"
+        }
     }
 
     private func confirm(url: URL, name: String) async {

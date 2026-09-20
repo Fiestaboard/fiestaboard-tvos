@@ -31,5 +31,9 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>FiestaBoard finds your board on this network so your TV can show its panels.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>SplineSansMono.ttf</string>
+	</array>
 </dict>
 </plist>

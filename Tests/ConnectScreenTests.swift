@@ -109,6 +109,17 @@ final class ConnectScreenTests: XCTestCase {
         RenderHarness.render(SignInScreen().environment(makeApp()))
     }
 
+    func testSignInCanForgetAndChooseAnotherBoard() async throws {
+        let app = makeApp()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        _ = try await app.connection.connect(to: URL(string: "http://board.local:4420")!, displayName: "Old board")
+        app.route = .signIn
+
+        SignInModel(app: app).useAnotherBoard()
+        XCTAssertEqual(app.route, .connect)
+        XCTAssertNil(app.connection.saved)
+    }
+
     func testSignInWithBadCredentialsShowsAnErrorAndStays() async {
         let app = makeApp()
         StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")

@@ -10,6 +10,8 @@ import SwiftUI
 /// per frame change, roughly every two seconds.
 public struct BoardCanvas: View {
 
+    @State private var transition: BoardFlipTransition?
+
     private let layout: BoardLayout
     private let background: BoardColor
     private let animated: Bool
@@ -21,35 +23,79 @@ public struct BoardCanvas: View {
     }
 
     public var body: some View {
-        Canvas(opaque: false, rendersAsynchronously: false) { context, _ in
-            draw(in: &context)
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0,
+                                paused: transition == nil || !animated)) { timeline in
+            Canvas(opaque: false, rendersAsynchronously: false) { context, _ in
+                draw(in: &context, at: timeline.date)
+            }
         }
         .frame(width: layout.width, height: layout.height)
         .background(background.swiftUI)
         // The flip is announced to VoiceOver by the viewer, not per tile:
         // 810 accessibility elements would make the board unusable to browse.
         .accessibilityHidden(true)
-        .animation(animated ? .easeInOut(duration: 0.18) : nil, value: layout.tiles.count)
+        .onChange(of: layout.tiles.map(\.cell)) { old, new in
+            guard animated, old.count == new.count else {
+                transition = nil
+                return
+            }
+            let columns = (layout.tiles.map(\.col).max() ?? -1) + 1
+            transition = BoardFlipTransition(from: old, to: new, columns: columns,
+                                             startedAt: Date())
+        }
+        .task(id: transition?.startedAt) {
+            guard let startedAt = transition?.startedAt else { return }
+            try? await Task.sleep(nanoseconds: UInt64(BoardFlipTransition.totalDuration * 1_000_000_000))
+            guard !Task.isCancelled, transition?.startedAt == startedAt else { return }
+            transition = nil
+        }
     }
 
-    private func draw(in context: inout GraphicsContext) {
+    private func draw(in context: inout GraphicsContext, at date: Date) {
         let font = BoardFont.glyph(size: layout.fontSize)
-        let unlit = BoardColor.black.swiftUI
-        let ink = Color.white
+        let whiteHardware = background == .white
+        let unlit = whiteHardware ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
+        let ink = whiteHardware ? Color.black : Color.white
 
         // Resolve each distinct glyph once, then stamp it.
         var resolved: [Character: GraphicsContext.ResolvedText] = [:]
 
-        for tile in layout.tiles {
-            let rect = CGRect(x: tile.x, y: tile.y, width: tile.width, height: tile.height)
-            let shape = Path(roundedRect: rect, cornerRadius: tile.radius)
+        for (index, tile) in layout.tiles.enumerated() {
+            let sample = animated ? transition?.sample(index: index, at: date) : nil
+            let cell = sample?.cell ?? tile.cell
+            if let scale = sample?.scaleY, scale < 0.999 {
+                context.drawLayer { layer in
+                    let midY = tile.y + tile.height / 2
+                    layer.translateBy(x: 0, y: midY)
+                    layer.scaleBy(x: 1, y: scale)
+                    layer.translateBy(x: 0, y: -midY)
+                    draw(tile: tile, cell: cell, in: &layer, resolved: &resolved,
+                         font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
+                }
+            } else {
+                draw(tile: tile, cell: cell, in: &context, resolved: &resolved,
+                     font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
+            }
+        }
+    }
 
-            switch tile.cell {
+    private func draw(tile: TileRect, cell: BoardCell,
+                      in context: inout GraphicsContext,
+                      resolved: inout [Character: GraphicsContext.ResolvedText],
+                      font: Font, unlit: Color, ink: Color, whiteHardware: Bool) {
+        let rect = CGRect(x: tile.x, y: tile.y, width: tile.width, height: tile.height)
+        let shape = Path(roundedRect: rect, cornerRadius: tile.radius)
+
+        switch cell {
             case .blank:
                 context.fill(shape, with: .color(unlit))
 
             case .color(let color):
-                context.fill(shape, with: .color(color.swiftUI))
+                let pigment: BoardColor
+                if whiteHardware && color == .white { pigment = .black }
+                else if whiteHardware && color == .black { pigment = .white }
+                else { pigment = color }
+                context.fill(shape, with: .color(pigment.swiftUI))
 
             case .character(let character):
                 context.fill(shape, with: .color(unlit))
@@ -60,10 +106,7 @@ public struct BoardCanvas: View {
                     text = context.resolve(Text(String(character)).font(font).foregroundColor(ink))
                     resolved[character] = text
                 }
-                let size = text.measure(in: rect.size)
                 context.draw(text, at: CGPoint(x: rect.midX, y: rect.midY), anchor: .center)
-                _ = size
-            }
         }
     }
 }

@@ -1,3 +1,4 @@
+import Network
 import XCTest
 @testable import FiestaBoardTV
 
@@ -61,6 +62,13 @@ final class DiscoveryTests: XCTestCase {
     func testIPv6LiteralsAreBracketed() {
         XCTAssertEqual(DiscoveryFilter.url(for: candidate(host: "fe80::1"))?.absoluteString,
                        "http://[fe80::1]:4420")
+    }
+
+    func testScopedIPv6PreservesTheRequiredInterface() {
+        XCTAssertEqual(BonjourDiscovery.hostString(from: .ipv6(IPv6Address("fe80::1%en0")!)),
+                       "fe80::1%en0")
+        XCTAssertEqual(DiscoveryFilter.url(for: candidate(host: "fe80::1%en0"))?.absoluteString,
+                       "http://[fe80::1%25en0]:4420")
     }
 
     // MARK: Manual entry

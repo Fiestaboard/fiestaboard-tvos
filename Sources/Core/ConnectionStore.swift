@@ -24,6 +24,7 @@ public final class ConnectionStore: @unchecked Sendable {
 
     private enum Keys {
         static let connection = "fiestaboard.connection"
+        static let signedOut = "fiestaboard.signedOut"
     }
 
     private let defaults: UserDefaults
@@ -32,6 +33,7 @@ public final class ConnectionStore: @unchecked Sendable {
 
     public private(set) var saved: SavedConnection?
     public private(set) var client: FiestaClient?
+    public var isSignedOut: Bool { defaults.bool(forKey: Keys.signedOut) }
 
     public init(defaults: UserDefaults = .standard,
                 credentials: CredentialStore = KeychainCredentialStore(),
@@ -62,7 +64,10 @@ public final class ConnectionStore: @unchecked Sendable {
         persist(connection)
 
         if status.setupRequired { return .needsSetup }
-        if !status.enabled || status.authenticated { return .ready }
+        if !status.enabled || status.authenticated {
+            defaults.set(false, forKey: Keys.signedOut)
+            return .ready
+        }
 
         // Auth is on and we are not authenticated. If we already hold a
         // credential for this host, spend it now rather than making someone
@@ -81,6 +86,7 @@ public final class ConnectionStore: @unchecked Sendable {
     public func signIn(username: String, password: String) async throws {
         guard let client, let saved else { throw FiestaError.transport("not connected") }
         try await client.login(username: username, password: password)
+        defaults.set(false, forKey: Keys.signedOut)
         // Only persist a credential the server just accepted.
         try? credentials.save(StoredCredential(username: username, password: password),
                               for: saved.host.absoluteString)
@@ -116,13 +122,25 @@ public final class ConnectionStore: @unchecked Sendable {
     public func signOut() {
         guard let saved else { return }
         try? credentials.delete(for: saved.host.absoluteString)
+        clearCookies(for: saved.host)
+        defaults.set(true, forKey: Keys.signedOut)
     }
 
     public func forget() {
-        if let saved { try? credentials.delete(for: saved.host.absoluteString) }
+        if let saved {
+            try? credentials.delete(for: saved.host.absoluteString)
+            clearCookies(for: saved.host)
+        }
         defaults.removeObject(forKey: Keys.connection)
+        defaults.removeObject(forKey: Keys.signedOut)
         self.saved = nil
         self.client = nil
+    }
+
+    private func clearCookies(for host: URL) {
+        for cookie in HTTPCookieStorage.shared.cookies(for: host) ?? [] {
+            HTTPCookieStorage.shared.deleteCookie(cookie)
+        }
     }
 
     private func persist(_ connection: SavedConnection) {

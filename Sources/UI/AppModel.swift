@@ -20,6 +20,7 @@ public final class AppModel {
 
     public var route: Route = .connecting
     public var errorMessage: String?
+    var offeredResizeRefs: Set<String> = []
 
     public let connection: ConnectionStore
 
@@ -32,6 +33,10 @@ public final class AppModel {
     public func start() {
         guard let saved = connection.saved, connection.client != nil else {
             route = .connect
+            return
+        }
+        if connection.isSignedOut {
+            route = .signIn
             return
         }
         if let ref = saved.defaultPanelRef {

@@ -41,3 +41,13 @@ jobs:
             -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -derivedDataPath build \
             test
+
+      - name: Archive (unsigned)
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj \
+            -scheme FiestaBoardTV \
+            -configuration Release \
+            -destination "generic/platform=tvOS" \
+            -derivedDataPath build \
+            archive -archivePath build/FiestaBoardTV.xcarchive \
+            CODE_SIGNING_ALLOWED=NO

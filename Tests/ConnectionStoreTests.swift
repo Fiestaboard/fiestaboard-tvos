@@ -160,6 +160,41 @@ final class ConnectionStoreTests: XCTestCase {
         XCTAssertEqual(store.saved?.host, host)
     }
 
+    func testSignOutClearsTheSessionAndPersistsTheSignInRoute() async throws {
+        let cookieHost = URL(string: "http://board.example:4420")!
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        _ = try await store.connect(to: cookieHost, displayName: "FiestaBoard")
+        let cookie = try XCTUnwrap(HTTPCookie(properties: [
+            .domain: "board.example", .path: "/", .name: "fiestaboard_session",
+            .value: "session-token"
+        ]))
+        HTTPCookieStorage.shared.setCookie(cookie)
+        defer { HTTPCookieStorage.shared.deleteCookie(cookie) }
+        XCTAssertTrue(HTTPCookieStorage.shared.cookies(for: cookieHost)?.contains { $0.name == cookie.name } ?? false,
+                      "the test must begin with an authenticated cookie")
+
+        store.signOut()
+        XCTAssertFalse(HTTPCookieStorage.shared.cookies(for: cookieHost)?.contains { $0.name == cookie.name } ?? false)
+
+        let restored = ConnectionStore(defaults: defaults, credentials: credentials,
+                                       clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        let app = AppModel(connection: restored)
+        app.start()
+        XCTAssertEqual(app.route, .signIn)
+    }
+
+    func testReconnectingToAnOpenBoardClearsTheSignedOutRoute() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        _ = try await store.connect(to: host, displayName: "FiestaBoard")
+        store.signOut()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        _ = try await store.connect(to: host, displayName: "FiestaBoard")
+
+        let app = AppModel(connection: store)
+        app.start()
+        XCTAssertEqual(app.route, .panels)
+    }
+
     func testForgetClearsEverything() async throws {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")

@@ -13,6 +13,8 @@ final class SignInModel {
 
     init(app: AppModel) { self.app = app }
 
+    func useAnotherBoard() { app.disconnect() }
+
     func submit() async {
         guard !isSubmitting else { return }
         guard !username.isEmpty, !password.isEmpty else {
@@ -67,6 +69,7 @@ struct SignInScreen: View {
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
 
             FiestaButton("Sign in") { Task { await model?.submit() } }
+            FiestaButton("Use another board") { model?.useAnotherBoard() }
         }
         .padding(Fiesta.Metrics.safeInset)
         .frame(maxWidth: 900, alignment: .leading)

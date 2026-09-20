@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import XCTest
 @testable import FiestaBoardTV
 
@@ -25,6 +26,16 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(app.connection.saved?.defaultPanelRef, "abc123def456")
     }
 
+    func testDefaultPanelSelectionNotifiesTheSettingsScreen() async {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        let changed = expectation(description: "default panel selection changed")
+        withObservationTracking({ _ = model.defaultPanelRef }, onChange: { changed.fulfill() })
+
+        model.setDefaultPanel("abc123def456")
+        await fulfillment(of: [changed], timeout: 1)
+    }
+
     func testClearingTheDefaultPanelPersists() async {
         let app = await makeApp()
         let model = SettingsModel(app: app)
@@ -44,6 +55,30 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(model.previewGrid, "45 × 18", "85\" 16:9 is a 3x6 block grid")
     }
 
+    func testCustomDiagonalUpdatesThePreview() async {
+        let model = SettingsModel(app: await makeApp())
+        model.setCustomDiagonal("58.5")
+        XCTAssertEqual(model.resizeDiagonal, 58.5)
+        XCTAssertNotEqual(model.previewGrid, "—")
+        model.setCustomDiagonal("not a size")
+        XCTAssertEqual(model.previewGrid, "—")
+    }
+
+    func testCalibrationIsLimitedToFifteenPercentAndPatched() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        model.setCalibration(1.5, for: panel)
+        XCTAssertEqual(model.calibration(for: panel), 1.15, accuracy: 0.0001)
+
+        StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#), for: "/panels/")
+        await model.saveCalibration(panel: panel)
+        let patch = try XCTUnwrap(StubURLProtocol.requests.first { $0.method == "PATCH" })
+        let body = try XCTUnwrap(patch.body)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(try XCTUnwrap(json["calibration_scale"] as? Double), 1.15, accuracy: 0.0001)
+    }
+
     func testResizePatchesTheDiagonal() async throws {
         let app = await makeApp()
         let model = SettingsModel(app: app)
@@ -58,6 +93,26 @@ final class SettingsScreenTests: XCTestCase {
         let body = try XCTUnwrap(patch?.body)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["screen_diagonal_inches"] as? Double, 85)
+    }
+
+    func testResizeOfAPortraitPanelSendsThePreviewedTVAspect() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+        object["screen_aspect_w"] = 9.0
+        object["screen_aspect_h"] = 16.0
+        let panel = try JSONDecoder().decode(Panel.self, from: JSONSerialization.data(withJSONObject: object))
+        model.resizeDiagonal = 85
+        XCTAssertEqual(model.previewGrid, "45 × 18")
+
+        StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#), for: "/panels/")
+        await model.resize(panel: panel)
+
+        let patch = try XCTUnwrap(StubURLProtocol.requests.first { $0.method == "PATCH" })
+        let body = try XCTUnwrap(patch.body)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["screen_aspect_w"] as? Double, 16)
+        XCTAssertEqual(json["screen_aspect_h"] as? Double, 9)
     }
 
     /// Reshaping can strand pages authored for the old grid. The server

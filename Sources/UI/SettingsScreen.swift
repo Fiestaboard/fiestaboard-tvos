@@ -62,10 +62,15 @@ struct SettingsScreen: View {
 
                     HStack(spacing: 16) {
                         ForEach(SettingsModel.presetDiagonals, id: \.self) { inches in
-                            Button("\(Int(inches))\"") { model?.resizeDiagonal = inches }
+                            Button("\(Int(inches))\"") { model?.selectPreset(inches) }
                                 .font(Fiesta.Text.body)
                         }
                     }
+
+                    TextField("Custom size in inches", text: Binding(
+                        get: { model?.customDiagonalText ?? "" },
+                        set: { model?.setCustomDiagonal($0) }))
+                        .frame(maxWidth: 500)
 
                     Text("New grid: \(model?.previewGrid ?? "—")")
                         .font(Fiesta.Text.body)
@@ -74,6 +79,27 @@ struct SettingsScreen: View {
                     ForEach(model?.panels ?? []) { panel in
                         FiestaButton("Resize \(panel.name)") {
                             Task { await model?.resize(panel: panel) }
+                        }
+                    }
+                }
+
+                section("True-size calibration") {
+                    Text("Adjust real flap size by up to 15% for your TV.")
+                        .font(Fiesta.Text.caption)
+                        .foregroundStyle(Fiesta.Colors.mutedForeground)
+                    ForEach(model?.panels ?? []) { panel in
+                        HStack(spacing: 20) {
+                            Text("\(panel.name): \(Int((model?.calibration(for: panel) ?? 1) * 100))%")
+                                .font(Fiesta.Text.body)
+                            Button("−1%") {
+                                model?.setCalibration((model?.calibration(for: panel) ?? 1) - 0.01,
+                                                      for: panel)
+                            }
+                            Button("+1%") {
+                                model?.setCalibration((model?.calibration(for: panel) ?? 1) + 0.01,
+                                                      for: panel)
+                            }
+                            FiestaButton("Save") { Task { await model?.saveCalibration(panel: panel) } }
                         }
                     }
                 }
