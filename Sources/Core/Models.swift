@@ -181,3 +181,19 @@ public enum FiestaError: Error, Equatable {
         self == .unauthorized
     }
 }
+extension Panel {
+    /// "30 × 12", or a plain statement when the virtual board is gone.
+    public var gridDescription: String {
+        guard !boardMissing, let rows, let cols else { return "No board" }
+        return "\(cols) × \(rows)"
+    }
+
+    /// The screen this panel's grid was auto-fit for — which is not
+    /// necessarily the screen it is about to be shown on.
+    public var screenDescription: String {
+        let inches = screenDiagonalInches
+        let rounded = inches.rounded()
+        let text = abs(inches - rounded) < 0.05 ? String(Int(rounded)) : String(format: "%.1f", inches)
+        return "Built for a \(text)\" screen"
+    }
+}
