@@ -8,9 +8,9 @@
   "maxNotesPerAxis": 8,
   "derived": {
     "colPitchIn": 1.6333333333333333,
-    "rowPitchIn": 2.2132018927444795,
+    "rowPitchIn": 2.2132149901380673,
     "blockWidthIn": 24.5,
-    "blockHeightIn": 6.639605678233438
+    "blockHeightIn": 6.639644970414202
   },
   "maxFillStretch": 1.1,
   "physicalWidthIn": { "flagship": 41.2, "note": 24.5 },
@@ -61,7 +61,7 @@
       { "name": "clamps a gigantic screen", "diagonal": 2000, "aspectW": 16, "aspectH": 9, "notesWide": 8, "notesTall": 8 }
     ],
     "screenDimensions": [
-      { "diagonal": 65, "aspectW": 16, "aspectH": 9, "widthIn": 56.65220536, "heightIn": 31.86686551 }
+      { "diagonal": 65, "aspectW": 16, "aspectH": 9, "widthIn": 56.6524099130957, "heightIn": 31.866980576116333 }
     ]
   }
 }
