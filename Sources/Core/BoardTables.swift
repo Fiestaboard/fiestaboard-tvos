@@ -43,7 +43,7 @@ public enum BoardColor: String, CaseIterable, Sendable {
 
 /// Which glyph character code 62 shows. Note-family devices print a heart
 /// where a Flagship prints a degree sign.
-public enum Code62Glyph: String, Sendable {
+public enum Code62Glyph: String, Codable, Sendable {
     case degree, heart
 
     public var character: Character {
