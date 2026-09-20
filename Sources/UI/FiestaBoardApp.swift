@@ -4,7 +4,7 @@ import SwiftUI
 struct FiestaBoardApp: App {
     var body: some Scene {
         WindowGroup {
-            Text(CoreMarker.greeting)
+            Text("FiestaBoard")
         }
     }
 }

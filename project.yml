@@ -43,6 +43,8 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: Tests
+      - path: Spec
+        type: folder
     dependencies:
       - target: FiestaBoardTV
     settings:
