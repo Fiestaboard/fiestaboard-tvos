@@ -1,0 +1,17 @@
+# Xcode / build
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# XcodeGen output (regenerated from project.yml)
+*.xcodeproj/
+
+# macOS
+.DS_Store
+
+# Tooling
+.claude/
+.superpowers/
