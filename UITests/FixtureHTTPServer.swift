@@ -6,13 +6,16 @@ final class FixtureHTTPServer {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "FiestaBoardUITests.fixtureServer")
     private let onFrame: () -> Void
+    private let frameBody: String
     private let lock = NSLock()
     private var sawFrame = false
 
     var port: UInt16 { listener.port!.rawValue }
 
-    init(onFrame: @escaping () -> Void) throws {
+    init(frameBody: String = Fixtures.emptyFrameJSON,
+         onFrame: @escaping () -> Void) throws {
         self.onFrame = onFrame
+        self.frameBody = frameBody
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -43,9 +46,9 @@ final class FixtureHTTPServer {
             let path = request.split(separator: " ").dropFirst().first.map(String.init) ?? ""
             let body: String
             switch path {
-            case "/api/panel/1": body = Fixtures.panelJSON
-            case "/api/panel/1/frame":
-                body = Fixtures.emptyFrameJSON
+            case "/api/panel/1", "/api/panel/abc123def456": body = Fixtures.panelJSON
+            case "/api/panel/1/frame", "/api/panel/abc123def456/frame":
+                body = frameBody
                 self.lock.lock()
                 let firstFrame = !self.sawFrame
                 self.sawFrame = true

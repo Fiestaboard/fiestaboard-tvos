@@ -11,6 +11,7 @@ public struct RootView: View {
             content
         }
         .preferredColorScheme(.dark)
+        .onOpenURL { model.openTopShelfURL($0) }
     }
 
     @ViewBuilder

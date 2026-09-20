@@ -2,7 +2,8 @@ import SwiftUI
 
 @main
 struct FiestaBoardApp: App {
-    @State private var model = AppModel(connection: ConnectionStore())
+    @State private var model = AppModel(connection: ConnectionStore(),
+                                        topShelfStore: TopShelfSnapshotStore.shared())
 
     var body: some Scene {
         WindowGroup {

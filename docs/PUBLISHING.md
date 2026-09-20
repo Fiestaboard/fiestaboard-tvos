@@ -5,6 +5,12 @@ Xcode configuration or signing override before creating a signed archive. Do
 not commit a team ID or signing credentials. The unsigned Release archive in
 CI checks compilation and bundle assembly; it is not an App Store upload.
 
+The Top Shelf extension has bundle ID `com.fiestaboard.tv.topshelf`. Register
+the App Group `group.com.fiestaboard.tv` for both bundle IDs in the Apple
+Developer portal, then refresh their provisioning profiles. Both targets use
+`Config/AppGroup.entitlements`. The extension reads locally cached board
+images; it does not receive the board address or sign-in credential.
+
 Use **FiestaBoard for Apple TV** as the App Store name and **Your panels, on
 your TV** as the subtitle. App Review may reject the platform wording under
 guideline 5.2.5. If it does, use **FiestaBoard** and keep the subtitle. The

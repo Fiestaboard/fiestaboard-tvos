@@ -21,16 +21,20 @@ public final class AppModel {
     public var route: Route = .connecting
     public var errorMessage: String?
     var offeredResizeRefs: Set<String> = []
+    private var previewTask: Task<Void, Never>?
 
     public let connection: ConnectionStore
+    let topShelfStore: TopShelfSnapshotStore?
 
-    public init(connection: ConnectionStore) {
+    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil) {
         self.connection = connection
+        self.topShelfStore = topShelfStore
     }
 
     /// Decide the opening screen. A configured TV should power on into its
     /// board — that is the whole point of the app.
     public func start() {
+        guard route == .connecting else { return }
         guard let saved = connection.saved, connection.client != nil else {
             route = .connect
             return
@@ -41,6 +45,7 @@ public final class AppModel {
         }
         if let ref = saved.defaultPanelRef {
             route = .viewer(ref)
+            refreshTopShelfForViewerLaunch()
         } else {
             route = .panels
         }
@@ -67,7 +72,18 @@ public final class AppModel {
         route = .viewer(ref)
     }
 
+    public func openTopShelfURL(_ url: URL) {
+        guard url.scheme == "fiestaboard", url.host == "panel",
+              let ref = url.path.split(separator: "/").map(String.init).first,
+              url.path.split(separator: "/").count == 1,
+              connection.saved != nil, connection.client != nil,
+              !connection.isSignedOut else { return }
+        openPanel(ref: ref)
+        refreshTopShelfForViewerLaunch()
+    }
+
     public func showPanels() {
+        previewTask?.cancel()
         errorMessage = nil
         route = .panels
     }
@@ -78,6 +94,24 @@ public final class AppModel {
 
     public func disconnect() {
         connection.forget()
+        clearTopShelf()
         route = .connect
+    }
+
+    func clearTopShelf() {
+        previewTask?.cancel()
+        TopShelfPreviewPublisher.clear(store: topShelfStore)
+    }
+
+    private func refreshTopShelfForViewerLaunch() {
+        guard let topShelfStore else { return }
+        previewTask?.cancel()
+        previewTask = Task { [weak self] in
+            guard let self,
+                  let panels = try? await connection.authorized({ try await $0.panels() }) else { return }
+            await TopShelfPreviewPublisher.publish(panels: panels,
+                                                   connection: connection,
+                                                   store: topShelfStore)
+        }
     }
 }

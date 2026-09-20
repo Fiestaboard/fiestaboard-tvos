@@ -37,7 +37,9 @@ final class ConnectModel {
         errorMessage = nil
         defer { isConnecting = false }
         do {
+            let previousHost = app.connection.saved?.host
             let result = try await app.connection.connect(to: host, displayName: name)
+            if previousHost != host { app.clearTopShelf() }
             stopScan()
             app.finishConnect(result)
         } catch {

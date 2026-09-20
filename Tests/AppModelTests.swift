@@ -76,6 +76,76 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .settings)
     }
 
+    func testTopShelfLinkOpensItsPanelOnlyForAConnectedBoard() async throws {
+        let model = makeModel()
+        let link = URL(string: "fiestaboard://panel/abc123def456")!
+        model.openTopShelfURL(link)
+        XCTAssertEqual(model.route, .connecting)
+
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await model.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        model.openTopShelfURL(link)
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+        model.start()
+        XCTAssertEqual(model.route, .viewer("abc123def456"),
+                       "a cold launch must not replace the Top Shelf destination")
+        model.openTopShelfURL(URL(string: "https://example.com/panel/other")!)
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+    }
+
+    func testRootReappearanceDoesNotReopenAnOldTopShelfPanel() async throws {
+        let model = makeModel()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await model.connection.connect(to: URL(string: "http://host:4420")!,
+                                               displayName: "Board")
+        model.start()
+        model.openTopShelfURL(URL(string: "fiestaboard://panel/abc123def456")!)
+        model.showPanels()
+
+        model.start()
+
+        XCTAssertEqual(model.route, .panels,
+                       "returning to the app should keep the screen the viewer left open")
+    }
+
+    func testDisconnectClearsOnlyThisAppsTopShelfCache() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("topshelf-disconnect-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        try store.replace([.init(panelID: "one", name: "Kitchen", imageData: Data([1]))])
+        let model = AppModel(connection: ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore()), topShelfStore: store)
+
+        model.disconnect()
+        XCTAssertTrue(store.items().isEmpty)
+    }
+
+    func testDefaultViewerLaunchAlsoRefreshesTopShelfPreviews() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("topshelf-default-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        let connection = ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        connection.setDefaultPanel(ref: "abc123def456")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/api/panel/")
+        let model = AppModel(connection: connection, topShelfStore: store)
+
+        model.start()
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+        for _ in 0..<40 where store.items().isEmpty {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(store.items().map(\.panelID), ["abc123def456"])
+    }
+
     func testRootViewRendersEveryRoute() {
         for route in [Route.connecting, .connect, .signIn, .panels, .viewer("1"), .settings] {
             let model = makeModel()

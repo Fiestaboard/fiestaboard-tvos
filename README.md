@@ -15,8 +15,10 @@ The app adds the public `/api` prefix itself. A FiestaBoard running in Docker
 bridge mode may not appear in Bonjour discovery, so use the manual address
 field in that setup.
 
-The tvOS icon and Top Shelf assets can be regenerated with
-`swift scripts/generate-brand-assets.swift`. Release submission steps are in
+The taco icon and static Top Shelf fallback can be regenerated with
+`swift scripts/generate-brand-assets.swift`. When the app loads the panel list,
+it caches a current image of each available board for the Apple TV Home Top
+Shelf carousel. Put FiestaBoard in the Home top row to see it. Release submission steps are in
 [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 Sources/Core holds board and network logic and must stay free of SwiftUI and UIKit imports. The build script and CI enforce this rule.

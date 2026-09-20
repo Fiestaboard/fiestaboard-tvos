@@ -147,6 +147,7 @@ final class SettingsModel {
 
     func signOut() {
         app.connection.signOut()
+        app.clearTopShelf()
         app.route = .signIn
     }
 

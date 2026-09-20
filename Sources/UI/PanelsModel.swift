@@ -9,6 +9,7 @@ final class PanelsModel {
     var errorMessage: String?
 
     private let app: AppModel
+    private var previewTask: Task<Void, Never>?
 
     init(app: AppModel) { self.app = app }
 
@@ -18,6 +19,15 @@ final class PanelsModel {
         defer { isLoading = false }
         do {
             panels = try await app.connection.authorized { try await $0.panels() }
+            previewTask?.cancel()
+            if let store = app.topShelfStore {
+                let currentPanels = panels
+                previewTask = Task {
+                    await TopShelfPreviewPublisher.publish(panels: currentPanels,
+                                                           connection: app.connection,
+                                                           store: store)
+                }
+            }
         } catch FiestaError.unauthorized {
             // The stored credential could not recover the session — the only
             // useful next step is asking for one.
