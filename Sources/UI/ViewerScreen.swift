@@ -31,6 +31,15 @@ struct ViewerScreen: View {
                     ProgressView().tint(Fiesta.Colors.brand)
                 }
 
+                // The canvas itself has no focusable elements. Keep a remote
+                // target over it so Menu, movement, and Select reach this view.
+                Button { model?.showOverlay() } label: {
+                    Color.clear.contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusEffectDisabled()
+                .accessibilityLabel("Show board controls")
+
                 if model?.snapshot.connection == .stale { OfflineDot() }
 
                 if model?.resizeOfferVisible == true {

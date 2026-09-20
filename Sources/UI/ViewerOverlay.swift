@@ -5,6 +5,7 @@ struct ViewerOverlay: View {
     let panelName: String
     let onPanels: () -> Void
     let onSettings: () -> Void
+    @FocusState private var panelsFocused: Bool
 
     var body: some View {
         VStack {
@@ -13,7 +14,9 @@ struct ViewerOverlay: View {
                     .font(Fiesta.Text.heading)
                     .foregroundStyle(Fiesta.Colors.foreground)
                 Spacer()
-                Button("Panels", action: onPanels).font(Fiesta.Text.body)
+                Button("Panels", action: onPanels)
+                    .font(Fiesta.Text.body)
+                    .focused($panelsFocused)
                 Button("Settings", action: onSettings).font(Fiesta.Text.body)
             }
             .padding(28)
@@ -22,6 +25,7 @@ struct ViewerOverlay: View {
             Spacer()
         }
         .transition(.opacity)
+        .onAppear { panelsFocused = true }
     }
 }
 

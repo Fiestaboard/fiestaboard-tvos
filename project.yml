@@ -53,6 +53,19 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
+  FiestaBoardTVUITests:
+    type: bundle.ui-testing
+    platform: tvOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: UITests
+      - path: Tests/Support/Fixtures.swift
+    dependencies:
+      - target: FiestaBoardTV
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   FiestaBoardTV:
     build:
@@ -60,7 +73,7 @@ schemes:
         FiestaBoardTV: all
         FiestaBoardTVTests: [test]
     test:
-      targets: [FiestaBoardTVTests]
+      targets: [FiestaBoardTVTests, FiestaBoardTVUITests]
       gatherCoverageData: true
     run:
       config: Debug
