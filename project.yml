@@ -1,0 +1,62 @@
+name: FiestaBoardTV
+options:
+  bundleIdPrefix: com.fiestaboard
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  FiestaBoardTV:
+    type: application
+    platform: tvOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Sources/Core
+      - path: Sources/Render
+      - path: Sources/UI
+      - path: Spec
+        type: folder
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: FiestaBoard for Apple TV
+        NSLocalNetworkUsageDescription: FiestaBoard finds your board on this network so your TV can show its panels.
+        NSBonjourServices: ["_http._tcp"]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fiestaboard.tv
+        PRODUCT_MODULE_NAME: FiestaBoardTV
+        TARGETED_DEVICE_FAMILY: "3"
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+
+  FiestaBoardTVTests:
+    type: bundle.unit-test
+    platform: tvOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: FiestaBoardTV
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  FiestaBoardTV:
+    build:
+      targets:
+        FiestaBoardTV: all
+        FiestaBoardTVTests: [test]
+    test:
+      targets: [FiestaBoardTVTests]
+      gatherCoverageData: true
+    run:
+      config: Debug

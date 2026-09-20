@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app || xcode-select -p
+
+      - name: Layering guard
+        run: ./scripts/check-layering.sh
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Resolve a tvOS simulator
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available | ./scripts/select-tvos-simulator.sh)
+          if [ -z "$ID" ]; then echo "No Apple TV simulator on this runner." >&2; exit 1; fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj \
+            -scheme FiestaBoardTV \
+            -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build \
+            test
