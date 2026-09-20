@@ -55,6 +55,19 @@ struct SettingsScreen: View {
                         .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
 
+                section("Flap animation") {
+                    Text("Each changed flap cycles through the drum at 80 ms per step. Choose which panels animate.")
+                        .font(Fiesta.Text.caption)
+                        .foregroundStyle(Fiesta.Colors.mutedForeground)
+                    ForEach(model?.panels ?? []) { panel in
+                        Toggle(panel.name, isOn: Binding(
+                            get: { model?.panels.first(where: { $0.id == panel.id })?.animationsEnabled ?? false },
+                            set: { enabled in
+                                Task { await model?.setAnimationEnabled(enabled, for: panel) }
+                            }))
+                    }
+                }
+
                 section("Resize a panel for this TV") {
                     Text("Rebuilds the panel's grid on your FiestaBoard for a screen this size.")
                         .font(Fiesta.Text.caption)

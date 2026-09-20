@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class ViewerNavigationUITests: XCTestCase {
@@ -46,5 +47,27 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertTrue(panelsButton.hasFocus, "Showing controls should focus Panels")
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
+    }
+
+    func testFocusedViewerDoesNotWashOutTheBoard() throws {
+        let app = launchLoadedViewer()
+        let captured = app.screenshot().image
+        let attachment = XCTAttachment(image: captured)
+        attachment.name = "Focused viewer"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let screenshot = try XCTUnwrap(captured.cgImage)
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = try XCTUnwrap(CGContext(data: &pixel, width: 1, height: 1,
+                                             bitsPerComponent: 8, bytesPerRow: 4,
+                                             space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.translateBy(x: -CGFloat(screenshot.width / 2),
+                            y: -CGFloat(screenshot.height / 2))
+        context.draw(screenshot, in: CGRect(x: 0, y: 0,
+                                            width: screenshot.width, height: screenshot.height))
+        XCTAssertLessThan(Int(pixel[0]), 20, "the empty board should remain OLED black when focused")
+        XCTAssertLessThan(Int(pixel[1]), 20)
+        XCTAssertLessThan(Int(pixel[2]), 20)
     }
 }

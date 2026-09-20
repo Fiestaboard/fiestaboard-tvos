@@ -61,6 +61,19 @@ final class BoardTablesTests: XCTestCase {
         XCTAssertEqual(BoardColor(code: 71)?.hex, "#1a1a1a")
     }
 
+    func testFlapDrumReverseLookupPreservesCharacterOrder() {
+        let cases: [(BoardCell, Int)] = [
+            (.blank, 0), (.character("A"), 1), (.character("Z"), 26),
+            (.character("1"), 27), (.character("0"), 36),
+            (.character("!"), 37), (.character("-"), 44),
+            (.character("°"), 62), (.character("♥"), 62),
+            (.color(.red), 63), (.color(.black), 70),
+        ]
+        for (cell, expectedCode) in cases {
+            XCTAssertEqual(BoardTables.code(for: cell), expectedCode)
+        }
+    }
+
     func testOutOfRangeCodesAreBlank() {
         XCTAssertEqual(BoardTables.cell(forCode: -1, code62: .degree), .blank)
         XCTAssertEqual(BoardTables.cell(forCode: 72, code62: .degree), .blank)

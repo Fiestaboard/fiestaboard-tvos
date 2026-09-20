@@ -95,6 +95,27 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(json["screen_diagonal_inches"] as? Double, 85)
     }
 
+    func testAnimationTogglePatchesOnlyTheSelectedPanel() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        model.panels = [panel]
+        var updated = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+        updated["animations_enabled"] = true
+        let response = ["panel": updated]
+        let data = try JSONSerialization.data(withJSONObject: response)
+        StubURLProtocol.enqueue(.json(String(decoding: data, as: UTF8.self)), for: "/api/panels/")
+
+        await model.setAnimationEnabled(true, for: panel)
+
+        let patch = try XCTUnwrap(StubURLProtocol.requests.first { $0.method == "PATCH" })
+        let body = try XCTUnwrap(patch.body)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["animations_enabled"] as? Bool, true)
+        XCTAssertEqual(json.count, 1)
+        XCTAssertEqual(model.panels.first?.animationsEnabled, true)
+    }
+
     func testResizeOfAPortraitPanelSendsThePreviewedTVAspect() async throws {
         let app = await makeApp()
         let model = SettingsModel(app: app)

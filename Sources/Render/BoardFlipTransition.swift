@@ -1,32 +1,69 @@
 import Foundation
 
-/// The one clock shared by all changing flaps in a frame.
-/// A tile's face and vertical scale are deterministic at any timestamp.
+/// FiestaUI's 72-position flap drum, driven by one clock for the whole board.
+/// Every changed tile advances one position every 80 ms with no tile stagger.
 struct BoardFlipTransition {
     struct Sample {
-        let cell: BoardCell
-        let scaleY: Double
+        let previous: BoardCell
+        let next: BoardCell
+        let progress: Double
+        let isAnimating: Bool
+
+        var cell: BoardCell { progress < 0.5 ? previous : next }
     }
 
-    static let duration = 0.18
-    static let totalDuration = 0.36
+    static let stepDuration: TimeInterval = 0.08
+    private static let drumSize = 72
 
     let from: [BoardCell]
     let to: [BoardCell]
-    let columns: Int
+    let code62: Code62Glyph
     let startedAt: Date
+    let duration: TimeInterval
+    private let startCodes: [Int]
+    private let distances: [Int]
+
+    init(from: [BoardCell], to: [BoardCell], code62: Code62Glyph, startedAt: Date) {
+        self.from = from
+        self.to = to
+        self.code62 = code62
+        self.startedAt = startedAt
+        let codes = from.map(BoardTables.code(for:))
+        startCodes = codes
+        let steps = to.enumerated().map { index, cell in
+            guard codes.indices.contains(index) else { return 0 }
+            let target = BoardTables.code(for: cell)
+            return (target - codes[index] + Self.drumSize) % Self.drumSize
+        }
+        distances = steps
+        duration = Double(steps.max() ?? 0) * Self.stepDuration
+    }
 
     func sample(index: Int, at date: Date) -> Sample {
-        guard to.indices.contains(index) else { return Sample(cell: .blank, scaleY: 1) }
-        let next = to[index]
-        guard from.indices.contains(index), from[index] != next else {
-            return Sample(cell: next, scaleY: 1)
+        guard to.indices.contains(index) else {
+            return Sample(previous: .blank, next: .blank, progress: 1, isAnimating: false)
         }
-        let colCount = max(columns, 1)
-        let delay = Double((index / colCount + index % colCount) % 8) * 0.025
-        let elapsed = date.timeIntervalSince(startedAt) - delay
-        let phase = min(1, max(0, elapsed / Self.duration))
-        let face = phase < 0.5 ? from[index] : next
-        return Sample(cell: face, scaleY: max(0.06, abs(1 - 2 * phase)))
+        let target = to[index]
+        guard distances.indices.contains(index), distances[index] > 0 else {
+            return Sample(previous: target, next: target, progress: 1, isAnimating: false)
+        }
+        let elapsed = max(0, date.timeIntervalSince(startedAt))
+        let cellDuration = Double(distances[index]) * Self.stepDuration
+        guard elapsed + 1e-9 < cellDuration else {
+            return Sample(previous: target, next: target, progress: 1, isAnimating: false)
+        }
+        let step = min(distances[index] - 1, Int(elapsed / Self.stepDuration))
+        let previousCode = (startCodes[index] + step) % Self.drumSize
+        let nextCode = (previousCode + 1) % Self.drumSize
+        let progress = (elapsed - Double(step) * Self.stepDuration) / Self.stepDuration
+        return Sample(previous: BoardTables.cell(forCode: previousCode, code62: code62),
+                      next: BoardTables.cell(forCode: nextCode, code62: code62),
+                      progress: min(1, max(0, progress)), isAnimating: true)
+    }
+
+    func retargeted(to newTarget: [BoardCell], at date: Date) -> BoardFlipTransition {
+        let visible = newTarget.indices.map { sample(index: $0, at: date).cell }
+        return BoardFlipTransition(from: visible, to: newTarget,
+                                   code62: code62, startedAt: date)
     }
 }

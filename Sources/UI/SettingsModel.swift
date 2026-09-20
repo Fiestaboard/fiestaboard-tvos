@@ -72,6 +72,22 @@ final class SettingsModel {
         UserDefaults.standard.set(sizing.rawValue, forKey: "fiestaboard.sizing")
     }
 
+    func setAnimationEnabled(_ enabled: Bool, for panel: Panel) async {
+        errorMessage = nil
+        do {
+            let result = try await app.connection.authorized {
+                try await $0.updatePanel(id: panel.id, animationsEnabled: enabled)
+            }
+            if let index = panels.firstIndex(where: { $0.id == panel.id }) {
+                panels[index] = result.panel
+            }
+        } catch FiestaError.unauthorized {
+            app.route = .signIn
+        } catch {
+            errorMessage = "Couldn't save the animation setting."
+        }
+    }
+
     func selectPreset(_ inches: Double) {
         resizeDiagonal = inches
         customDiagonalText = ""

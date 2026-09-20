@@ -81,6 +81,36 @@ public enum BoardTables {
         return table
     }()
 
+    private static let codeByGlyph: [Character: Int] = {
+        var codes: [Character: Int] = [:]
+        for (code, glyph) in glyphs.enumerated() {
+            if let glyph { codes[glyph] = code }
+        }
+        codes["°"] = 62
+        codes["♥"] = 62
+        return codes
+    }()
+
+    /// Canonical drum position for a painted cell. Both black codes paint the
+    /// same face, so the return path uses code 70.
+    public static func code(for cell: BoardCell) -> Int {
+        switch cell {
+        case .blank: return 0
+        case .character(let glyph): return codeByGlyph[glyph] ?? 0
+        case .color(let color):
+            switch color {
+            case .red: return 63
+            case .orange: return 64
+            case .yellow: return 65
+            case .green: return 66
+            case .blue: return 67
+            case .violet: return 68
+            case .white: return 69
+            case .black: return 70
+            }
+        }
+    }
+
     public static func cell(forCode code: Int, code62: Code62Glyph) -> BoardCell {
         if code == 62 { return .character(code62.character) }
         if let color = BoardColor(code: code) { return .color(color) }

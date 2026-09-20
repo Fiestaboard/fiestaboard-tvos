@@ -24,20 +24,21 @@ struct ViewerScreen: View {
                 } else if let layout = try? model?.layout(for: proxy.size) {
                     BoardCanvas(layout: layout,
                                 background: model?.snapshot.panel?.backgroundColor ?? .black,
-                                animated: model?.snapshot.panel?.animationsEnabled ?? false)
+                                animated: model?.snapshot.panel?.animationsEnabled ?? false,
+                                code62: model?.snapshot.panel?.effectiveCode62 ?? .degree)
                         .frame(width: layout.width, height: layout.height)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ProgressView().tint(Fiesta.Colors.brand)
                 }
 
-                // The canvas itself has no focusable elements. Keep a remote
-                // target over it so Menu, movement, and Select reach this view.
-                Button { model?.showOverlay() } label: {
-                    Color.clear.contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                // The canvas needs a remote target, but a full-screen tvOS
+                // Button paints its focus material over the entire board.
+                Color.clear
+                .contentShape(Rectangle())
+                .focusable(true, interactions: .activate)
                 .focusEffectDisabled()
+                .onTapGesture { model?.showOverlay() }
                 .accessibilityLabel("Show board controls")
 
                 if model?.snapshot.connection == .stale { OfflineDot() }
