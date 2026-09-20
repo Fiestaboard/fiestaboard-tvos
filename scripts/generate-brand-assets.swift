@@ -1,5 +1,5 @@
 #!/usr/bin/env swift
-// Rebuild the tvOS layered icon and Top Shelf art from FiestaBoard's source icon.
+// Rebuild the tvOS layered icon and static Top Shelf fallback from FiestaBoard's taco.
 import AppKit
 import Foundation
 
@@ -9,7 +9,7 @@ let catalog = root.appendingPathComponent("Sources/UI/Assets.xcassets/App Icon &
 guard let icon = NSImage(contentsOf: artwork) else { fatalError("Missing FiestaBoard source icon") }
 
 func color(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
-    NSColor(calibratedRed: CGFloat((hex >> 16) & 0xff) / 255,
+    NSColor(deviceRed: CGFloat((hex >> 16) & 0xff) / 255,
             green: CGFloat((hex >> 8) & 0xff) / 255,
             blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
 }
@@ -33,33 +33,15 @@ func render(width: Int, height: Int, layer: Layer, to url: URL) throws {
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context
     let w = CGFloat(width), h = CGFloat(height)
-    let board = NSRect(x: w * 0.09, y: h * 0.17, width: w * 0.82, height: h * 0.66)
     if layer == .back || layer == .complete {
         color(0xf5a623).setFill()
         NSRect(x: 0, y: 0, width: w, height: h).fill()
-        color(0xffbc47, alpha: 0.5).setFill()
-        NSRect(x: 0, y: h * 0.83, width: w, height: h * 0.17).fill()
-    }
-    if layer == .middle || layer == .complete {
-        color(0x161625).setFill()
-        NSBezierPath(roundedRect: board, xRadius: h * 0.065, yRadius: h * 0.065).fill()
-        color(0x28243b).setFill()
-        NSRect(x: board.minX + h * 0.04, y: board.minY + h * 0.12,
-               width: h * 0.012, height: board.height - h * 0.24).fill()
     }
     if layer == .front || layer == .complete {
-        let artSide = h * 0.48
-        icon.draw(in: NSRect(x: board.minX + h * 0.065, y: (h - artSide) / 2,
+        let artSide = min(h * 0.88, w * 0.58)
+        icon.draw(in: NSRect(x: (w - artSide) / 2, y: (h - artSide) / 2,
                              width: artSide, height: artSide),
                   from: .zero, operation: .sourceOver, fraction: 1)
-        let textX = board.minX + h * 0.59
-        let font = NSFont.systemFont(ofSize: h * 0.135, weight: .black)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font, .foregroundColor: color(0xfff8ea),
-            .kern: h * 0.005
-        ]
-        ("FIESTA" as NSString).draw(at: NSPoint(x: textX, y: h * 0.53), withAttributes: attrs)
-        ("BOARD" as NSString).draw(at: NSPoint(x: textX, y: h * 0.34), withAttributes: attrs)
     }
     context.flushGraphics()
     NSGraphicsContext.restoreGraphicsState()
