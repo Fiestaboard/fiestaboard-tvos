@@ -31,7 +31,7 @@ final class AppModelTests: XCTestCase {
             defaults: defaults, credentials: credentials,
             clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
 
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         connection.setDefaultPanel(ref: "1")
 
@@ -45,7 +45,7 @@ final class AppModelTests: XCTestCase {
         let connection = ConnectionStore(
             defaults: defaults, credentials: InMemoryCredentialStore(),
             clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
 
         let model = AppModel(connection: connection)

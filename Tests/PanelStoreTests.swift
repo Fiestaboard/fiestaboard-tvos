@@ -27,7 +27,7 @@ final class PanelStoreTests: XCTestCase {
     }
 
     func testPublishesDecodedCellsFromTheFrame() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
         for _ in 0..<6 { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
 
         let store = makeStore()
@@ -41,7 +41,7 @@ final class PanelStoreTests: XCTestCase {
     /// The panel's device decides code 62, so the store must apply the
     /// panel's glyph rather than a default.
     func testAppliesThePanelsCode62Glyph() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
         let heartFrame = #"{"characters":[[62]],"message":null,"rows":1,"cols":1,"updated_at":null}"#
         for _ in 0..<6 { StubURLProtocol.enqueue(.json(heartFrame), for: "/frame") }
 
@@ -54,7 +54,7 @@ final class PanelStoreTests: XCTestCase {
     /// The contract that matters most on a wall: a dropped connection keeps
     /// the last frame on screen and only flags itself.
     func testALostConnectionKeepsTheLastFrameAndGoesStale() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
         StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame")
         // Nothing more enqueued: subsequent polls fail at the transport.
 
@@ -66,7 +66,7 @@ final class PanelStoreTests: XCTestCase {
     }
 
     func testADeletedPanelIsReportedNotRetriedForever() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelNotFound, status: 404), for: "/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelNotFound, status: 404), for: "/api/panel/1")
         for _ in 0..<6 { StubURLProtocol.enqueue(.json(Fixtures.panelNotFound, status: 404), for: "/frame") }
 
         let store = makeStore()
@@ -75,7 +75,7 @@ final class PanelStoreTests: XCTestCase {
     }
 
     func testABlankBoardIsNotAnError() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
         for _ in 0..<6 { StubURLProtocol.enqueue(.json(Fixtures.emptyFrameJSON), for: "/frame") }
 
         let store = makeStore()
@@ -86,7 +86,7 @@ final class PanelStoreTests: XCTestCase {
     }
 
     func testStopEndsTheStream() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
         for _ in 0..<10 { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
 
         let store = makeStore()

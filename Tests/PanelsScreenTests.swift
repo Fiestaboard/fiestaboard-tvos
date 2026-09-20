@@ -10,7 +10,7 @@ final class PanelsScreenTests: XCTestCase {
             defaults: UserDefaults(suiteName: "tv.panels.\(UUID().uuidString)")!,
             credentials: InMemoryCredentialStore(),
             clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) }))
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try? await app.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         return app
     }
@@ -20,7 +20,7 @@ final class PanelsScreenTests: XCTestCase {
 
     func testLoadsThePanelList() async {
         let app = await makeApp()
-        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
         let model = PanelsModel(app: app)
         await model.load()
         XCTAssertEqual(model.panels.count, 1)
@@ -32,7 +32,7 @@ final class PanelsScreenTests: XCTestCase {
     /// not a dead-end error.
     func testA401RoutesToSignIn() async {
         let app = await makeApp()
-        StubURLProtocol.enqueue(.json(#"{"detail":"Not authenticated"}"#, status: 401), for: "/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"Not authenticated"}"#, status: 401), for: "/api/panels")
         let model = PanelsModel(app: app)
         await model.load()
         XCTAssertEqual(app.route, .signIn)
@@ -47,7 +47,7 @@ final class PanelsScreenTests: XCTestCase {
 
     func testAnEmptyListIsNotAnError() async {
         let app = await makeApp()
-        StubURLProtocol.enqueue(.json(#"{"panels":[],"total":0}"#), for: "/panels")
+        StubURLProtocol.enqueue(.json(#"{"panels":[],"total":0}"#), for: "/api/panels")
         let model = PanelsModel(app: app)
         await model.load()
         XCTAssertTrue(model.panels.isEmpty)
@@ -74,7 +74,7 @@ final class PanelsScreenTests: XCTestCase {
 
     func testScreenRendersLoadedEmptyAndErrorStates() async {
         let app = await makeApp()
-        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
         RenderHarness.render(PanelsScreen().environment(app))
     }
 }

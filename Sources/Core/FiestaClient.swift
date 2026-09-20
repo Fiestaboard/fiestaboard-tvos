@@ -15,6 +15,7 @@ public final class FiestaClient: @unchecked Sendable {
         // Normalising here means every caller can pass whatever the user typed.
         var normalized = baseURL.absoluteString
         while normalized.hasSuffix("/") { normalized.removeLast() }
+        if normalized.hasSuffix("/api") { normalized.removeLast(4) }
         self.baseURL = URL(string: normalized) ?? baseURL
 
         if let session {
@@ -95,7 +96,9 @@ public final class FiestaClient: @unchecked Sendable {
     // MARK: Plumbing
 
     private func url(for path: String) -> URL {
-        URL(string: baseURL.absoluteString + path) ?? baseURL
+        // The Docker/nginx public port proxies /api/* to FastAPI after
+        // stripping that prefix. Direct /auth/* URLs reach the web UI.
+        URL(string: baseURL.absoluteString + "/api" + path) ?? baseURL
     }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {

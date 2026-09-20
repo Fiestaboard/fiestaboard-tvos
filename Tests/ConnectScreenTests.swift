@@ -46,7 +46,7 @@ final class ConnectScreenTests: XCTestCase {
     func testConnectingToAnOpenBoardRoutesToPanels() async {
         let app = makeApp()
         let model = ConnectModel(app: app)
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         await model.connect(to: board.host, name: board.name)
         XCTAssertEqual(app.route, .panels)
     }
@@ -54,7 +54,7 @@ final class ConnectScreenTests: XCTestCase {
     func testConnectingToALockedBoardRoutesToSignIn() async {
         let app = makeApp()
         let model = ConnectModel(app: app)
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         await model.connect(to: board.host, name: board.name)
         XCTAssertEqual(app.route, .signIn)
     }
@@ -73,7 +73,7 @@ final class ConnectScreenTests: XCTestCase {
         let app = makeApp()
         let model = ConnectModel(app: app)
         model.manualAddress = "192.168.1.50"
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         await model.connectManually()
         XCTAssertEqual(app.connection.saved?.host.absoluteString, "http://192.168.1.50:4420")
     }
@@ -111,7 +111,7 @@ final class ConnectScreenTests: XCTestCase {
 
     func testSignInCanForgetAndChooseAnotherBoard() async throws {
         let app = makeApp()
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         _ = try await app.connection.connect(to: URL(string: "http://board.local:4420")!, displayName: "Old board")
         app.route = .signIn
 
@@ -122,12 +122,12 @@ final class ConnectScreenTests: XCTestCase {
 
     func testSignInWithBadCredentialsShowsAnErrorAndStays() async {
         let app = makeApp()
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         _ = try? await app.connection.connect(to: board.host, displayName: "Board")
         app.route = .signIn
 
         StubURLProtocol.enqueue(.json(#"{"detail":"Invalid username or password"}"#, status: 401),
-                                for: "/auth/login")
+                                for: "/api/auth/login")
         let model = SignInModel(app: app)
         model.username = "jeffre"
         model.password = "wrong"
@@ -139,10 +139,10 @@ final class ConnectScreenTests: XCTestCase {
 
     func testSuccessfulSignInRoutesToPanels() async {
         let app = makeApp()
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         _ = try? await app.connection.connect(to: board.host, displayName: "Board")
 
-        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/auth/login")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
         let model = SignInModel(app: app)
         model.username = "jeffre"
         model.password = "hunter2"

@@ -25,7 +25,7 @@ final class ConnectionStoreTests: XCTestCase {
     }
 
     func testConnectingToAnOpenInstanceIsImmediatelyReady() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         let result = try await store.connect(to: host, displayName: "FiestaBoard")
         XCTAssertEqual(result, .ready)
         XCTAssertEqual(store.saved?.host, host)
@@ -33,7 +33,7 @@ final class ConnectionStoreTests: XCTestCase {
     }
 
     func testConnectingToALockedInstanceAsksForSignIn() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         let result = try await store.connect(to: host, displayName: "FiestaBoard")
         XCTAssertEqual(result, .needsSignIn)
     }
@@ -45,7 +45,7 @@ final class ConnectionStoreTests: XCTestCase {
         {"enabled":true,"setup_required":true,"authenticated":false,
          "username":null,"mode":"undecided","first_run":true}
         """
-        StubURLProtocol.enqueue(.json(json), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(json), for: "/api/auth/status")
         let result = try await store.connect(to: host, displayName: "FiestaBoard")
         XCTAssertEqual(result, .needsSetup)
     }
@@ -55,16 +55,16 @@ final class ConnectionStoreTests: XCTestCase {
         {"enabled":true,"setup_required":false,"authenticated":true,
          "username":"jeffre","mode":"enabled","first_run":false}
         """
-        StubURLProtocol.enqueue(.json(json), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(json), for: "/api/auth/status")
         let result = try await store.connect(to: host, displayName: "FiestaBoard")
         XCTAssertEqual(result, .ready)
     }
 
     func testSignInStoresTheCredential() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
 
-        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/auth/login")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
         try await store.signIn(username: "jeffre", password: "hunter2")
 
         let saved = credentials.load(for: host.absoluteString)
@@ -73,10 +73,10 @@ final class ConnectionStoreTests: XCTestCase {
     }
 
     func testFailedSignInStoresNothing() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
 
-        StubURLProtocol.enqueue(.json(#"{"detail":"bad"}"#, status: 401), for: "/auth/login")
+        StubURLProtocol.enqueue(.json(#"{"detail":"bad"}"#, status: 401), for: "/api/auth/login")
         do {
             try await store.signIn(username: "jeffre", password: "wrong")
             XCTFail("expected unauthorized")
@@ -87,57 +87,57 @@ final class ConnectionStoreTests: XCTestCase {
 
     /// The core recovery behaviour: an expired cookie re-logs in silently.
     func testA401TriggersOneSilentReLoginAndRetriesTheOperation() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
         try credentials.save(StoredCredential(username: "jeffre", password: "hunter2"),
                              for: host.absoluteString)
 
-        StubURLProtocol.enqueue(.json(#"{"detail":"Not authenticated"}"#, status: 401), for: "/panels")
-        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/auth/login")
-        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"Not authenticated"}"#, status: 401), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
 
         let panels = try await store.authorized { try await $0.panels() }
         XCTAssertEqual(panels.count, 1)
 
         let paths = StubURLProtocol.requests.map(\.url.path)
-        XCTAssertEqual(paths, ["/auth/status", "/panels", "/auth/login", "/panels"])
+        XCTAssertEqual(paths, ["/api/auth/status", "/api/panels", "/api/auth/login", "/api/panels"])
     }
 
     /// One attempt, not a loop: a changed password must surface, not spin.
     func testASecond401AfterReLoginSurfaces() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
         try credentials.save(StoredCredential(username: "jeffre", password: "stale"),
                              for: host.absoluteString)
 
-        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/panels")
-        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/auth/login")
-        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
 
         do {
             _ = try await store.authorized { try await $0.panels() }
             XCTFail("expected unauthorized")
         } catch FiestaError.unauthorized {}
 
-        XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path == "/auth/login" }.count, 1,
+        XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path == "/api/auth/login" }.count, 1,
                        "exactly one re-login attempt")
     }
 
     func testA401WithNoStoredCredentialSurfacesImmediately() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
 
-        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
         do {
             _ = try await store.authorized { try await $0.panels() }
             XCTFail("expected unauthorized")
         } catch FiestaError.unauthorized {}
 
-        XCTAssertFalse(StubURLProtocol.requests.contains { $0.url.path == "/auth/login" })
+        XCTAssertFalse(StubURLProtocol.requests.contains { $0.url.path == "/api/auth/login" })
     }
 
     func testTheConnectionAndDefaultPanelSurviveARestart() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "Kitchen Board")
         store.setDefaultPanel(ref: "abc123def456")
 
@@ -151,7 +151,7 @@ final class ConnectionStoreTests: XCTestCase {
     }
 
     func testSignOutClearsTheCredentialButKeepsTheHost() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
         try credentials.save(StoredCredential(username: "a", password: "1"), for: host.absoluteString)
 
@@ -162,7 +162,7 @@ final class ConnectionStoreTests: XCTestCase {
 
     func testSignOutClearsTheSessionAndPersistsTheSignInRoute() async throws {
         let cookieHost = URL(string: "http://board.example:4420")!
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         _ = try await store.connect(to: cookieHost, displayName: "FiestaBoard")
         let cookie = try XCTUnwrap(HTTPCookie(properties: [
             .domain: "board.example", .path: "/", .name: "fiestaboard_session",
@@ -184,10 +184,10 @@ final class ConnectionStoreTests: XCTestCase {
     }
 
     func testReconnectingToAnOpenBoardClearsTheSignedOutRoute() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
         store.signOut()
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
 
         let app = AppModel(connection: store)
@@ -196,7 +196,7 @@ final class ConnectionStoreTests: XCTestCase {
     }
 
     func testForgetClearsEverything() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")
         try credentials.save(StoredCredential(username: "a", password: "1"), for: host.absoluteString)
 

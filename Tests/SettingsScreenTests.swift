@@ -11,7 +11,7 @@ final class SettingsScreenTests: XCTestCase {
             defaults: UserDefaults(suiteName: "tv.settings.\(UUID().uuidString)")!,
             credentials: InMemoryCredentialStore(),
             clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) }))
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try? await app.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         return app
     }
@@ -71,7 +71,7 @@ final class SettingsScreenTests: XCTestCase {
         model.setCalibration(1.5, for: panel)
         XCTAssertEqual(model.calibration(for: panel), 1.15, accuracy: 0.0001)
 
-        StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#), for: "/panels/")
+        StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#), for: "/api/panels/")
         await model.saveCalibration(panel: panel)
         let patch = try XCTUnwrap(StubURLProtocol.requests.first { $0.method == "PATCH" })
         let body = try XCTUnwrap(patch.body)
@@ -85,7 +85,7 @@ final class SettingsScreenTests: XCTestCase {
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
 
         StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#),
-                                for: "/panels/")
+                                for: "/api/panels/")
         model.resizeDiagonal = 85
         await model.resize(panel: panel)
 
@@ -105,7 +105,7 @@ final class SettingsScreenTests: XCTestCase {
         model.resizeDiagonal = 85
         XCTAssertEqual(model.previewGrid, "45 × 18")
 
-        StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#), for: "/panels/")
+        StubURLProtocol.enqueue(.json(#"{"status":"success","panel":\#(Fixtures.panelJSON)}"#), for: "/api/panels/")
         await model.resize(panel: panel)
 
         let patch = try XCTUnwrap(StubURLProtocol.requests.first { $0.method == "PATCH" })
@@ -127,7 +127,7 @@ final class SettingsScreenTests: XCTestCase {
          "incompatible_references":[{"type":"page","id":"p1","name":"Welcome"},
                                     {"type":"page","id":"p2","name":"Hours"}]}
         """
-        StubURLProtocol.enqueue(.json(response), for: "/panels/")
+        StubURLProtocol.enqueue(.json(response), for: "/api/panels/")
         await model.resize(panel: panel)
 
         let warning = try XCTUnwrap(model.warningMessage)
@@ -166,7 +166,7 @@ final class SettingsScreenTests: XCTestCase {
 
     func testScreenRenders() async {
         let app = await makeApp()
-        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
         RenderHarness.render(SettingsScreen().environment(app))
     }
 }

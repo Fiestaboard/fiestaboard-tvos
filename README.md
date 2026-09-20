@@ -9,6 +9,12 @@ A native tvOS viewer for FiestaBoard panels. It finds your board on the local ne
 
 Run the app with ./build-and-run.sh. Run tests with ./build-and-run.sh --test.
 
+To connect from the simulator, enter the Mac's LAN address and FiestaBoard's
+mapped port in the manual address field, for example `192.168.0.50:4420`.
+The app adds the public `/api` prefix itself. A FiestaBoard running in Docker
+bridge mode may not appear in Bonjour discovery, so use the manual address
+field in that setup.
+
 The tvOS icon and Top Shelf assets can be regenerated with
 `swift scripts/generate-brand-assets.swift`. Release submission steps are in
 [docs/PUBLISHING.md](docs/PUBLISHING.md).

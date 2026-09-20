@@ -19,7 +19,7 @@ final class FiestaClientTests: XCTestCase {
     }
 
     func testAuthStatusDecodesSnakeCase() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
         let status = try await client.authStatus()
         XCTAssertTrue(status.enabled)
         XCTAssertFalse(status.authenticated)
@@ -27,13 +27,19 @@ final class FiestaClientTests: XCTestCase {
         XCTAssertFalse(status.setupRequired)
     }
 
+    func testPublicServerUsesTheAPIPrefix() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
+        _ = try await client.authStatus()
+        XCTAssertEqual(StubURLProtocol.requests.first?.url.path, "/api/auth/status")
+    }
+
     func testLoginPostsCredentialsAndAlwaysAsksToBeRemembered() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/auth/login")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
         try await client.login(username: "jeffre", password: "hunter2")
 
         let request = try XCTUnwrap(StubURLProtocol.requests.first)
         XCTAssertEqual(request.method, "POST")
-        XCTAssertEqual(request.url.path, "/auth/login")
+        XCTAssertEqual(request.url.path, "/api/auth/login")
 
         let body = try XCTUnwrap(request.body)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -45,7 +51,7 @@ final class FiestaClientTests: XCTestCase {
 
     func testLoginMapsA401ToUnauthorized() async {
         StubURLProtocol.enqueue(.json(#"{"detail":"Invalid username or password"}"#, status: 401),
-                                for: "/auth/login")
+                                for: "/api/auth/login")
         do {
             try await client.login(username: "jeffre", password: "wrong")
             XCTFail("expected unauthorized")
@@ -60,7 +66,7 @@ final class FiestaClientTests: XCTestCase {
     /// the user to the web UI rather than offer a sign-in form that cannot work.
     func testSetupRequiredIsItsOwnError() async {
         StubURLProtocol.enqueue(.json(#"{"detail":"Setup required","setup_required":true}"#, status: 409),
-                                for: "/panels")
+                                for: "/api/panels")
         do {
             _ = try await client.panels()
             XCTFail("expected setupRequired")
@@ -72,7 +78,7 @@ final class FiestaClientTests: XCTestCase {
     }
 
     func testPanelsDecodesTheListEnvelope() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
         let panels = try await client.panels()
         XCTAssertEqual(panels.count, 1)
         let panel = try XCTUnwrap(panels.first)
@@ -89,7 +95,7 @@ final class FiestaClientTests: XCTestCase {
     }
 
     func testPanelsMapsA401ToUnauthorized() async {
-        StubURLProtocol.enqueue(.json(#"{"detail":"Not authenticated"}"#, status: 401), for: "/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"Not authenticated"}"#, status: 401), for: "/api/panels")
         do {
             _ = try await client.panels()
             XCTFail("expected unauthorized")
@@ -101,9 +107,9 @@ final class FiestaClientTests: XCTestCase {
 
     /// The viewer surface takes an id OR a short code, so /panel/1 must work.
     func testPanelAcceptsAShortCodeRef() async throws {
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/panel/")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/")
         _ = try await client.panel(ref: "1")
-        XCTAssertEqual(StubURLProtocol.requests.first?.url.path, "/panel/1")
+        XCTAssertEqual(StubURLProtocol.requests.first?.url.path, "/api/panel/1")
     }
 
     func testFrameDecodesCharactersAndTimestamp() async throws {
@@ -126,7 +132,7 @@ final class FiestaClientTests: XCTestCase {
     }
 
     func testDeletedPanelIsNotFound() async {
-        StubURLProtocol.enqueue(.json(Fixtures.panelNotFound, status: 404), for: "/panel/")
+        StubURLProtocol.enqueue(.json(Fixtures.panelNotFound, status: 404), for: "/api/panel/")
         do {
             _ = try await client.panel(ref: "gone")
             XCTFail("expected notFound")
@@ -138,12 +144,12 @@ final class FiestaClientTests: XCTestCase {
 
     func testUpdatePanelPatchesOnlyTheFieldsGiven() async throws {
         let response = #"{"status":"success","panel":\#(Fixtures.panelJSON)}"#
-        StubURLProtocol.enqueue(.json(response), for: "/panels/")
+        StubURLProtocol.enqueue(.json(response), for: "/api/panels/")
         _ = try await client.updatePanel(id: "abc123def456", diagonal: 55, aspectW: 16, aspectH: 9)
 
         let request = try XCTUnwrap(StubURLProtocol.requests.first)
         XCTAssertEqual(request.method, "PATCH")
-        XCTAssertEqual(request.url.path, "/panels/abc123def456")
+        XCTAssertEqual(request.url.path, "/api/panels/abc123def456")
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: request.body!) as? [String: Any])
         XCTAssertEqual(json["screen_diagonal_inches"] as? Double, 55)
         XCTAssertEqual(json["screen_aspect_w"] as? Double, 16)
@@ -158,7 +164,7 @@ final class FiestaClientTests: XCTestCase {
         {"status":"success","panel":\(Fixtures.panelJSON),
          "incompatible_references":[{"type":"page","id":"p1","name":"Welcome"}]}
         """
-        StubURLProtocol.enqueue(.json(response), for: "/panels/")
+        StubURLProtocol.enqueue(.json(response), for: "/api/panels/")
         let result = try await client.updatePanel(id: "abc123def456", diagonal: 85)
         XCTAssertEqual(result.incompatibleReferences.count, 1)
         XCTAssertEqual(result.incompatibleReferences.first?.name, "Welcome")
@@ -178,9 +184,9 @@ final class FiestaClientTests: XCTestCase {
     func testBaseURLPathsAreJoinedWithoutDoubleSlashes() async throws {
         let trailing = FiestaClient(baseURL: URL(string: "http://host:4420/")!,
                                     session: StubURLProtocol.makeSession())
-        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await trailing.authStatus()
         XCTAssertEqual(StubURLProtocol.requests.first?.url.absoluteString,
-                       "http://host:4420/auth/status")
+                       "http://host:4420/api/auth/status")
     }
 }

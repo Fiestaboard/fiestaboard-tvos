@@ -50,7 +50,7 @@ final class StubURLProtocol: URLProtocol {
         return URLSession(configuration: config)
     }
 
-    // Longest matching fragment wins, so "/panels" and "/panel/" can coexist.
+    // Longest matching fragment wins, so "/api/panels" and "/api/panel/" can coexist.
     private static func dequeue(for url: URL) -> Stub? {
         lock.lock(); defer { lock.unlock() }
         let path = url.path
