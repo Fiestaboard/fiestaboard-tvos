@@ -30,7 +30,7 @@ public struct BoardCanvas: View {
             }
         }
         .frame(width: layout.width, height: layout.height)
-        .background(background.swiftUI)
+        .background(background == .black ? Color.black : background.swiftUI)
         // The flip is announced to VoiceOver by the viewer, not per tile:
         // 810 accessibility elements would make the board unusable to browse.
         .accessibilityHidden(true)
@@ -54,7 +54,7 @@ public struct BoardCanvas: View {
     private func draw(in context: inout GraphicsContext, at date: Date) {
         let font = BoardFont.glyph(size: layout.fontSize)
         let whiteHardware = background == .white
-        let unlit = whiteHardware ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
+        let unlit = whiteHardware ? Color(hex: "#e8e8e8") : Color.black
         let ink = whiteHardware ? Color.black : Color.white
 
         // Resolve each distinct glyph once, then stamp it.
@@ -95,7 +95,7 @@ public struct BoardCanvas: View {
                 if whiteHardware && color == .white { pigment = .black }
                 else if whiteHardware && color == .black { pigment = .white }
                 else { pigment = color }
-                context.fill(shape, with: .color(pigment.swiftUI))
+                context.fill(shape, with: .color(pigment == .black ? .black : pigment.swiftUI))
 
             case .character(let character):
                 context.fill(shape, with: .color(unlit))

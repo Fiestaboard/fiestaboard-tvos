@@ -118,6 +118,18 @@ final class ViewerScreenTests: XCTestCase {
         RenderHarness.render(ViewerScreen(ref: "1", model: model).environment(app))
     }
 
+    func testViewerMarginsAreTrueBlackForOLED() throws {
+        let app = makeApp()
+        let model = ViewerModel(app: app, ref: "1")
+        model.snapshot = snapshot()
+        model.sizing = .trueScale
+        let image = RenderHarness.image(ViewerScreen(ref: "1", model: model).environment(app))
+        let corner = try XCTUnwrap(image.pixel(x: 10, y: 10))
+        XCTAssertLessThanOrEqual(Int(corner.r), 2)
+        XCTAssertLessThanOrEqual(Int(corner.g), 2)
+        XCTAssertLessThanOrEqual(Int(corner.b), 2)
+    }
+
     func testRendersTheOverlay() {
         let app = makeApp()
         let model = ViewerModel(app: app, ref: "1")

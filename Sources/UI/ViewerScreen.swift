@@ -14,8 +14,8 @@ struct ViewerScreen: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                // Board black, not pure black: matches the flaps behind it.
-                BoardColor.black.swiftUI.ignoresSafeArea()
+                // Switch off OLED pixels outside the lit flaps.
+                Color.black.ignoresSafeArea()
 
                 if model?.snapshot.deleted == true {
                     deletedState

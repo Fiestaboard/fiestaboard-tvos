@@ -8,7 +8,7 @@ import SwiftUI
 /// sRGB. When FiestaUI moves a token, this file is the one that changes.
 ///
 /// Dark only: a TV lives in a dark room, an Apple TV app is conventionally
-/// dark, and the viewer is pure board-black regardless. A light palette
+/// dark, and the viewer uses OLED black regardless. A light palette
 /// would be a theme switcher nobody would ever touch.
 public enum Fiesta {
 

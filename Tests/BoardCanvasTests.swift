@@ -102,6 +102,20 @@ final class BoardCanvasTests: XCTestCase {
         XCTAssertGreaterThan(Int(tile.r), 0xc0, "a white flap must be lit")
     }
 
+    func testBlackFlapsAndGutterAreTrueBlackForOLED() throws {
+        let board = layout(cells: [[.blank, .color(.black)]], tileHeight: 200)
+        let image = RenderHarness.image(BoardCanvas(layout: board, background: .black),
+                                        size: CGSize(width: board.width, height: board.height))
+        let first = try XCTUnwrap(image.pixel(x: Int(board.tiles[0].width / 2), y: 80))
+        let gutter = try XCTUnwrap(image.pixel(x: Int(board.tiles[0].width + 10), y: 80))
+        let second = try XCTUnwrap(image.pixel(x: Int(board.tiles[1].x + board.tiles[1].width / 2), y: 80))
+        for pixel in [first, gutter, second] {
+            XCTAssertLessThanOrEqual(Int(pixel.r), 2)
+            XCTAssertLessThanOrEqual(Int(pixel.g), 2)
+            XCTAssertLessThanOrEqual(Int(pixel.b), 2)
+        }
+    }
+
     func testBoardColorsBridgeToSwiftUI() {
         // Guards against a typo silently turning into black.
         XCTAssertNotEqual(BoardColor.red.swiftUI.description, BoardColor.blue.swiftUI.description)
