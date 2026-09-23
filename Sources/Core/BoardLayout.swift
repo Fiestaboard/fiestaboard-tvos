@@ -40,6 +40,22 @@ public struct BoardLayout: Sendable {
 
     public var fontSize: Double { tileHeight * Self.fontSizeRatio }
 
+    /// The size `make` would produce, without building its tiles.
+    ///
+    /// Laying a board out is a two-pass job and only the second pass needs
+    /// the tiles; so is asking whether a grid suits a screen. An 85" panel
+    /// is 810 tiles, so measuring through `make` allocated a whole board to
+    /// read two numbers off it.
+    public static func size(rows: Int, cols: Int,
+                            tileHeight: Double) -> (width: Double, height: Double) {
+        guard rows > 0, cols > 0, tileHeight > 0 else { return (0, 0) }
+        let gutter = tileHeight * BoardGeometry.tileGutterRatio
+        let colPitch = tileHeight * BoardGeometry.tileWidthRatio + gutter
+        let rowPitch = tileHeight + gutter
+        // Borderless: the trailing gutter is not part of the board.
+        return (Double(cols) * colPitch - gutter, Double(rows) * rowPitch - gutter)
+    }
+
     public static func make(rows: Int, cols: Int, cells: [[BoardCell]], tileHeight: Double) -> BoardLayout {
         guard rows > 0, cols > 0, tileHeight > 0 else {
             return BoardLayout(tiles: [], width: 0, height: 0, tileHeight: max(tileHeight, 0))
@@ -88,11 +104,11 @@ public struct BoardLayout: Sendable {
             return BoardLayout(tiles: [], width: 0, height: 0, tileHeight: 0)
         }
 
-        // Lay out once at a reference height, measure, then rescale. This is
-        // the same two-pass shape the web viewer uses (render, measure the
-        // grid, apply a transform) without needing a real measurement.
+        // Measure once at a reference height, then rescale. This is the
+        // same two-pass shape the web viewer uses (render, measure the grid,
+        // apply a transform) without needing a real measurement.
         let reference = 100.0
-        let base = make(rows: rows, cols: cols, cells: cells, tileHeight: reference)
+        let base = size(rows: rows, cols: cols, tileHeight: reference)
 
         let scale: Double
         switch mode {

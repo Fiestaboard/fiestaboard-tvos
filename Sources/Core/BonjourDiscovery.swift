@@ -8,6 +8,13 @@ import Network
 /// list that offers an unreachable board is worse than a short list.
 public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
 
+    /// Existing FiestaPi images publish this hostname through host Avahi.
+    private static let legacyFiestaPiURL = URL(string: "http://fiestapi.local:\(DiscoveryFilter.defaultPort)")!
+    /// The service name a FiestaPi announces once it is new enough to.
+    private static let legacyFiestaPiServiceName = "FiestaBoard on fiestapi"
+    /// How long to wait for service browsing before falling back to it.
+    private static let legacyProbeDelay: TimeInterval = 1
+
     private let queue = DispatchQueue(label: "com.fiestaboard.tv.discovery")
     private var browser: NWBrowser?
     private var connections: [NWConnection] = []
@@ -72,10 +79,12 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
     /// do not publish an HTTP service from their bridge container. Check that
     /// known hostname when service browsing has not found a FiestaBoard.
     private func probeLegacyFiestaPi() {
-        queue.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self, self.continuation != nil, self.found.isEmpty,
-                  let url = URL(string: "http://fiestapi.local:4420") else { return }
-            Task { await self.confirm(url: url, name: "FiestaPi", onlyIfEmpty: true) }
+        queue.asyncAfter(deadline: .now() + Self.legacyProbeDelay) { [weak self] in
+            guard let self, self.continuation != nil, self.found.isEmpty else { return }
+            Task {
+                await self.confirm(url: Self.legacyFiestaPiURL, name: "FiestaPi",
+                                   onlyIfEmpty: true)
+            }
         }
     }
 
@@ -92,11 +101,11 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
                 guard let path = connection.currentPath,
                       let remote = path.remoteEndpoint,
                       case let .hostPort(host, port) = remote else {
-                    connection.cancel()
+                    self.discard(connection)
                     return
                 }
                 let hostString = Self.hostString(from: host)
-                connection.cancel()
+                self.discard(connection)
 
                 let candidate = DiscoveryCandidate(name: name,
                                                    host: hostString,
@@ -106,12 +115,22 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
                 Task { await self.confirm(url: url, name: name) }
 
             case .failed, .cancelled:
-                connection.cancel()
+                self.discard(connection)
             default:
                 break
             }
         }
         connection.start(queue: queue)
+    }
+
+    /// Cancel a resolve connection and stop tracking it. A browse that runs
+    /// while someone reads the Connect screen can resolve the same service
+    /// repeatedly; without this the array only ever grew.
+    private func discard(_ connection: NWConnection) {
+        connection.cancel()
+        queue.async {
+            self.connections.removeAll { $0 === connection }
+        }
     }
 
     /// Keep the interface suffix on link-local IPv6 addresses. Without it,
@@ -132,8 +151,8 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
             if onlyIfEmpty && !self.found.isEmpty { return }
             // A newly updated FiestaPi may announce its service after the
             // hostname fallback appeared. Replace that fallback entry.
-            if name.caseInsensitiveCompare("FiestaBoard on fiestapi") == .orderedSame {
-                self.found.removeValue(forKey: "http://fiestapi.local:4420")
+            if name.caseInsensitiveCompare(Self.legacyFiestaPiServiceName) == .orderedSame {
+                self.found.removeValue(forKey: Self.legacyFiestaPiURL.absoluteString)
             }
             let board = DiscoveredBoard(id: url.absoluteString, name: name, host: url)
             guard self.found[board.id] != board else { return }

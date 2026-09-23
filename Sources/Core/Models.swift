@@ -176,11 +176,8 @@ public enum FiestaError: Error, Equatable {
     case http(Int)
     case transport(String)
     case decoding(String)
-
-    public var isRecoverableBySigningIn: Bool {
-        self == .unauthorized
-    }
 }
+
 extension Panel {
     /// "30 × 12", or a plain statement when the virtual board is gone.
     public var gridDescription: String {

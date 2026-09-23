@@ -59,9 +59,12 @@ struct SettingsScreen: View {
                     Text("Each changed flap cycles through the drum at 80 ms per step. Choose which panels animate.")
                         .font(Fiesta.Text.caption)
                         .foregroundStyle(Fiesta.Colors.mutedForeground)
+                    // `panel` is already the current value — ForEach re-runs
+                    // when the model's list changes, so re-finding it here
+                    // only turned drawing the section into N searches of N.
                     ForEach(model?.panels ?? []) { panel in
                         Toggle(panel.name, isOn: Binding(
-                            get: { model?.panels.first(where: { $0.id == panel.id })?.animationsEnabled ?? false },
+                            get: { panel.animationsEnabled },
                             set: { enabled in
                                 Task { await model?.setAnimationEnabled(enabled, for: panel) }
                             }))

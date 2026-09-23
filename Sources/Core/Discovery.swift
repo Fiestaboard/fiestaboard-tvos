@@ -59,13 +59,11 @@ public enum DiscoveryFilter {
         guard !host.isEmpty else { return nil }
 
         // A bare Bonjour hostname resolves only with the .local suffix.
-        let isIPv4 = host.allSatisfy { $0.isNumber || $0 == "." }
         let isIPv6 = host.contains(":")
         if !host.contains("."), !isIPv6 {
             host += ".local"
         }
         if isIPv6 { host = "[\(host)]" }
-        _ = isIPv4
 
         let authority = candidate.port == 80 ? host : "\(host):\(candidate.port)"
         return URL(string: "http://\(authority)")

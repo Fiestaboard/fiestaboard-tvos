@@ -28,15 +28,16 @@ struct BoardFlipTransition {
         self.to = to
         self.code62 = code62
         self.startedAt = startedAt
+        // `codes` stays a local: the closure below cannot capture a stored
+        // property while the initialiser is still running.
         let codes = from.map(BoardTables.code(for:))
         startCodes = codes
-        let steps = to.enumerated().map { index, cell in
+        distances = to.enumerated().map { index, cell in
             guard codes.indices.contains(index) else { return 0 }
             let target = BoardTables.code(for: cell)
             return (target - codes[index] + Self.drumSize) % Self.drumSize
         }
-        distances = steps
-        duration = Double(steps.max() ?? 0) * Self.stepDuration
+        duration = Double(distances.max() ?? 0) * Self.stepDuration
     }
 
     func sample(index: Int, at date: Date) -> Sample {
