@@ -44,15 +44,27 @@ public struct TopShelfSnapshotStore {
         directory.appendingPathComponent(item.imageFile)
     }
 
+    /// Files are named for their CONTENTS, not for the panel they belong to.
+    ///
+    /// Home caches a Top Shelf image against its URL. Naming the file after
+    /// the panel meant new artwork arrived at a URL Home had already cached,
+    /// so it kept showing the old picture. Hashing the bytes gives identical
+    /// artwork a stable URL — which is what stops Home restarting a load it
+    /// is halfway through — while changed artwork gets a URL Home has never
+    /// seen and must fetch. It also means one poster shared by every panel
+    /// is written once rather than once per panel.
     public func replace(_ previews: [Preview]) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let previous = items()
         var current: [Item] = []
         for preview in previews {
-            let digest = SHA256.hash(data: Data(preview.panelID.utf8))
+            let digest = SHA256.hash(data: preview.imageData)
                 .map { String(format: "%02x", $0) }.joined()
             let filename = "preview-\(digest).png"
-            try preview.imageData.write(to: directory.appendingPathComponent(filename), options: .atomic)
+            let url = directory.appendingPathComponent(filename)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try preview.imageData.write(to: url, options: .atomic)
+            }
             current.append(Item(panelID: preview.panelID, name: preview.name, imageFile: filename))
         }
         try JSONEncoder().encode(current).write(to: manifestURL, options: .atomic)
