@@ -16,8 +16,12 @@ bridge mode may not appear in Bonjour discovery, so use the manual address
 field in that setup. Existing FiestaPi images are also checked through their
 `fiestapi.local` host name while newer images advertise a Bonjour HTTP service.
 
-The taco icon and static Top Shelf fallback can be regenerated with
-`swift scripts/generate-brand-assets.swift`. When the app loads the panel list,
+The taco icon and static Top Shelf fallback are drawn from `TacoMark`, a
+30 x 26 grid of flat colours in `Sources/Render/TacoMark.swift`, and can be
+regenerated with `./scripts/generate-brand-assets.sh`. Because the mark is
+geometry rather than a bitmap, it is exact at every size tvOS asks for;
+`scripts/check-brand-assets.swift` fails the build if it ever regresses to a
+resampled image. When the app loads the panel list,
 it caches a current image of each available board for the Apple TV Home Top
 Shelf carousel. Put FiestaBoard in the Home top row to see it. Release submission steps are in
 [docs/PUBLISHING.md](docs/PUBLISHING.md).

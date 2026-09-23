@@ -5,6 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 ./scripts/check-layering.sh
+./scripts/check-brand-assets.swift
 
 command -v xcodegen >/dev/null 2>&1 && xcodegen generate
 

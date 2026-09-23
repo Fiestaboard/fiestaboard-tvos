@@ -21,6 +21,9 @@ jobs:
       - name: Layering guard
         run: ./scripts/check-layering.sh
 
+      - name: Brand asset guard
+        run: ./scripts/check-brand-assets.swift
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
