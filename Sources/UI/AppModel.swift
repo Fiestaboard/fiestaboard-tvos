@@ -72,13 +72,18 @@ public final class AppModel {
         route = .viewer(ref)
     }
 
+    /// Opens `fiestaboard://panel/<ref>` from a Top Shelf carousel item.
+    ///
+    /// Exactly one path component, and only for a board this TV is still
+    /// signed in to: the carousel can outlive the connection it was built
+    /// from, and Home will happily send a stale link.
     public func openTopShelfURL(_ url: URL) {
+        let components = url.path.split(separator: "/")
         guard url.scheme == "fiestaboard", url.host == "panel",
-              let ref = url.path.split(separator: "/").map(String.init).first,
-              url.path.split(separator: "/").count == 1,
+              components.count == 1,
               connection.saved != nil, connection.client != nil,
               !connection.isSignedOut else { return }
-        openPanel(ref: ref)
+        openPanel(ref: String(components[0]))
         refreshTopShelfForViewerLaunch()
     }
 
@@ -108,10 +113,11 @@ public final class AppModel {
         previewTask?.cancel()
         previewTask = Task { [weak self] in
             guard let self,
-                  let panels = try? await connection.authorized({ try await $0.panels() }) else { return }
-            await TopShelfPreviewPublisher.publish(panels: panels,
-                                                   connection: connection,
-                                                   store: topShelfStore)
+                  let panels = try? await connection.authorized({ try await $0.panels() }),
+                  !Task.isCancelled else { return }
+            TopShelfPreviewPublisher.publish(panels: panels,
+                                             connection: connection,
+                                             store: topShelfStore)
         }
     }
 }

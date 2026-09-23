@@ -1,27 +1,25 @@
 import Foundation
 import TVServices
 
+/// Keeps the Top Shelf carousel in step with the board's panel list.
+///
+/// The carousel exists for the shortcut, not the picture: each item deep
+/// links straight into its panel. So publishing is local work — it needs the
+/// panel list, which the caller already has, and nothing off the network.
 @MainActor
 enum TopShelfPreviewPublisher {
+
     static func publish(panels: [Panel], connection: ConnectionStore,
-                        store: TopShelfSnapshotStore) async {
-        guard let host = connection.saved?.host else { return }
-        let cached = Dictionary(store.items().map { ($0.panelID, $0) },
-                                uniquingKeysWith: { first, _ in first })
-        var previews: [TopShelfSnapshotStore.Preview] = []
-        for panel in panels where !panel.boardMissing {
-            if Task.isCancelled { return }
-            if let frame = try? await connection.authorized({
-                try await $0.frame(ref: panel.id)
-            }), let png = TopShelfPreviewRenderer.png(panel: panel, frame: frame) {
-                previews.append(.init(panelID: panel.id, name: panel.name, imageData: png))
-            } else if let item = cached[panel.id],
-                      let data = try? Data(contentsOf: store.imageURL(for: item)) {
-                previews.append(.init(panelID: panel.id, name: panel.name, imageData: data))
-            }
-        }
-        guard !Task.isCancelled, !connection.isSignedOut,
-              connection.saved?.host == host else { return }
+                        store: TopShelfSnapshotStore) {
+        // Nothing is written for a board we are no longer entitled to show.
+        guard connection.saved != nil, !connection.isSignedOut,
+              let poster = TopShelfPreviewRenderer.poster else { return }
+
+        let previews = panels
+            .filter { !$0.boardMissing }
+            .map { TopShelfSnapshotStore.Preview(panelID: $0.id, name: $0.name,
+                                                 imageData: poster) }
+
         guard (try? store.replace(previews)) != nil else { return }
         TVTopShelfContentProvider.topShelfContentDidChange()
     }

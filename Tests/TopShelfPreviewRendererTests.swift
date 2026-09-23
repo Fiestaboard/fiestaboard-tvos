@@ -7,24 +7,29 @@ final class TopShelfPreviewRendererTests: XCTestCase {
     override func setUp() { super.setUp(); StubURLProtocol.reset() }
     override func tearDown() { StubURLProtocol.reset(); super.tearDown() }
 
-    func testRendersCurrentFrameAsFullSizeCarouselImage() throws {
-        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
-        let frame = try JSONDecoder().decode(PanelFrame.self, from: Data(Fixtures.frameJSON.utf8))
-        let png = try XCTUnwrap(TopShelfPreviewRenderer.png(panel: panel, frame: frame))
+    func testPosterIsTheBrandMarkOnTheBrandField() throws {
+        let png = try XCTUnwrap(TopShelfPreviewRenderer.poster)
         let image = try XCTUnwrap(UIImage(data: png))
         let attachment = XCTAttachment(image: image)
-        attachment.name = "Top Shelf board preview"
+        attachment.name = "Top Shelf poster"
         attachment.lifetime = .keepAlways
         add(attachment)
+
         XCTAssertEqual(image.size.width, 1920)
         XCTAssertEqual(image.size.height, 1080)
+
         let margin = try XCTUnwrap(image.pixel(x: 20, y: 20))
-        XCTAssertLessThan(Int(margin.r), 3)
-        let center = try XCTUnwrap(image.pixel(x: 960, y: 540))
-        XCTAssertLessThan(Int(center.r), 40, "the board preview should retain its dark flap surface")
+        XCTAssertEqual([Int(margin.r), Int(margin.g), Int(margin.b)], [0xf5, 0xa6, 0x23],
+                       "Home should see the brand field, not a dark board")
+
+        // The mark's centre falls on the tortilla, which is nothing like the
+        // near-black a rendered board would put here.
+        let centre = try XCTUnwrap(image.pixel(x: 960, y: 540))
+        XCTAssertGreaterThan(Int(centre.r), 120, "the taco should be drawn over the field")
+        XCTAssertNotEqual([Int(centre.r), Int(centre.g), Int(centre.b)], [0xf5, 0xa6, 0x23])
     }
 
-    func testPublisherCachesTheAvailablePanelsCurrentFrame() async throws {
+    func testPublisherWritesOnePosterPerAvailablePanelWithoutTouchingTheNetwork() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("topshelf-render-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -36,26 +41,25 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
-        StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/api/panel/")
+        StubURLProtocol.reset()
 
-        await TopShelfPreviewPublisher.publish(panels: [panel], connection: connection,
-                                               store: store)
+        TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
 
         let item = try XCTUnwrap(store.items().first)
         XCTAssertEqual(item.panelID, panel.id)
         XCTAssertEqual(item.name, panel.name)
         XCTAssertNotNil(UIImage(data: try Data(contentsOf: store.imageURL(for: item))))
-        XCTAssertTrue(StubURLProtocol.requests.contains { $0.url.path.hasSuffix("/frame") })
+        // The poster is the brand mark, so publishing asks the board for
+        // nothing — the panel list the caller already holds is enough.
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty,
+                      "publishing should not make requests, made \(StubURLProtocol.requests)")
     }
 
-    func testFrameFailureKeepsTheLastTopShelfPreview() async throws {
+    func testPanelWithNoBoardIsLeftOutOfTheCarousel() async throws {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("topshelf-offline-\(UUID().uuidString)")
+            .appendingPathComponent("topshelf-missing-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = TopShelfSnapshotStore(directory: directory)
-        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
-        let oldImage = Data([1, 2, 3])
-        try store.replace([.init(panelID: panel.id, name: panel.name, imageData: oldImage)])
         let connection = ConnectionStore(
             defaults: UserDefaults(suiteName: "tv.topshelf.\(UUID().uuidString)")!,
             credentials: InMemoryCredentialStore(),
@@ -63,10 +67,38 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
 
-        await TopShelfPreviewPublisher.publish(panels: [panel], connection: connection,
-                                               store: store)
+        let missing = Fixtures.panelJSON.replacingOccurrences(of: #""board_missing":false"#,
+                                                              with: #""board_missing":true"#)
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(missing.utf8))
+        XCTAssertTrue(panel.boardMissing, "fixture should describe a panel with no board")
+
+        TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
+
+        XCTAssertTrue(store.items().isEmpty,
+                      "a panel with no board has nothing to open into")
+    }
+
+    func testSignedOutBoardPublishesNothing() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("topshelf-signedout-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        let existing = Data([1, 2, 3])
+        try store.replace([.init(panelID: "one", name: "Kitchen", imageData: existing)])
+
+        let connection = ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.topshelf.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        connection.signOut()
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+
+        TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
 
         let retained = try XCTUnwrap(store.items().first)
-        XCTAssertEqual(try Data(contentsOf: store.imageURL(for: retained)), oldImage)
+        XCTAssertEqual(retained.panelID, "one")
+        XCTAssertEqual(try Data(contentsOf: store.imageURL(for: retained)), existing)
     }
 }

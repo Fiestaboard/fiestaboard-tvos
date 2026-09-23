@@ -6,15 +6,19 @@ final class FixtureHTTPServer {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "FiestaBoardUITests.fixtureServer")
     private let onFrame: () -> Void
+    private let onPanels: () -> Void
     private let frameBody: String
     private let lock = NSLock()
     private var sawFrame = false
+    private var sawPanels = false
 
     var port: UInt16 { listener.port!.rawValue }
 
     init(frameBody: String = Fixtures.emptyFrameJSON,
-         onFrame: @escaping () -> Void) throws {
+         onFrame: @escaping () -> Void = {},
+         onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
+        self.onPanels = onPanels
         self.frameBody = frameBody
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
@@ -54,7 +58,13 @@ final class FixtureHTTPServer {
                 self.sawFrame = true
                 self.lock.unlock()
                 if firstFrame { self.onFrame() }
-            case "/api/panels": body = Fixtures.panelsList
+            case "/api/panels":
+                body = Fixtures.panelsList
+                self.lock.lock()
+                let firstPanels = !self.sawPanels
+                self.sawPanels = true
+                self.lock.unlock()
+                if firstPanels { self.onPanels() }
             default: body = #"{"detail":"Not found"}"#
             }
             let payload = Data(body.utf8)

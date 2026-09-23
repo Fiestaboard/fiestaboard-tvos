@@ -8,8 +8,9 @@ CI checks compilation and bundle assembly; it is not an App Store upload.
 The Top Shelf extension has bundle ID `com.fiestaboard.tv.topshelf`. Register
 the App Group `group.com.fiestaboard.tv` for both bundle IDs in the Apple
 Developer portal, then refresh their provisioning profiles. Both targets use
-`Config/AppGroup.entitlements`. The extension reads locally cached board
-images; it does not receive the board address or sign-in credential.
+`Config/AppGroup.entitlements`. The extension reads a locally written
+manifest of panel names and a brand poster; it does not receive the board
+address, the board's contents, or the sign-in credential.
 
 Use **FiestaBoard for Apple TV** as the App Store name and **Your panels, on
 your TV** as the subtitle. App Review may reject the platform wording under
