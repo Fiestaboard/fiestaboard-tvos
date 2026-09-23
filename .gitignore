@@ -8,6 +8,8 @@ DerivedData/
 
 # XcodeGen output (regenerated from project.yml)
 *.xcodeproj/
+/Info.plist
+/TopShelf/Info.plist
 
 # macOS
 .DS_Store
