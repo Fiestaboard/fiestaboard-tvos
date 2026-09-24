@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import FiestaBoardTV
 
@@ -15,6 +16,13 @@ final class ViewerScreenTests: XCTestCase {
         let cells = Array(repeating: Array(repeating: BoardCell.character("A"), count: cols), count: rows)
         return PanelSnapshot(panel: panel, cells: cells, rows: rows, cols: cols,
                              connection: connection, dimmed: dimmed, deleted: deleted)
+    }
+
+    /// 8-bit sRGB components of a token colour, for pixel comparisons.
+    private func components(of color: Color) -> (r: Int, g: Int, b: Int) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
     }
 
     private func makeApp() -> AppModel {
@@ -136,6 +144,58 @@ final class ViewerScreenTests: XCTestCase {
         model.snapshot = snapshot()
         model.showOverlay()
         RenderHarness.render(ViewerScreen(ref: "1", model: model).environment(app))
+    }
+
+    /// The offer is a message over a live board, so it has to look like one:
+    /// a card with its own surface, not text floating on the flaps. Counted
+    /// down the middle of the screen rather than asserted at one point, so
+    /// the test does not encode the card's exact height.
+    func testResizeOfferDrawsACardOverTheBoard() throws {
+        let app = makeApp()
+        let model = ViewerModel(app: app, ref: "1")
+        model.snapshot = snapshot(rows: 21, cols: 15)
+        model.considerResizeOffer(for: screen)
+        XCTAssertTrue(model.resizeOfferVisible)
+
+        let image = RenderHarness.image(ViewerScreen(ref: "1", model: model).environment(app))
+        // Taken from the token rather than written out, so retuning the
+        // palette does not quietly turn this assertion into a no-op.
+        let card = components(of: Fiesta.Colors.surface)
+        var surfaceSamples = 0
+        for y in stride(from: 200, to: 880, by: 4) {
+            guard let sample = image.pixel(x: 960, y: y) else { continue }
+            if abs(Int(sample.r) - card.r) <= 3,
+               abs(Int(sample.g) - card.g) <= 3,
+               abs(Int(sample.b) - card.b) <= 3 {
+                surfaceSamples += 1
+            }
+        }
+        XCTAssertGreaterThan(surfaceSamples, 10,
+                             "the resize offer should paint a card behind its text")
+
+        // A message on top must not cost the surround its OLED black.
+        let corner = try XCTUnwrap(image.pixel(x: 10, y: 10))
+        XCTAssertLessThanOrEqual(Int(corner.r), 2)
+        XCTAssertLessThanOrEqual(Int(corner.g), 2)
+        XCTAssertLessThanOrEqual(Int(corner.b), 2)
+    }
+
+    /// The overlay is transient chrome: it belongs at the top, and the board
+    /// below it must still be the board.
+    func testOverlayStaysAtTheTopOfTheScreen() throws {
+        let app = makeApp()
+        let model = ViewerModel(app: app, ref: "1")
+        model.snapshot = snapshot()
+        model.showOverlay()
+
+        let image = RenderHarness.image(ViewerScreen(ref: "1", model: model).environment(app))
+        // Above the bar is the inset, which stays true black; inside it the
+        // material is visibly lighter. An equal pair means nothing drew.
+        let aboveBar = try XCTUnwrap(image.pixel(x: 960, y: 20))
+        let inBar = try XCTUnwrap(image.pixel(x: 960, y: 110))
+        XCTAssertGreaterThan(Int(inBar.r) + Int(inBar.g) + Int(inBar.b),
+                             Int(aboveBar.r) + Int(aboveBar.g) + Int(aboveBar.b),
+                             "the overlay's bar should be visible against the black inset")
     }
 
     func testRendersTheLargestGrid() throws {
