@@ -116,6 +116,47 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(model.panels.first?.animationsEnabled, true)
     }
 
+    /// The row must read the loaded list, not a Panel value captured when
+    /// the row was built. A captured copy goes stale the moment anything
+    /// updates the list, and the switch then sits on the old state forever.
+    func testAnimationStateIsReadFromTheLoadedListNotACapturedCopy() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        let stale = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        XCTAssertFalse(stale.animationsEnabled)
+
+        var enabled = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+        enabled["animations_enabled"] = true
+        let fresh = try JSONDecoder().decode(
+            Panel.self, from: JSONSerialization.data(withJSONObject: enabled))
+        model.panels = [fresh]
+
+        XCTAssertTrue(model.animationEnabled(for: stale),
+                      "asking with a stale copy should still report the loaded state")
+    }
+
+    /// A switch on a TV must move when it is pressed. Waiting for a network
+    /// round trip before it moves reads as "the control does not work".
+    func testTheAnimationSwitchMovesBeforeTheSaveCompletes() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        model.panels = [panel]
+        XCTAssertFalse(model.animationEnabled(for: panel))
+
+        // Nothing enqueued, so the save fails — but only after a moment.
+        let saving = Task { await model.setAnimationEnabled(true, for: panel) }
+        await Task.yield()
+        XCTAssertTrue(model.animationEnabled(for: panel),
+                      "the switch should show the new state while the save is in flight")
+
+        await saving.value
+        XCTAssertFalse(model.animationEnabled(for: panel),
+                       "a save that failed must put the switch back")
+        XCTAssertNotNil(model.errorMessage)
+    }
+
     func testResizeOfAPortraitPanelSendsThePreviewedTVAspect() async throws {
         let app = await makeApp()
         let model = SettingsModel(app: app)

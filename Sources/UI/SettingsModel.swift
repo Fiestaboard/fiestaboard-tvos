@@ -18,6 +18,8 @@ final class SettingsModel {
     var sizing: BoardSizing = .fit
     var defaultPanelRef: String?
     private var calibrations: [String: Double] = [:]
+    /// Switches the user has flipped but the board has not confirmed yet.
+    private var pendingAnimation: [String: Bool] = [:]
 
     private let app: AppModel
 
@@ -74,8 +76,26 @@ final class SettingsModel {
         UserDefaults.standard.set(sizing.rawValue, forKey: "fiestaboard.sizing")
     }
 
+    /// Whether this panel's flaps animate.
+    ///
+    /// Read from the loaded list rather than from the `Panel` the caller is
+    /// holding: a row built earlier hands back a value copied at build time,
+    /// which goes stale as soon as anything updates the list, and the switch
+    /// then sits on the old state.
+    ///
+    /// A flip the board has not confirmed yet wins over both, so the switch
+    /// moves under the thumb instead of after a round trip.
+    func animationEnabled(for panel: Panel) -> Bool {
+        if let pending = pendingAnimation[panel.id] { return pending }
+        return panels.first(where: { $0.id == panel.id })?.animationsEnabled
+            ?? panel.animationsEnabled
+    }
+
     func setAnimationEnabled(_ enabled: Bool, for panel: Panel) async {
         errorMessage = nil
+        pendingAnimation[panel.id] = enabled
+        // However this ends, the switch goes back to describing the board.
+        defer { pendingAnimation[panel.id] = nil }
         do {
             let result = try await app.connection.authorized {
                 try await $0.updatePanel(id: panel.id, animationsEnabled: enabled)
