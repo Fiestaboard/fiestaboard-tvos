@@ -49,6 +49,24 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
     }
 
+    /// The board sits under a full-screen focusable target, which is how a
+    /// press anywhere wakes the chrome. While the chrome is up that target
+    /// must get out of the way, or the focus engine keeps handing focus back
+    /// to it and the buttons cannot be reached.
+    func testMovingRightFromPanelsReachesSettings() {
+        let app = launchLoadedViewer()
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus,
+                      "moving right from Panels should focus Settings")
+
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.staticTexts["Settings"].waitForExistence(timeout: 5),
+                      "activating Settings should open the settings screen")
+    }
+
     func testFocusedViewerDoesNotWashOutTheBoard() throws {
         let app = launchLoadedViewer()
         let captured = app.screenshot().image

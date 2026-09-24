@@ -34,9 +34,16 @@ struct ViewerScreen: View {
 
                 // The canvas needs a remote target, but a full-screen tvOS
                 // Button paints its focus material over the entire board.
+                //
+                // It gives that target up the moment anything else is on
+                // screen. The focus engine picks by geometry, and a
+                // focusable covering the whole display beats every button
+                // in it — leaving the overlay's Panels and Settings
+                // unreachable, because moving in any direction just landed
+                // back here.
                 Color.clear
                 .contentShape(Rectangle())
-                .focusable(true, interactions: .activate)
+                .focusable(boardIsTheOnlyTarget, interactions: .activate)
                 .focusEffectDisabled()
                 .onTapGesture { model?.showOverlay() }
                 .accessibilityLabel("Show board controls")
@@ -75,6 +82,17 @@ struct ViewerScreen: View {
         .onMoveCommand { _ in model?.showOverlay() }
         .onPlayPauseCommand { model?.showOverlay() }
         .onExitCommand { model?.stop(); app.showPanels() }
+    }
+
+    /// Whether the board is the only thing a press could be aimed at.
+    ///
+    /// False whenever the viewer is showing chrome or a message of its own —
+    /// each of those carries its own buttons, and they must win the focus.
+    private var boardIsTheOnlyTarget: Bool {
+        model?.overlayVisible != true
+            && model?.resizeOfferVisible != true
+            && model?.snapshot.deleted != true
+            && model?.boardMissing != true
     }
 
     private var deletedState: some View {
