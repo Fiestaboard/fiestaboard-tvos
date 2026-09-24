@@ -83,13 +83,22 @@ seeing them pass. If something fails, say so with the output.
    regression; the deterministic half of that behaviour is covered by
    `TopShelfPreviewRendererTests`.
 
-4. **A performance checkpoint the simulator cannot answer.** The renderer
+4. **`RenderHarness.image` paints nothing below about 100pt.** On this
+   simulator a hosting window smaller than roughly 100 points renders
+   empty, so a pixel test of a small view samples all zeroes and passes
+   whatever it asserts — the precise failure those tests exist to catch.
+   Every pre-existing pixel test uses 200-240pt tiles, which is why nobody
+   had hit it. To test something small, render at TV size pinned
+   top-leading and crop; `smallBoardImage` in `Tests/BoardCanvasTests.swift`
+   does exactly that.
+
+5. **A performance checkpoint the simulator cannot answer.** The renderer
    bets a single SwiftUI `Canvas` holds 60fps at 45×18 (810 flaps) with flip
    animation on. That needs real hardware. If it cannot, the documented
    fallback is a `CALayer` per tile with `CATransform3D` flips. Measure
    before changing anything; do not preemptively rewrite the renderer.
 
-5. **CI runs on a macOS runner, which `act` cannot emulate.** Verify locally
+6. **CI runs on a macOS runner, which `act` cannot emulate.** Verify locally
    with `xcodebuild` directly, but do not report a local pass as a CI pass.
 
 ## Scope
