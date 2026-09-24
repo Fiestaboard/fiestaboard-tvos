@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import FiestaBoardTV
 
@@ -15,7 +16,13 @@ final class AppModelTests: XCTestCase {
     }
 
     override func setUp() { super.setUp(); StubURLProtocol.reset() }
-    override func tearDown() { StubURLProtocol.reset(); super.tearDown() }
+    override func tearDown() {
+        StubURLProtocol.reset()
+        // Rendering the viewer route touches the real flag; leave the test
+        // host's display the way we found it.
+        UIApplication.shared.isIdleTimerDisabled = false
+        super.tearDown()
+    }
 
     func testWithNoSavedBoardItAsksToConnect() {
         let model = makeModel()
@@ -144,6 +151,87 @@ final class AppModelTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTAssertEqual(store.items().map(\.panelID), ["abc123def456"])
+    }
+
+    // MARK: Keeping a wall-mounted board awake
+
+    /// Record what the app asks of the idle timer, without touching the
+    /// test host's real display.
+    private func watchScreenAwake(_ model: AppModel) -> NSMutableArray {
+        let log = NSMutableArray()
+        model.screenAwake.sink = { held in log.add(held) }
+        model.applyScreenAwake()
+        log.removeAllObjects()
+        return log
+    }
+
+    func testTheScreenIsHeldAwakeOnlyWhileABoardIsShowing() {
+        let model = makeModel()
+        _ = watchScreenAwake(model)
+
+        model.openPanel(ref: "abc123def456")
+        XCTAssertTrue(model.screenAwake.isHeld, "a board on a wall must not be put to sleep")
+
+        model.showSettings()
+        XCTAssertFalse(model.screenAwake.isHeld, "off the board, the TV's own sleep settings rule")
+
+        model.dismissSettings()
+        XCTAssertTrue(model.screenAwake.isHeld, "back on the board, hold it awake again")
+
+        model.showPanels()
+        XCTAssertFalse(model.screenAwake.isHeld)
+    }
+
+    /// The reason this moved out of `ViewerScreen`: `onAppear` and
+    /// `onDisappear` are not ordered against each other across a route
+    /// swap, so the flag could be left cleared by the screen that was
+    /// leaving while the board was already back up. Driven by the route,
+    /// there is no ordering left to get wrong.
+    func testARouteRoundTripLeavesTheScreenHeldAwake() {
+        let model = makeModel()
+        let log = watchScreenAwake(model)
+        model.openPanel(ref: "abc123def456")
+
+        for _ in 0..<5 {
+            model.showSettings()
+            model.dismissSettings()
+            model.showPanels()
+            model.openPanel(ref: "abc123def456")
+        }
+
+        XCTAssertTrue(model.screenAwake.isHeld)
+        XCTAssertEqual(log.lastObject as? Bool, true,
+                       "the last thing said to the idle timer must match the screen on show")
+    }
+
+    /// A wake request is not a fact the system keeps for us. Coming back to
+    /// the foreground, the app says it again.
+    func testReturningToTheForegroundRestatesTheWakeRequest() {
+        let model = makeModel()
+        let log = watchScreenAwake(model)
+        model.openPanel(ref: "abc123def456")
+        log.removeAllObjects()
+
+        model.screenAwake.onForeground?()
+
+        XCTAssertEqual(log as! [Bool], [true])
+    }
+
+    func testAColdLaunchStraightIntoABoardHoldsTheScreenAwake() async throws {
+        let connection = ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        connection.setDefaultPanel(ref: "abc123def456")
+
+        let model = AppModel(connection: connection)
+        model.screenAwake.sink = { _ in }
+        model.start()
+
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+        XCTAssertTrue(model.screenAwake.isHeld)
     }
 
     func testRootViewRendersEveryRoute() {

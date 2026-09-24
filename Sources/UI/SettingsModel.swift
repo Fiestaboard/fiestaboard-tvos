@@ -17,15 +17,27 @@ final class SettingsModel {
     var customDiagonalText = ""
     var sizing: BoardSizing = .fit
     var defaultPanelRef: String?
+    /// This TV's say in the panel's nightly dim window.
+    var autoDimOverride: AutoDimOverride = .followPanel
+    /// Whether the board drifts to keep the TV's panel protection off it.
+    var driftEnabled = false
     private var calibrations: [String: Double] = [:]
     /// Switches the user has flipped but the board has not confirmed yet.
     private var pendingAnimation: [String: Bool] = [:]
 
     private let app: AppModel
+    private let signage: SignageSettings
+    private let clock: () -> Date
 
-    init(app: AppModel) {
+    init(app: AppModel,
+         signage: SignageSettings = .shared,
+         clock: @escaping () -> Date = Date.init) {
         self.app = app
+        self.signage = signage
+        self.clock = clock
         defaultPanelRef = app.connection.saved?.defaultPanelRef
+        autoDimOverride = signage.autoDimOverride
+        driftEnabled = signage.driftEnabled
         if let raw = UserDefaults.standard.string(forKey: "fiestaboard.sizing"),
            let stored = BoardSizing(rawValue: raw) {
             sizing = stored
@@ -110,6 +122,65 @@ final class SettingsModel {
         } catch {
             errorMessage = "Couldn't save the animation setting."
         }
+    }
+
+    // MARK: A board left on a wall
+
+    func setAutoDimOverride(_ value: AutoDimOverride) {
+        autoDimOverride = value
+        signage.autoDimOverride = value
+    }
+
+    func setDriftEnabled(_ enabled: Bool) {
+        driftEnabled = enabled
+        signage.driftEnabled = enabled
+    }
+
+    /// Why the board is dim, in words, for the Section footer.
+    ///
+    /// The whole reason this screen exists: auto-dim is configured on the
+    /// server and was invisible from the TV, so someone standing in front of
+    /// a board that had gone dim had no way to learn why. It also says when
+    /// FiestaBoard is *not* the culprit, because two of the three things
+    /// that dim a wall-mounted TV are not this app.
+    var autoDimSummary: String {
+        let scheduled = panels.filter { $0.autoDim.enabled }
+        guard !scheduled.isEmpty else {
+            return "No panel on this board is set to dim. If the picture still fades, it is the Apple TV's screen saver or the TV's own panel protection, not FiestaBoard."
+        }
+        var lines = scheduled.map { panel -> String in
+            let from = Self.clockLabel(panel.autoDim.start)
+            let until = Self.clockLabel(panel.autoDim.end)
+            return "\(panel.name) dims from \(from) to \(until)."
+        }
+        if autoDimOverride == .neverDim {
+            lines.append("This Apple TV is ignoring that and staying bright.")
+        } else if let dimming = scheduled.first(where: { isDimmingNow($0) }) {
+            lines.append("\(dimming.name) is dimmed right now.")
+        }
+        lines.append("The schedule itself belongs to the panel and is changed in the FiestaBoard app.")
+        return lines.joined(separator: " ")
+    }
+
+    private func isDimmingNow(_ panel: Panel) -> Bool {
+        AutoDimWindow.isDimmed(panel.autoDim, at: clock())
+    }
+
+    /// "22:00" as the TV's user would read a clock.
+    static func clockLabel(_ hhmm: String, locale: Locale = .current) -> String {
+        guard let total = AutoDimWindow.minutes(from: hhmm) else { return hhmm }
+        var calendar = Calendar(identifier: .gregorian)
+        let utc = TimeZone(secondsFromGMT: 0) ?? .current
+        calendar.timeZone = utc
+        let parts = DateComponents(year: 2001, month: 1, day: 1,
+                                   hour: total / 60, minute: total % 60)
+        guard let date = calendar.date(from: parts) else { return hhmm }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = utc
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     func selectPreset(_ inches: Double) {

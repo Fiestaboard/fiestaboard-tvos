@@ -18,6 +18,23 @@ public struct PanelSnapshot: Sendable {
     public let dimmed: Bool
     /// The panel was deleted in the app; there is nothing to come back to.
     public let deleted: Bool
+    /// Burn-in drift, in points. `.zero` unless this TV asked for it.
+    public let drift: BoardOffset
+
+    /// Spelled out rather than synthesised so `drift` can default: it is a
+    /// late arrival and every existing caller predates it.
+    public init(panel: Panel?, cells: [[BoardCell]], rows: Int, cols: Int,
+                connection: ConnectionState, dimmed: Bool, deleted: Bool,
+                drift: BoardOffset = .zero) {
+        self.panel = panel
+        self.cells = cells
+        self.rows = rows
+        self.cols = cols
+        self.connection = connection
+        self.dimmed = dimmed
+        self.deleted = deleted
+        self.drift = drift
+    }
 
     public static let empty = PanelSnapshot(panel: nil, cells: [], rows: 0, cols: 0,
                                             connection: .connecting, dimmed: false, deleted: false)
@@ -42,6 +59,7 @@ public final class PanelStore: @unchecked Sendable {
     private let frameInterval: TimeInterval
     private let configInterval: TimeInterval
     private let clock: () -> Date
+    private let signage: SignageSettings
 
     private var task: Task<Void, Never>?
     private var continuation: AsyncStream<PanelSnapshot>.Continuation?
@@ -56,12 +74,14 @@ public final class PanelStore: @unchecked Sendable {
                 ref: String,
                 frameInterval: TimeInterval = PanelStore.frameIntervalDefault,
                 configInterval: TimeInterval = PanelStore.configIntervalDefault,
-                clock: @escaping () -> Date = Date.init) {
+                clock: @escaping () -> Date = Date.init,
+                signage: SignageSettings = .shared) {
         self.client = client
         self.ref = ref
         self.frameInterval = frameInterval
         self.configInterval = configInterval
         self.clock = clock
+        self.signage = signage
     }
 
     public func snapshots() -> AsyncStream<PanelSnapshot> {
@@ -111,9 +131,16 @@ public final class PanelStore: @unchecked Sendable {
                 }
             }
 
-            let dimmed = panel.map { AutoDimWindow.isDimmed($0.autoDim, at: clock()) } ?? false
+            // This tick is also the drift's heartbeat: at a couple of
+            // points a minute, a step every frame interval is far below
+            // anything the eye resolves, so it needs no animation of its own.
+            let now = clock()
+            let dimmed = panel.map {
+                AutoDimWindow.isDimmed($0.autoDim, at: now, override: signage.autoDimOverride)
+            } ?? false
             continuation?.yield(PanelSnapshot(panel: panel, cells: cells, rows: rows, cols: cols,
-                                              connection: connection, dimmed: dimmed, deleted: deleted))
+                                              connection: connection, dimmed: dimmed, deleted: deleted,
+                                              drift: signage.drift(at: now)))
 
             try? await Task.sleep(nanoseconds: UInt64(frameInterval * 1_000_000_000))
             sinceConfig += frameInterval

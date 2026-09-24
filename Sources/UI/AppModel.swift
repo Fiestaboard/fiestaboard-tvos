@@ -18,7 +18,22 @@ public enum Route: Equatable, Hashable {
 @Observable
 public final class AppModel {
 
-    public var route: Route = .connecting
+    /// Spelled out rather than left to `@Observable` so that every route
+    /// change — including the ones other models make directly — passes
+    /// through one place that can restate whether the TV may sleep.
+    @ObservationIgnored private var storedRoute: Route = .connecting
+
+    public var route: Route {
+        get {
+            access(keyPath: \.route)
+            return storedRoute
+        }
+        set {
+            withMutation(keyPath: \.route) { storedRoute = newValue }
+            applyScreenAwake()
+        }
+    }
+
     public var errorMessage: String?
     var offeredResizeRefs: Set<String> = []
     /// Where Settings was opened from, so leaving it goes back there.
@@ -28,14 +43,38 @@ public final class AppModel {
     public let connection: ConnectionStore
     let topShelfStore: TopShelfSnapshotStore?
 
+    /// Holds the display awake while a board is up. Tests replace its sink.
+    @ObservationIgnored let screenAwake: ScreenAwake
+
     public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil) {
         self.connection = connection
         self.topShelfStore = topShelfStore
+        self.screenAwake = ScreenAwake()
+        // A wake request is not a fact the system remembers on the app's
+        // behalf. Coming back to the foreground, say what we want again.
+        screenAwake.onForeground = { [weak self] in self?.applyScreenAwake() }
+    }
+
+    /// Whether a board is on screen. The whole case for keeping the display
+    /// awake is that a panel is being shown; anywhere else, the TV's own
+    /// sleep settings are none of this app's business.
+    var wantsScreenAwake: Bool {
+        if case .viewer = route { return true }
+        return false
+    }
+
+    /// Restate the wake request. Cheap, idempotent, and safe to call from
+    /// anywhere — which is the point.
+    func applyScreenAwake() {
+        screenAwake.hold(wantsScreenAwake)
     }
 
     /// Decide the opening screen. A configured TV should power on into its
     /// board — that is the whole point of the app.
     public func start() {
+        // Also the app's first chance to state what it wants: a cold launch
+        // straight into a board must not let the TV fall asleep on it.
+        defer { applyScreenAwake() }
         guard route == .connecting else { return }
         guard let saved = connection.saved, connection.client != nil else {
             route = .connect

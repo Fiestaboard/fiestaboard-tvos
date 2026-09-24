@@ -15,9 +15,15 @@ public enum AutoDimWindow {
         return hour * 60 + minute
     }
 
+    /// Whether the board should be dimmed right now.
+    ///
+    /// `override` is the TV's own say in it, and it can only ever refuse the
+    /// dim — the window itself stays the panel's to define.
     public static func isDimmed(_ autoDim: AutoDim,
                                 at date: Date,
-                                calendar: Calendar = .current) -> Bool {
+                                calendar: Calendar = .current,
+                                override: AutoDimOverride = .followPanel) -> Bool {
+        guard override == .followPanel else { return false }
         guard autoDim.enabled,
               let start = minutes(from: autoDim.start),
               let end = minutes(from: autoDim.end),

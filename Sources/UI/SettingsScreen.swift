@@ -26,6 +26,8 @@ struct SettingsScreen: View {
                 launchSection
                 sizeSection
                 animationSection
+                dimmingSection
+                burnInSection
                 resizeSection
                 calibrationSection
 
@@ -124,6 +126,58 @@ struct SettingsScreen: View {
         }
     }
 
+    /// Auto-dim is configured on the server and was, until now, invisible
+    /// from the TV: the board went dim at ten and the room had no way to
+    /// find out why, let alone stop it.
+    ///
+    /// The override is this TV's, not the panel's. The window belongs to the
+    /// panel and every viewer reads it — the web one included — so switching
+    /// it off from here to fix one room would darken, or un-darken, screens
+    /// nobody in this room can see.
+    private var dimmingSection: some View {
+        Section {
+            Button {
+                model?.setAutoDimOverride(.followPanel)
+            } label: {
+                selectableRow("Follow the panel's schedule",
+                              isSelected: model?.autoDimOverride == .followPanel)
+            }
+            Button {
+                model?.setAutoDimOverride(.neverDim)
+            } label: {
+                selectableRow("Never dim on this Apple TV",
+                              isSelected: model?.autoDimOverride == .neverDim)
+            }
+        } header: {
+            Text("Night dimming")
+        } footer: {
+            Text(model?.autoDimSummary ?? "")
+        }
+    }
+
+    /// The honest section. Most of what dims a wall-mounted TV is the TV,
+    /// and no app can reach it — so this offers the one lever that does
+    /// work, and says plainly what it is for.
+    private var burnInSection: some View {
+        Section {
+            Toggle("Shift the board slowly", isOn: driftBinding)
+        } header: {
+            Text("Screen burn-in")
+        } footer: {
+            Text(Self.burnInFooter)
+        }
+    }
+
+    private static let burnInFooter = """
+        While a board is up, the Apple TV is kept awake, so its screen saver \
+        won't start. The TV itself is a separate matter: most sets, and every \
+        OLED, quietly pull brightness down on a picture that never changes, \
+        and no app can switch that off. Turn this on for a board that lives \
+        on a wall and it drifts a few pixels over twenty minutes — too slow \
+        to notice, enough that the TV stops treating it as a still image. \
+        Leave it off for ordinary viewing.
+        """
+
     private var resizeSection: some View {
         Section {
             Picker("Screen size", selection: diagonalBinding) {
@@ -195,6 +249,11 @@ struct SettingsScreen: View {
     private var customDiagonalBinding: Binding<String> {
         Binding(get: { model?.customDiagonalText ?? "" },
                 set: { model?.setCustomDiagonal($0) })
+    }
+
+    private var driftBinding: Binding<Bool> {
+        Binding(get: { model?.driftEnabled ?? false },
+                set: { model?.setDriftEnabled($0) })
     }
 
     private func animationBinding(for panel: Panel) -> Binding<Bool> {

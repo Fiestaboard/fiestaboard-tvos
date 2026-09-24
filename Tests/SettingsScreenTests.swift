@@ -226,6 +226,111 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(SettingsModel.presetDiagonals.first, 32)
     }
 
+    // MARK: A board left on a wall
+
+    private func freshSignage() -> SignageSettings {
+        SignageSettings(defaults: UserDefaults(suiteName: "tv.signage.\(UUID().uuidString)")!)
+    }
+
+    /// The override is this TV's. Nothing about it is sent to the board:
+    /// the window belongs to the panel and the web viewer reads the same
+    /// field, so writing it from here would darken screens in other rooms.
+    func testTheDimOverrideIsDeviceSideAndSendsNothing() async {
+        let app = await makeApp()
+        let signage = freshSignage()
+        let model = SettingsModel(app: app, signage: signage)
+
+        model.setAutoDimOverride(.neverDim)
+
+        XCTAssertEqual(signage.autoDimOverride, .neverDim)
+        XCTAssertEqual(model.autoDimOverride, .neverDim)
+        XCTAssertTrue(StubURLProtocol.requests.filter { $0.method == "PATCH" }.isEmpty,
+                      "the panel's own schedule must not be edited from the TV")
+    }
+
+    func testTheDimOverrideSurvivesReopeningSettings() async {
+        let app = await makeApp()
+        let signage = freshSignage()
+        SettingsModel(app: app, signage: signage).setAutoDimOverride(.neverDim)
+        XCTAssertEqual(SettingsModel(app: app, signage: signage).autoDimOverride, .neverDim)
+    }
+
+    /// The gap this closes: a board goes dim at ten at night and the person
+    /// in front of it has no way to learn why.
+    func testTheSummaryNamesThePanelAndItsWindow() async throws {
+        let app = await makeApp()
+        let atElevenPM = Calendar(identifier: .gregorian)
+            .date(from: DateComponents(year: 2026, month: 9, day: 19, hour: 23))!
+        let model = SettingsModel(app: app, signage: freshSignage(), clock: { atElevenPM })
+        model.panels = [try dimmingPanel(named: "Kitchen", start: "22:00", end: "07:00")]
+
+        let summary = model.autoDimSummary
+        XCTAssertTrue(summary.contains("Kitchen"), summary)
+        XCTAssertTrue(summary.contains(SettingsModel.clockLabel("22:00")), summary)
+        XCTAssertTrue(summary.contains(SettingsModel.clockLabel("07:00")), summary)
+        XCTAssertTrue(summary.lowercased().contains("dimmed right now"),
+                      "at 11pm inside a 22:00-07:00 window it should say so: \(summary)")
+
+        model.setAutoDimOverride(.neverDim)
+        XCTAssertFalse(model.autoDimSummary.lowercased().contains("dimmed right now"))
+        XCTAssertTrue(model.autoDimSummary.contains("ignoring"), model.autoDimSummary)
+    }
+
+    /// Two of the three things that dim a wall-mounted TV are not this app.
+    /// Saying so is the difference between a setting and an answer.
+    func testTheSummarySaysWhenFiestaBoardIsNotTheCause() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app, signage: freshSignage())
+        model.panels = [try panel(named: "Kitchen", dimming: false)]
+        XCTAssertFalse(model.panels[0].autoDim.enabled)
+
+        let summary = model.autoDimSummary
+        XCTAssertTrue(summary.contains("screen saver"), summary)
+        XCTAssertTrue(summary.lowercased().contains("panel protection"), summary)
+    }
+
+    func testClockLabelsAreReadableTimesNotRawStrings() {
+        // Compared loosely on the separator: modern ICU puts a narrow
+        // no-break space before the meridiem, which is correct typography
+        // and none of this test's business.
+        let evening = SettingsModel.clockLabel("22:00", locale: Locale(identifier: "en_US"))
+        XCTAssertTrue(evening.hasPrefix("10:00"), evening)
+        XCTAssertTrue(evening.hasSuffix("PM"), evening)
+
+        let morning = SettingsModel.clockLabel("07:00", locale: Locale(identifier: "en_US"))
+        XCTAssertTrue(morning.hasPrefix("7:00"), morning)
+        XCTAssertTrue(morning.hasSuffix("AM"), morning)
+
+        XCTAssertEqual(SettingsModel.clockLabel("nonsense"), "nonsense")
+    }
+
+    /// Off by default: it moves the picture, and most people are not running
+    /// a wall display.
+    func testDriftIsOffByDefaultAndOptIn() async {
+        let app = await makeApp()
+        let signage = freshSignage()
+        let model = SettingsModel(app: app, signage: signage)
+        XCTAssertFalse(model.driftEnabled)
+
+        model.setDriftEnabled(true)
+        XCTAssertTrue(signage.driftEnabled)
+        XCTAssertTrue(SettingsModel(app: app, signage: signage).driftEnabled)
+    }
+
+    private func dimmingPanel(named name: String, start: String, end: String) throws -> Panel {
+        try panel(named: name, dimming: true, start: start, end: end)
+    }
+
+    private func panel(named name: String, dimming: Bool,
+                       start: String = "22:00", end: String = "07:00") throws -> Panel {
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+        object["name"] = name
+        object["auto_dim"] = ["enabled": dimming, "start": start, "end": end]
+        return try JSONDecoder().decode(
+            Panel.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+
     func testScreenRenders() async {
         let app = await makeApp()
         StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
