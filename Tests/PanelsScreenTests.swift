@@ -45,6 +45,55 @@ final class PanelsScreenTests: XCTestCase {
         XCTAssertNotNil(model.errorMessage)
     }
 
+    /// A board that answers promptly with a lockout, a server fault, or a
+    /// payload this app cannot parse is NOT an unreachable board. Saying so
+    /// sends people to check cables while the board sits there replying.
+    func testALockoutSaysSoRatherThanBlamingTheNetwork() async {
+        let app = await makeApp()
+        StubURLProtocol.enqueue(
+            .json(#"{"detail":"Too many failed login attempts. Try again later."}"#, status: 429),
+            for: "/api/panels")
+        let model = PanelsModel(app: app)
+        await model.load()
+        let message = model.errorMessage ?? ""
+        XCTAssertFalse(message.contains("still on"),
+                       "a 429 is not an unreachable board, got: \(message)")
+        XCTAssertTrue(message.lowercased().contains("too many")
+                      || message.lowercased().contains("sign-in"),
+                      "a 429 should explain the lockout, got: \(message)")
+    }
+
+    func testAServerFaultReportsItsStatus() async {
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(#"{"detail":"boom"}"#, status: 500), for: "/api/panels")
+        let model = PanelsModel(app: app)
+        await model.load()
+        let message = model.errorMessage ?? ""
+        XCTAssertTrue(message.contains("500"), "the status is the whole clue, got: \(message)")
+        XCTAssertFalse(message.contains("still on"))
+    }
+
+    func testAnUnparseablePayloadSaysSoRatherThanBlamingTheNetwork() async {
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(#"{"panels":[{"id":"1"}]}"#), for: "/api/panels")
+        let model = PanelsModel(app: app)
+        await model.load()
+        let message = model.errorMessage ?? ""
+        XCTAssertFalse(message.contains("still on"),
+                       "a board that replied is reachable, got: \(message)")
+        XCTAssertTrue(message.lowercased().contains("understand")
+                      || message.lowercased().contains("version"),
+                      "a decode failure should point at versions, got: \(message)")
+    }
+
+    /// The one case that really is the network keeps its plain wording.
+    func testAnUnreachableBoardStillSaysCheckItIsOn() async {
+        let app = await makeApp()
+        let model = PanelsModel(app: app)
+        await model.load()   // nothing enqueued -> transport failure
+        XCTAssertTrue((model.errorMessage ?? "").contains("still on"))
+    }
+
     func testAnEmptyListIsNotAnError() async {
         let app = await makeApp()
         StubURLProtocol.enqueue(.json(#"{"panels":[],"total":0}"#), for: "/api/panels")

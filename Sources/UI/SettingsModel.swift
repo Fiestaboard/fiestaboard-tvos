@@ -57,8 +57,10 @@ final class SettingsModel {
             panels = try await app.connection.authorized { try await $0.panels() }
         } catch FiestaError.unauthorized {
             app.route = .signIn
+        } catch let error as FiestaError {
+            errorMessage = error.userMessage
         } catch {
-            errorMessage = "Couldn't reach your FiestaBoard."
+            errorMessage = FiestaError.transport("\(error)").userMessage
         }
     }
 
@@ -83,6 +85,8 @@ final class SettingsModel {
             }
         } catch FiestaError.unauthorized {
             app.route = .signIn
+        } catch let error as FiestaError {
+            errorMessage = "Couldn't save the animation setting. " + error.userMessage
         } catch {
             errorMessage = "Couldn't save the animation setting."
         }
@@ -115,6 +119,8 @@ final class SettingsModel {
             }
         } catch FiestaError.unauthorized {
             app.route = .signIn
+        } catch let error as FiestaError {
+            errorMessage = "Couldn't save the calibration. " + error.userMessage
         } catch {
             errorMessage = "Couldn't save the calibration."
         }

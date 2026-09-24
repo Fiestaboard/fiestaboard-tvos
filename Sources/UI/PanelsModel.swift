@@ -27,10 +27,10 @@ final class PanelsModel {
             // The stored credential could not recover the session — the only
             // useful next step is asking for one.
             app.route = .signIn
-        } catch FiestaError.setupRequired {
-            errorMessage = "This FiestaBoard has no account yet. Finish setup in the FiestaBoard app."
+        } catch let error as FiestaError {
+            errorMessage = error.userMessage
         } catch {
-            errorMessage = "Couldn't reach your FiestaBoard. Check it's still on."
+            errorMessage = FiestaError.transport("\(error)").userMessage
         }
     }
 }

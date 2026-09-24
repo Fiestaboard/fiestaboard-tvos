@@ -176,6 +176,39 @@ public enum FiestaError: Error, Equatable {
     case http(Int)
     case transport(String)
     case decoding(String)
+
+    /// What to put on a TV screen for this failure.
+    ///
+    /// Every case here used to surface as "Couldn't reach your FiestaBoard.
+    /// Check it's still on" — including a board that answered in
+    /// milliseconds with 429, with 500, or with a payload this app could not
+    /// parse. Blaming the network for those sends people to check cables
+    /// and power while the board sits there replying, which is the worst
+    /// possible thing to tell someone standing in front of a working board.
+    ///
+    /// Only `.transport` is actually an unreachable board.
+    public var userMessage: String {
+        switch self {
+        case .transport:
+            return "Couldn't reach your FiestaBoard. Check it's still on and on this network."
+        case .unauthorized:
+            return "Your saved sign-in was refused. Sign in again."
+        case .setupRequired:
+            return "This FiestaBoard has no account yet. Finish setup in the FiestaBoard app."
+        case .notFound(let detail):
+            return detail
+        case .http(429):
+            return "Your FiestaBoard is refusing sign-ins after too many failed attempts. "
+                 + "Wait a minute, then sign in again."
+        case .http(let status) where (500..<600).contains(status):
+            return "Your FiestaBoard answered with an error (HTTP \(status)). Check its logs."
+        case .http(let status):
+            return "Your FiestaBoard refused the request (HTTP \(status))."
+        case .decoding:
+            return "Your FiestaBoard replied in a format this app doesn't understand. "
+                 + "It may be running a newer version than this app supports."
+        }
+    }
 }
 
 extension Panel {

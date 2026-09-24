@@ -123,6 +123,57 @@ final class ConnectionStoreTests: XCTestCase {
                        "exactly one re-login attempt")
     }
 
+    /// The board locks an IP out after ten failed logins in a minute, so a
+    /// credential it has already rejected must not be spent again by the
+    /// next screen that loads. Otherwise a stale password becomes a lockout,
+    /// and the lockout then refuses the correct password too.
+    func testARejectedCredentialIsNotSpentAgainOnTheNextCall() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: host, displayName: "FiestaBoard")
+        try credentials.save(StoredCredential(username: "jeffre", password: "stale"),
+                             for: host.absoluteString)
+
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"Invalid username or password"}"#, status: 401),
+                                for: "/api/auth/login")
+        do {
+            _ = try await store.authorized { try await $0.panels() }
+            XCTFail("expected unauthorized")
+        } catch FiestaError.unauthorized {}
+
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
+        do {
+            _ = try await store.authorized { try await $0.panels() }
+            XCTFail("expected unauthorized")
+        } catch FiestaError.unauthorized {}
+
+        XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path == "/api/auth/login" }.count, 1,
+                       "a rejected credential must not be retried until someone signs in")
+    }
+
+    /// Signing in by hand is the event that makes the silent path trustworthy
+    /// again — otherwise the cooldown would outlast the fix.
+    func testSigningInClearsTheRejectedCredentialBlock() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: host, displayName: "FiestaBoard")
+        try credentials.save(StoredCredential(username: "jeffre", password: "stale"),
+                             for: host.absoluteString)
+
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/auth/login")
+        _ = try? await store.authorized { try await $0.panels() }
+
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
+        try await store.signIn(username: "jeffre", password: "correct")
+
+        StubURLProtocol.enqueue(.json(#"{"detail":"no"}"#, status: 401), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.loginOK), for: "/api/auth/login")
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        let panels = try await store.authorized { try await $0.panels() }
+        XCTAssertEqual(panels.count, 1, "the silent re-login should work again after signing in")
+    }
+
     func testA401WithNoStoredCredentialSurfacesImmediately() async throws {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await store.connect(to: host, displayName: "FiestaBoard")

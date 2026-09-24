@@ -29,8 +29,12 @@ final class SignInModel {
             app.route = .panels
         } catch FiestaError.unauthorized {
             errorMessage = "That username or password didn't work."
+        } catch let error as FiestaError {
+            // A lockout in particular must not read as a wrong password —
+            // the board is refusing to even consider one for a minute.
+            errorMessage = error.userMessage
         } catch {
-            errorMessage = "Couldn't reach your FiestaBoard. Check it's still on."
+            errorMessage = FiestaError.transport("\(error)").userMessage
         }
     }
 }

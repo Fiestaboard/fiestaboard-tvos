@@ -27,9 +27,19 @@ public final class ConnectionStore: @unchecked Sendable {
         static let signedOut = "fiestaboard.signedOut"
     }
 
+    /// How long a rejected credential is left alone for.
+    ///
+    /// Matched to FiestaBoard's own lockout window: it refuses an IP after
+    /// ten failed logins in sixty seconds.
+    static let rejectedCredentialCooldown: TimeInterval = 60
+
     private let defaults: UserDefaults
     private let credentials: CredentialStore
     private let clientFactory: (URL) -> FiestaClient
+    private let clock: () -> Date
+
+    /// When the silent re-login may be trusted again, if it has just failed.
+    private var silentLoginBlockedUntil: Date?
 
     public private(set) var saved: SavedConnection?
     public private(set) var client: FiestaClient?
@@ -37,10 +47,12 @@ public final class ConnectionStore: @unchecked Sendable {
 
     public init(defaults: UserDefaults = .standard,
                 credentials: CredentialStore = KeychainCredentialStore(),
-                clientFactory: @escaping (URL) -> FiestaClient = { FiestaClient(baseURL: $0) }) {
+                clientFactory: @escaping (URL) -> FiestaClient = { FiestaClient(baseURL: $0) },
+                clock: @escaping () -> Date = Date.init) {
         self.defaults = defaults
         self.credentials = credentials
         self.clientFactory = clientFactory
+        self.clock = clock
 
         if let data = defaults.data(forKey: Keys.connection),
            let connection = try? JSONDecoder().decode(SavedConnection.self, from: data) {
@@ -87,6 +99,9 @@ public final class ConnectionStore: @unchecked Sendable {
         guard let client, let saved else { throw FiestaError.transport("not connected") }
         try await client.login(username: username, password: password)
         defaults.set(false, forKey: Keys.signedOut)
+        // A credential the board just accepted makes the silent path
+        // trustworthy again.
+        silentLoginBlockedUntil = nil
         // Only persist a credential the server just accepted.
         try? credentials.save(StoredCredential(username: username, password: password),
                               for: saved.host.absoluteString)
@@ -96,19 +111,40 @@ public final class ConnectionStore: @unchecked Sendable {
 
     /// Run an authenticated request, recovering once from an expired session.
     ///
-    /// Exactly one silent re-login: a stale cookie is routine and should be
-    /// invisible, but a changed password must surface rather than spin.
+    /// Exactly one silent re-login per call: a stale cookie is routine and
+    /// should be invisible, but a changed password must surface rather than
+    /// spin.
+    ///
+    /// And once a credential has been rejected, it is not offered again for
+    /// `rejectedCredentialCooldown`. Without that, every screen that loads
+    /// spends another attempt on a password the board has already refused —
+    /// and ten of those in a minute trip FiestaBoard's lockout, after which
+    /// it refuses the *correct* password too. Signing in by hand lifts it.
     public func authorized<T>(_ operation: (FiestaClient) async throws -> T) async throws -> T {
         guard let client, let saved else { throw FiestaError.transport("not connected") }
         do {
             return try await operation(client)
         } catch FiestaError.unauthorized {
-            guard let stored = credentials.load(for: saved.host.absoluteString) else {
+            guard let stored = credentials.load(for: saved.host.absoluteString),
+                  !silentLoginIsBlocked else {
                 throw FiestaError.unauthorized
             }
-            try await client.login(username: stored.username, password: stored.password)
+            do {
+                try await client.login(username: stored.username, password: stored.password)
+            } catch {
+                silentLoginBlockedUntil = clock().addingTimeInterval(Self.rejectedCredentialCooldown)
+                throw error
+            }
+            silentLoginBlockedUntil = nil
             return try await operation(client)
         }
+    }
+
+    private var silentLoginIsBlocked: Bool {
+        guard let until = silentLoginBlockedUntil else { return false }
+        if clock() < until { return true }
+        silentLoginBlockedUntil = nil
+        return false
     }
 
     // MARK: Preferences
