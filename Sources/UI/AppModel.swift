@@ -21,6 +21,8 @@ public final class AppModel {
     public var route: Route = .connecting
     public var errorMessage: String?
     var offeredResizeRefs: Set<String> = []
+    /// Where Settings was opened from, so leaving it goes back there.
+    private var routeBeforeSettings: Route?
     private var previewTask: Task<Void, Never>?
 
     public let connection: ConnectionStore
@@ -94,7 +96,21 @@ public final class AppModel {
     }
 
     public func showSettings() {
+        // Opening Settings twice must not lose the original origin.
+        if route != .settings { routeBeforeSettings = route }
         route = .settings
+    }
+
+    /// Leave Settings for wherever it was opened from.
+    ///
+    /// Settings is a destination reached from two different places, and tvOS
+    /// has one Back button for both. Without an origin to return to, Menu
+    /// fell through to the system and quit the app — so going Board →
+    /// Settings → Back landed on the Apple TV home screen.
+    public func dismissSettings() {
+        let destination = routeBeforeSettings ?? .panels
+        routeBeforeSettings = nil
+        route = destination
     }
 
     public func disconnect() {

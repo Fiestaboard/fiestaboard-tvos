@@ -153,4 +153,47 @@ final class AppModelTests: XCTestCase {
             RenderHarness.render(RootView().environment(model))
         }
     }
+
+    /// Settings is reached from two places and tvOS has one Back button for
+    /// both. Leaving it must return to the caller — Menu used to fall
+    /// through to the system and quit the app.
+    @MainActor
+    func testLeavingSettingsReturnsToTheViewerItWasOpenedFrom() {
+        let model = AppModel(connection: ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore()))
+        model.route = .viewer("abc123def456")
+
+        model.showSettings()
+        XCTAssertEqual(model.route, .settings)
+
+        model.dismissSettings()
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+    }
+
+    @MainActor
+    func testLeavingSettingsOpenedFromTheListReturnsToTheList() {
+        let model = AppModel(connection: ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore()))
+        model.route = .panels
+
+        model.showSettings()
+        model.dismissSettings()
+        XCTAssertEqual(model.route, .panels)
+    }
+
+    /// Reopening Settings must not overwrite the origin with Settings itself.
+    @MainActor
+    func testReopeningSettingsKeepsTheOriginalOrigin() {
+        let model = AppModel(connection: ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore()))
+        model.route = .viewer("one")
+
+        model.showSettings()
+        model.showSettings()
+        model.dismissSettings()
+        XCTAssertEqual(model.route, .viewer("one"))
+    }
 }
