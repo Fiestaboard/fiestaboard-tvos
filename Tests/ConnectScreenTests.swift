@@ -94,6 +94,28 @@ final class ConnectScreenTests: XCTestCase {
         XCTAssertTrue(discovery.stopped)
     }
 
+    // MARK: Board labels
+
+    /// The hostname alone is the label when it is unambiguous — short enough
+    /// to read from the sofa.
+    func testBoardAddressUsesJustTheHostWhenItIsUnambiguous() {
+        let other = DiscoveredBoard(id: "http://192.168.1.51:4420",
+                                    name: "Kitchen",
+                                    host: URL(string: "http://192.168.1.51:4420")!)
+        XCTAssertEqual(BoardAddressLabel.text(for: board, among: [board, other]), "192.168.1.50")
+    }
+
+    /// Two instances on one Pi differ only by port, so the port has to show
+    /// or the two cards are indistinguishable.
+    func testBoardAddressIncludesThePortWhenTwoBoardsShareAHost() {
+        let second = DiscoveredBoard(id: "http://192.168.1.50:4421",
+                                     name: "Garage",
+                                     host: URL(string: "http://192.168.1.50:4421")!)
+        let found = [board, second]
+        XCTAssertEqual(BoardAddressLabel.text(for: board, among: found), "192.168.1.50:4420")
+        XCTAssertEqual(BoardAddressLabel.text(for: second, among: found), "192.168.1.50:4421")
+    }
+
     // MARK: Rendering
 
     func testConnectScreenRendersInEveryState() {
@@ -107,6 +129,10 @@ final class ConnectScreenTests: XCTestCase {
 
     func testSignInScreenRenders() {
         RenderHarness.render(SignInScreen().environment(makeApp()))
+    }
+
+    func testDiscoveredBoardCardRenders() {
+        RenderHarness.render(DiscoveredBoardCard(board: board, address: "192.168.1.50") {})
     }
 
     func testSignInCanForgetAndChooseAnotherBoard() async throws {
@@ -151,4 +177,20 @@ final class ConnectScreenTests: XCTestCase {
         XCTAssertEqual(app.route, .panels)
         XCTAssertNil(model.errorMessage)
     }
+
+    /// Menu on sign in goes back to choosing a board — it must not quit the
+    /// app, and it must not throw the saved board away the way
+    /// "Use another board" deliberately does.
+    func testSignInBackReturnsToConnectWithoutForgettingTheBoard() async throws {
+        let app = makeApp()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
+        _ = try await app.connection.connect(to: board.host, displayName: "Board")
+        app.route = .signIn
+
+        SignInModel(app: app).back()
+
+        XCTAssertEqual(app.route, .connect)
+        XCTAssertNotNil(app.connection.saved, "Back is a reflex; it must not forget the board")
+    }
+
 }
