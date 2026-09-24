@@ -9,7 +9,10 @@ struct BoardFlipTransition {
         let progress: Double
         let isAnimating: Bool
 
-        var cell: BoardCell { progress < 0.5 ? previous : next }
+        /// The face on screen. The leaf shows its back (the next glyph) once
+        /// it has passed edge-on, which `FlapPhysics` puts before half way
+        /// because the fall is gravity-driven.
+        var cell: BoardCell { FlapPhysics.showsNext(at: progress) ? next : previous }
     }
 
     static let stepDuration: TimeInterval = 0.08

@@ -68,6 +68,7 @@ public struct BoardCanvas: View {
 
         // Resolve each distinct glyph once, then stamp it.
         var resolved: [Character: GraphicsContext.ResolvedText] = [:]
+        let seam = seam(forTileHeight: layout.tileHeight)
 
         for (index, tile) in layout.tiles.enumerated() {
             if let sample = transition?.sample(index: index, at: date), sample.isAnimating {
@@ -77,63 +78,142 @@ public struct BoardCanvas: View {
                 draw(tile: tile, cell: tile.cell, in: &context, resolved: &resolved,
                      font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
             }
-            drawSeam(tile: tile, whiteHardware: whiteHardware, in: &context)
+            drawSeam(tile: tile, seam: seam, whiteHardware: whiteHardware, in: &context)
         }
     }
 
+    /// One drum step of one tile: a leaf hinged on the axle through the
+    /// tile's middle falls forward off the top half, passes edge-on, and
+    /// lands on the bottom half showing its other face. `FlapPhysics`
+    /// decides where the leaf is, how it projects and how it is lit; this
+    /// only paints. Everything is affine fills and cached glyphs — no
+    /// gradients, layers or filters — so the cost per animating tile stays
+    /// in the same class as a static one.
     private static func paintSplit(tile: TileRect, sample: BoardFlipTransition.Sample,
                                    in context: inout GraphicsContext,
                                    resolved: inout [Character: GraphicsContext.ResolvedText],
                                    font: Font, unlit: Color, ink: Color, whiteHardware: Bool) {
+        let midX = tile.x + tile.width / 2
         let midY = tile.y + tile.height / 2
-        let top = CGRect(x: tile.x, y: tile.y, width: tile.width, height: tile.height / 2)
-        let bottom = CGRect(x: tile.x, y: midY, width: tile.width, height: tile.height / 2)
+        let halfHeight = tile.height / 2
+        let top = CGRect(x: tile.x, y: tile.y, width: tile.width, height: halfHeight)
+        let bottom = CGRect(x: tile.x, y: midY, width: tile.width, height: halfHeight)
 
+        let angle = FlapPhysics.angle(at: sample.progress)
+        let projection = FlapPhysics.projection(angle: angle)
+        let shadow = FlapPhysics.castShadow(angle: angle)
+        let brightness = FlapPhysics.brightness(angle: angle)
+        let showsNext = angle >= .pi / 2
+
+        // The next leaf, already waiting on the drum behind the falling one.
         var newTop = context
         newTop.clip(to: Path(top))
         draw(tile: tile, cell: sample.next, in: &newTop, resolved: &resolved,
              font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
 
+        // The old bottom stays until the leaf lands on it, with the leaf's
+        // shadow sweeping down it: two flat bands, darker under the hinge.
         var oldBottom = context
         oldBottom.clip(to: Path(bottom))
         draw(tile: tile, cell: sample.previous, in: &oldBottom, resolved: &resolved,
              font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
-
-        if sample.progress < 0.5 {
-            let t = sample.progress * 2
-            let fall = t * t // FiestaUI's ease-in: the top leaf accelerates.
-            let scale = max(0.001, cos(.pi / 2 * fall))
-            var flap = context
-            flap.clip(to: Path(top))
-            flap.translateBy(x: 0, y: midY)
-            flap.scaleBy(x: 1, y: scale)
-            flap.translateBy(x: 0, y: -midY)
-            draw(tile: tile, cell: sample.previous, in: &flap, resolved: &resolved,
-                 font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
-        } else {
-            let t = (sample.progress - 0.5) * 2
-            let settle = 1 - pow(1 - t, 3) // fast rise, soft landing.
-            let scale = max(0.001, sin(.pi / 2 * settle))
-            var flap = context
-            flap.clip(to: Path(bottom))
-            flap.translateBy(x: 0, y: midY)
-            flap.scaleBy(x: 1, y: scale)
-            flap.translateBy(x: 0, y: -midY)
-            draw(tile: tile, cell: sample.next, in: &flap, resolved: &resolved,
-                 font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
+        if shadow.opacity > 0 {
+            let face = CGRect(x: tile.x, y: tile.y, width: tile.width, height: tile.height)
+            oldBottom.clip(to: Path(roundedRect: face, cornerRadius: tile.radius))
+            let depth = halfHeight * shadow.depth
+            oldBottom.fill(Path(CGRect(x: tile.x, y: midY, width: tile.width, height: depth)),
+                           with: .color(Color.black.opacity(shadow.opacity * 0.6)))
+            oldBottom.fill(Path(CGRect(x: tile.x, y: midY, width: tile.width, height: depth * 0.4)),
+                           with: .color(Color.black.opacity(shadow.opacity * 0.5)))
         }
 
-        let shadow = 0.25 * sin(.pi * sample.progress)
-        context.fill(Path(bottom), with: .color(Color.black.opacity(shadow)))
+        // The leaf. Below half a pixel it is edge-on and there is nothing
+        // to see; skipping it is also what keeps the scale non-singular.
+        let leafHeight = halfHeight * projection.height
+        guard leafHeight >= 0.5 else { return }
+        let outline = leafOutline(tile: tile, midX: midX, midY: midY, height: leafHeight,
+                                  widthFactor: projection.widthFactor, hangsBelow: showsNext)
+
+        // Perspective: the face is scaled to its projected height about the
+        // hinge and to its near-edge width about the tile's centre line, then
+        // clipped to the trapezoid the leaf actually projects to. The hinge
+        // edge is exact; the interior differs from a true projective map by
+        // under a pixel at board scale.
+        var leaf = context
+        leaf.clip(to: outline)
+        leaf.translateBy(x: midX, y: midY)
+        leaf.scaleBy(x: projection.widthFactor, y: projection.height)
+        leaf.translateBy(x: -midX, y: -midY)
+        draw(tile: tile, cell: showsNext ? sample.next : sample.previous, in: &leaf,
+             resolved: &resolved, font: font, unlit: unlit, ink: ink, whiteHardware: whiteHardware)
+
+        // Lighting: the face turns out of the room light as it falls and
+        // comes back into it as it lands.
+        if brightness < 1 {
+            context.fill(outline, with: .color(Color.black.opacity(1 - brightness)))
+        }
     }
 
-    private static func drawSeam(tile: TileRect, whiteHardware: Bool,
+    /// The silhouette of a leaf swung toward the eye: full tile width along
+    /// the hinge, `widthFactor` wider along the free edge, with the tile's
+    /// rounded corners carried onto the free edge. Serves as both the clip
+    /// for the face and the shape the lighting is applied to.
+    private static func leafOutline(tile: TileRect, midX: Double, midY: Double, height: Double,
+                                    widthFactor: Double, hangsBelow: Bool) -> Path {
+        let direction: Double = hangsBelow ? 1 : -1
+        let hingeHalf = tile.width / 2
+        let freeHalf = hingeHalf * widthFactor
+        let freeY = midY + direction * height
+        let rx = min(tile.radius * widthFactor, freeHalf)
+        let ry = min(tile.radius * height / (tile.height / 2), height)
+
+        var path = Path()
+        path.move(to: CGPoint(x: midX - hingeHalf, y: midY))
+        path.addLine(to: CGPoint(x: midX - freeHalf, y: freeY - direction * ry))
+        path.addQuadCurve(to: CGPoint(x: midX - freeHalf + rx, y: freeY),
+                          control: CGPoint(x: midX - freeHalf, y: freeY))
+        path.addLine(to: CGPoint(x: midX + freeHalf - rx, y: freeY))
+        path.addQuadCurve(to: CGPoint(x: midX + freeHalf, y: freeY - direction * ry),
+                          control: CGPoint(x: midX + freeHalf, y: freeY))
+        path.addLine(to: CGPoint(x: midX + hingeHalf, y: midY))
+        path.closeSubpath()
+        return path
+    }
+
+    /// The split between the two leaves: a dark gap with the lit top edge
+    /// of the lower leaf under it.
+    struct Seam: Equatable {
+        /// Height of each of the two lines, in points.
+        let thickness: Double
+        /// Multiplier on the lines' opacity, 0…1.
+        let ink: Double
+    }
+
+    /// Each seam line as a fraction of the tile: 2.5% of the height for the
+    /// pair, which is a hairline at viewer size (about 1px on a 75pt flap).
+    static let seamRatio = 1.0 / 80
+
+    /// The seam is a physical gap and scales with the tile like the glyph
+    /// and the corner radius do. Below a pixel it cannot get thinner, so
+    /// its opacity carries the scaling instead — a fixed 2px of seam on a
+    /// 19pt preview tile weighs as much as the text and reads as striping.
+    /// The ink floor keeps a trace of the split on any tile at all.
+    static func seam(forTileHeight height: Double) -> Seam {
+        let line = height * seamRatio
+        let thickness = max(1, line)
+        return Seam(thickness: thickness, ink: max(0.3, min(1, line / thickness)))
+    }
+
+    private static func drawSeam(tile: TileRect, seam: Seam, whiteHardware: Bool,
                                  in context: inout GraphicsContext) {
-        let midY = tile.y + tile.height / 2
-        let gap = CGRect(x: tile.x, y: midY, width: tile.width, height: 1)
-        let highlight = CGRect(x: tile.x, y: midY + 1, width: tile.width, height: 1)
-        context.fill(Path(gap), with: .color(Color.black.opacity(whiteHardware ? 0.12 : 0.35)))
-        context.fill(Path(highlight), with: .color(Color.white.opacity(whiteHardware ? 0.55 : 0.13)))
+        // Snapped to the pixel grid (Apple TV is 1×) so a one-pixel seam
+        // lands on one row rather than smearing faintly across two.
+        let top = (tile.y + tile.height / 2).rounded()
+        let gap = CGRect(x: tile.x, y: top, width: tile.width, height: seam.thickness)
+        let highlight = CGRect(x: tile.x, y: top + seam.thickness,
+                               width: tile.width, height: seam.thickness)
+        context.fill(Path(gap), with: .color(Color.black.opacity((whiteHardware ? 0.12 : 0.35) * seam.ink)))
+        context.fill(Path(highlight), with: .color(Color.white.opacity((whiteHardware ? 0.55 : 0.13) * seam.ink)))
     }
 
     private static func draw(tile: TileRect, cell: BoardCell,
