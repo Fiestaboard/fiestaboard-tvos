@@ -11,6 +11,9 @@ DerivedData/
 /Info.plist
 /TopShelf/Info.plist
 
+# Machine-specific development team; shared project generation preserves it.
+/Config/Signing.local.xcconfig
+
 # macOS
 .DS_Store
 

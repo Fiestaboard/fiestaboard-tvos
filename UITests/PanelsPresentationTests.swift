@@ -9,7 +9,7 @@ final class PanelsPresentationTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Exercises the real safe area and focus lift; an offscreen render that
+    /// Exercises the real safe area and focus movement; an offscreen render that
     /// ignores safe areas missed the old one-column layout on a real TV.
     func testTwoColumnsFitAndRemoteCanBrowseEveryRow() throws {
         continueAfterFailure = false
@@ -58,8 +58,12 @@ final class PanelsPresentationTests: XCTestCase {
                        "Two panels should share a row inside the TV safe area")
         XCTAssertGreaterThan(second.frame.minX, first.frame.midX)
         waitForFocus(first)
+        let focusedSize = first.frame.size
         XCUIRemote.shared.press(.right)
         waitForFocus(second, "Right should reach the second card, not Settings")
+        XCTAssertEqual(first.frame.width, focusedSize.width, accuracy: 1,
+                       "Focus must not rescale the board preview")
+        XCTAssertEqual(first.frame.height, focusedSize.height, accuracy: 1)
         XCUIRemote.shared.press(.down)
         waitForFocus(card("Patio"))
         XCUIRemote.shared.press(.down)

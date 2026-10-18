@@ -1,0 +1,3 @@
+// Copy to Signing.local.xcconfig and set the team from Xcode's Apple Accounts.
+// This local file is ignored by Git. Do not put credentials in it.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
