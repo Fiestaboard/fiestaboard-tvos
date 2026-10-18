@@ -192,6 +192,45 @@ final class MatrixDisplayTests: XCTestCase {
     }
 
     @MainActor
+    func testMatrixCardNormalizesServerMessageBeforeVisibleContent() throws {
+        let panel = try Self.matrixPanel()
+        for cells: [[BoardCell]] in [[], [[.character("A")]], [[.color(.red)]]] {
+            let preview = PanelPreview(rows: 1, cols: 1, cells: cells,
+                                       message: " \nServer\t message\u{00a0} ")
+            let card = PanelCard(panel: panel, preview: .ready(preview), action: {})
+            XCTAssertEqual(card.subtitle, "Server message")
+            XCTAssertTrue(card.accessibilityLabel.hasSuffix("Board reads: Server message"))
+        }
+    }
+
+    @MainActor
+    func testMatrixCardEmptyMessageKeepsVisibleContentFallbacks() throws {
+        let panel = try Self.matrixPanel()
+        let cases: [(cells: [[BoardCell]], rich: [[MatrixCell]]?, expected: String?)] = [
+            ([], nil, nil),
+            ([[.blank]], nil, nil),
+            ([[.color(.black)]], nil, nil),
+            ([[.color(.red)]], nil, "Coloured pixels, no text"),
+            ([[.character("A")]], nil, "A"),
+            ([], [[MatrixCell(type: "char", value: " ", icon: "sun")]], "sun"),
+            ([], [[MatrixCell(type: "char", value: "a")]], "a")
+        ]
+        for message: String? in [nil, "", " \n\t\u{00a0} "] {
+            for example in cases {
+                let preview = PanelPreview(rows: 1, cols: 1, cells: example.cells,
+                                           message: message, richCells: example.rich)
+                let card = PanelCard(panel: panel, preview: .ready(preview), action: {})
+                XCTAssertEqual(card.subtitle, example.expected ?? "No message yet")
+                if let expected = example.expected {
+                    XCTAssertTrue(card.accessibilityLabel.hasSuffix("Board reads: \(expected)"))
+                } else {
+                    XCTAssertFalse(card.accessibilityLabel.contains("Board reads:"))
+                }
+            }
+        }
+    }
+
+    @MainActor
     func testDefaultSquarePixelsAndExplicitRoundAppearance() throws {
         let size = CGSize(width: 500, height: 700)
         for (appearance, square) in [([String: Any](), true), (["pixelShape": "round"], false)] {

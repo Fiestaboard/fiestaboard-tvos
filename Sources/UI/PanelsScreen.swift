@@ -4,6 +4,7 @@ struct PanelsScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: PanelsModel?
     @State private var restoredInitialFocus = false
+    @State private var previewImages = PanelPreviewImageCache()
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
@@ -44,7 +45,10 @@ struct PanelsScreen: View {
             model = fresh
             await fresh.load()
         }
-        .onDisappear { model?.stopPreviews() }
+        .onDisappear {
+            model?.stopPreviews()
+            previewImages.removeAll()
+        }
     }
 
     private var panelIDs: [String] { model?.panels.map(\.id) ?? [] }
@@ -242,7 +246,8 @@ struct PanelsScreen: View {
     private func card(for panel: Panel, width: CGFloat) -> some View {
         PanelCard(panel: panel,
                   preview: model?.previewState(for: panel) ?? .loading,
-                  action: { app.openPanel(ref: panel.id) }, cardWidth: width)
+                  action: { app.openPanel(ref: panel.id) }, cardWidth: width,
+                  previewImages: previewImages)
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
     }

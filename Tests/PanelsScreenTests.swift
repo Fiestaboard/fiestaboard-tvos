@@ -314,7 +314,8 @@ extension PanelsScreenTests {
                                    message: nil)
         let size = CGSize(width: PanelCard.width + 40,
                           height: PanelCard.previewHeight + PanelCard.detailHeight + 40)
-        let image = RenderHarness.image(PanelCard(panel: panel, preview: .ready(preview)) {},
+        let image = RenderHarness.image(PanelCard(panel: panel, preview: .ready(preview), action: {},
+                                                 previewImages: PanelPreviewImageCache()),
                                         size: size)
         var redPixels = 0
         for y in stride(from: 10, to: Int(PanelCard.previewHeight), by: 8) {

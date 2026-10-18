@@ -17,6 +17,7 @@ struct PanelCard: View {
     static let detailHeight: CGFloat = 166
     static let boardInset: CGFloat = 24
     var cardWidth: CGFloat = Self.width
+    var previewImages: PanelPreviewImageCache? = nil
 
     var body: some View {
         Button(action: action) {
@@ -73,7 +74,11 @@ struct PanelCard: View {
             case .loading:
                 ProgressView().tint(Fiesta.Colors.brand)
             case .ready(let ready):
-                PanelPreviewBoard(panel: panel, preview: ready)
+                if let previewImages {
+                    PanelPreviewThumbnail(panel: panel, preview: ready, cache: previewImages)
+                } else {
+                    PanelPreviewBoard(panel: panel, preview: ready)
+                }
             case .unavailable:
                 placeholder("Preview unavailable")
             }
@@ -141,6 +146,9 @@ struct PanelCard: View {
         guard case .ready(let ready) = preview else { return nil }
         let message = ready.message?.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") ?? ""
         if panel.renderStyle == .ledMatrix {
+            // Server text already has priority in MatrixRaster.spoken.
+            // Avoid rebuilding all pixels just to read that same message.
+            if !message.isEmpty { return message }
             let raster = MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells)
             guard !message.isEmpty || !raster.text.isEmpty || raster.pixels.contains(where: { $0 != 0 }) else { return nil }
             return raster.spoken(message: ready.message)
