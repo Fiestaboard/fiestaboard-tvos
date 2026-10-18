@@ -8,6 +8,7 @@ public enum Route: Equatable, Hashable {
     case panels
     case viewer(String)
     case settings
+    case fiestaBot
 }
 
 /// Navigation and app-wide state.
@@ -29,7 +30,12 @@ public final class AppModel {
             return storedRoute
         }
         set {
+            if storedRoute == .fiestaBot && newValue != .fiestaBot { fiestaBot?.stop() }
             withMutation(keyPath: \.route) { storedRoute = newValue }
+            if newValue == .signIn || newValue == .connect {
+                fiestaBot?.stop()
+                fiestaBot = nil
+            }
             applyScreenAwake()
         }
     }
@@ -39,6 +45,9 @@ public final class AppModel {
     var lastViewedPanelRef: String?
     /// Where Settings was opened from, so leaving it goes back there.
     private var routeBeforeSettings: Route?
+    private var routeBeforeBot: Route?
+    var fiestaBot: FiestaBotModel?
+    var botPanelRef: String?
     private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var panelReloadTask: Task<Void, Never>?
     @ObservationIgnored weak var activePanelsModel: PanelsModel?
@@ -161,6 +170,19 @@ public final class AppModel {
         // Opening Settings twice must not lose the original origin.
         if route != .settings { routeBeforeSettings = route }
         route = .settings
+    }
+
+    func showFiestaBot() {
+        if route != .fiestaBot { routeBeforeBot = route }
+        if case .viewer(let ref) = route { botPanelRef = ref }
+        else { botPanelRef = lastViewedPanelRef }
+        if fiestaBot?.isCurrentConnection != true { fiestaBot = FiestaBotModel(app: self) }
+        route = .fiestaBot
+    }
+
+    func dismissFiestaBot() {
+        route = routeBeforeBot ?? .panels
+        routeBeforeBot = nil
     }
 
     /// Select the panel being watched when Settings opens. References may

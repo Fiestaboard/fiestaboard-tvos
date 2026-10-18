@@ -105,6 +105,20 @@ final class MatrixDisplayTests: XCTestCase {
         XCTAssertEqual(viewer.matrixPresentation, signage.matrixPresentation)
     }
 
+    @MainActor
+    func testViewerAppliesSharedCalibrationWhileFollowingLocalMatrixSizing() throws {
+        let signage = SignageSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        signage.matrixPresentation = .init(sizing: .trueSize, diagonalInches: 75, pitchMillimeters: 5)
+        let app = AppModel(connection: ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!, credentials: InMemoryCredentialStore()))
+        let viewer = ViewerModel(app: app, ref: "p1", signage: signage)
+        let panel = try Self.panel(["render_style": "led_matrix", "matrix_sizing": NSNull(),
+                                    "matrix_pitch_mm": 6, "calibration_scale": 1.1])
+        viewer.apply(PanelSnapshot(panel: panel, cells: [], rows: 12, cols: 30,
+                                   connection: .live, dimmed: false, deleted: false))
+        XCTAssertEqual(viewer.matrixPresentation, .init(sizing: .trueSize, diagonalInches: 75,
+                                                       pitchMillimeters: 5, calibrationScale: 1.1))
+    }
+
     static func matrixPanel(width: Int = 5, height: Int = 7, font: String = "5x7", mono: String? = nil) throws -> Panel {
         var spec: [String: Any] = ["geometry": ["kind": "pixels", "width": width, "height": height], "font": font]
         if let mono { spec["color"] = ["kind": "monochrome", "color": mono] }
@@ -316,7 +330,7 @@ final class MatrixDisplayTests: XCTestCase {
         let bounded = try Self.panel(["render_style": "led_matrix", "device_model_spec": [
             "geometry": ["kind": "pixels", "width": 4_000_000_000, "height": -10], "font": "unknown"
         ]])
-        XCTAssertEqual(bounded.matrixDisplay.width, 256)
+        XCTAssertEqual(bounded.matrixDisplay.width, MatrixDisplay.maxPixelDimension)
         XCTAssertEqual(bounded.matrixDisplay.height, 1)
         XCTAssertEqual(bounded.matrixDisplay.font, "5x7")
     }

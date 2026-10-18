@@ -22,6 +22,14 @@ public enum MatrixTransitionStyle: String, CaseIterable, Sendable, Codable {
 public enum MatrixSizing: String, Codable, CaseIterable, Sendable {
     case fillTV, fitPanel, trueSize
 
+    public var serverValue: String {
+        switch self {
+        case .fillTV: return "fill_tv"
+        case .fitPanel: return "fit_panel"
+        case .trueSize: return "true_size"
+        }
+    }
+
     public init?(serverValue: String?) {
         switch serverValue {
         case "fill_tv": self = .fillTV
@@ -37,21 +45,24 @@ public struct MatrixPresentation: Codable, Equatable, Sendable {
     public let sizing: MatrixSizing
     public let diagonalInches: Double
     public let pitchMillimeters: Double
+    public let calibrationScale: Double
 
-    public init(sizing: MatrixSizing = .fillTV, diagonalInches: Double = 55, pitchMillimeters: Double = 6) {
+    public init(sizing: MatrixSizing = .fillTV, diagonalInches: Double = 55, pitchMillimeters: Double = 6, calibrationScale: Double = 1) {
+        self.calibrationScale = calibrationScale.isFinite ? min(1.15, max(0.85, calibrationScale)) : 1
         self.sizing = sizing
         self.diagonalInches = diagonalInches.isFinite && diagonalInches > 0 ? min(200, max(3, diagonalInches)) : 55
         self.pitchMillimeters = pitchMillimeters.isFinite && pitchMillimeters > 0 ? min(20, max(1, pitchMillimeters)) : 6
     }
 
-    private enum CodingKeys: String, CodingKey { case sizing, diagonalInches, pitchMillimeters }
+    private enum CodingKeys: String, CodingKey { case sizing, diagonalInches, pitchMillimeters, calibrationScale }
 
     public init(from decoder: Decoder) throws {
         let fields = try decoder.container(keyedBy: CodingKeys.self)
         let raw = try fields.decodeIfPresent(String.self, forKey: .sizing)
         self.init(sizing: raw.flatMap(MatrixSizing.init(rawValue:)) ?? .fillTV,
                   diagonalInches: try fields.decodeIfPresent(Double.self, forKey: .diagonalInches) ?? 55,
-                  pitchMillimeters: try fields.decodeIfPresent(Double.self, forKey: .pitchMillimeters) ?? 6)
+                  pitchMillimeters: try fields.decodeIfPresent(Double.self, forKey: .pitchMillimeters) ?? 6,
+                  calibrationScale: try fields.decodeIfPresent(Double.self, forKey: .calibrationScale) ?? 1)
     }
 }
 
@@ -65,14 +76,15 @@ public struct MatrixLayout: Equatable, Sendable {
 
     public static func make(width: Int, height: Int, viewportWidth: Double, viewportHeight: Double,
                             presentation: MatrixPresentation, drift: BoardOffset = .zero) -> MatrixLayout? {
-        guard width > 0, height > 0, width <= 256, height <= 256,
+        guard width > 0, height > 0, width <= MatrixDisplay.maxPixelDimension, height <= MatrixDisplay.maxPixelDimension,
               viewportWidth.isFinite, viewportHeight.isFinite, viewportWidth > 0, viewportHeight > 0 else { return nil }
         let fit = min(viewportWidth / Double(width), viewportHeight / Double(height))
         let pitch: Double
         if presentation.sizing == .trueSize {
-            // Apple TV's physical screen is 16:9; render points alone cannot tell us its diagonal.
-            let widthMillimeters = presentation.diagonalInches * 25.4 * 16 / hypot(16, 9)
-            pitch = min(fit, viewportWidth / widthMillimeters * presentation.pitchMillimeters)
+            // Actual viewport pixels determine physical scale. The configured
+            // panel aspect determines its cell grid, not the TV's pixel aspect.
+            let pointsPerMillimeter = hypot(viewportWidth, viewportHeight) / (presentation.diagonalInches * 25.4)
+            pitch = min(fit, pointsPerMillimeter * presentation.pitchMillimeters * presentation.calibrationScale)
         } else {
             pitch = fit
         }
@@ -106,21 +118,37 @@ public struct MatrixDisplay: Codable, Equatable, Sendable {
         public let kind: String?
         public let color: String?
     }
+    public static let maxPixelDimension = 2048
+    public let id: String?
     public let geometry: Geometry?
     private let fontName: String?
     public let appearance: Appearance?
     public let color: ColorSpec?
 
     enum CodingKeys: String, CodingKey {
-        case geometry, appearance, color
+        case id, geometry, appearance, color
         case fontName = "font"
     }
 
-    public static let standard = MatrixDisplay(geometry: nil, fontName: nil, appearance: nil, color: nil)
-    public var width: Int { min(256, max(1, geometry?.kind == "pixels" ? geometry?.width ?? 192 : 192)) }
-    public var height: Int { min(256, max(1, geometry?.kind == "pixels" ? geometry?.height ?? 96 : 96)) }
+    public static let standard = MatrixDisplay(id: "fiestapanel_led_matrix", geometry: nil, fontName: nil, appearance: nil, color: nil)
+    public var width: Int { min(Self.maxPixelDimension, max(1, geometry?.kind == "pixels" ? geometry?.width ?? 192 : 192)) }
+    public var height: Int { min(Self.maxPixelDimension, max(1, geometry?.kind == "pixels" ? geometry?.height ?? 96 : 96)) }
     public var font: String { fontName == "3x5" ? "3x5" : "5x7" }
     public var dotRatio: Double { min(1, max(0.1, appearance?.dotRatio ?? 0.82)) }
+
+    /// Old servers may keep the original 192×96 device model after a resize.
+    /// Expand FiestaPanel's own model so the full declared cell grid is drawn.
+    func containingCellGrid(rows: Int?, columns: Int?) -> MatrixDisplay {
+        guard id == "fiestapanel_led_matrix", let rows, let columns else { return self }
+        let cols = min(PanelFrame.maxDimension, max(1, columns))
+        let boundedRows = min(PanelFrame.maxDimension, max(1, rows))
+        let pitchX = font == "3x5" ? 4 : 6
+        let pitchY = font == "3x5" ? 6 : 8
+        return MatrixDisplay(id: id, geometry: .init(kind: "pixels", width: max(width, cols * pitchX),
+                                                     height: max(height, boundedRows * pitchY)),
+                             fontName: fontName, appearance: appearance, color: color)
+    }
+
 }
 
 /// Rich tokens are already parsed by the server. Preserve case and colors.

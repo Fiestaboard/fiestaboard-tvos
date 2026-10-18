@@ -337,4 +337,30 @@ final class FiestaClientTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.requests.first?.url.absoluteString,
                        "http://host:4420/api/auth/status")
     }
+    func testEditorPatchCannotReportSuccessWhenServerIgnoresFields() async throws {
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        var draft = PanelSettingsDraft(panel: panel)
+        draft.name = "Kitchen"
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panels/")
+        do {
+            _ = try await client.updatePanel(id: panel.id, patch: draft.patch())
+            XCTFail("An HTTP 200 alone does not prove that settings saved")
+        } catch PanelSettingsError.notApplied { }
+    }
+
+    func testEditorPatchPreservesExplicitNullForSizingReset() async throws {
+        var json = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
+        json["matrix_sizing"] = "true_size"
+        json["matrix_pitch_mm"] = 5
+        let panel = try JSONDecoder().decode(Panel.self, from: JSONSerialization.data(withJSONObject: json))
+        var draft = PanelSettingsDraft(panel: panel)
+        draft.matrixSizing = nil
+        json["matrix_sizing"] = NSNull()
+        StubURLProtocol.enqueue(.json(String(decoding: try JSONSerialization.data(withJSONObject: json), as: UTF8.self)), for: "/api/panels/")
+        let result = try await client.updatePanel(id: panel.id, patch: draft.patch())
+        XCTAssertNil(result.panel.matrixSizing)
+        let body = try JSONSerialization.jsonObject(with: XCTUnwrap(StubURLProtocol.requests.last?.body)) as! NSDictionary
+        XCTAssertEqual(body, ["matrix_sizing": NSNull()] as NSDictionary)
+    }
+
 }

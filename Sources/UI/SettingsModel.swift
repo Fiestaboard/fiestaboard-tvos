@@ -253,6 +253,41 @@ final class SettingsModel {
         }
     }
 
+    /// Save a full editor draft while retaining it in the caller on failure.
+    func saveDisplaySettings(_ draft: PanelSettingsDraft) async -> PanelUpdateResult? {
+        let id = draft.original.id
+        guard pendingPanelWrites.insert(id).inserted else { return nil }
+        defer { pendingPanelWrites.remove(id) }
+        errorMessage = nil
+        warningMessage = nil
+        do {
+            let patch = try draft.patch()
+            guard !patch.body.isEmpty else {
+                return PanelUpdateResult(panel: current(draft.original), incompatibleReferences: [])
+            }
+            let result = try await app.connection.authorized {
+                try await $0.updatePanel(id: id, patch: patch)
+            }
+            if let index = panels.firstIndex(where: { $0.id == id }) { panels[index] = result.panel }
+            if !result.incompatibleReferences.isEmpty {
+                let names = result.incompatibleReferences.compactMap(\.name).joined(separator: ", ")
+                report(warning: "The grid changed. \(result.incompatibleReferences.count) page or schedule references need review for this size."
+                       + (names.isEmpty ? "" : " " + names))
+            }
+            return result
+        } catch FiestaError.unauthorized {
+            report(error: FiestaError.unauthorized.userMessage)
+            app.route = .signIn
+        } catch let error as FiestaError {
+            report(error: error.userMessage)
+        } catch let error as PanelSettingsError {
+            report(error: error.localizedDescription)
+        } catch {
+            report(error: "Couldn't save the display settings. Try again.")
+        }
+        return nil
+    }
+
     // MARK: A board left on a wall
 
     func setAutoDimOverride(_ value: AutoDimOverride) {
@@ -299,7 +334,7 @@ final class SettingsModel {
         // Not "in the FiestaBoard app": the icon this is being read from is
         // labelled FiestaBoard. The schedule is edited on the board's own
         // web page, which is the thing that actually does the job.
-        lines.append("The schedule itself belongs to the panel and is changed on your board's web page.")
+        lines.append("Change the shared schedule in Panel appearance → All display settings.")
         return lines.joined(separator: " ")
     }
 

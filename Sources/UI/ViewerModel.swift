@@ -12,7 +12,7 @@ final class ViewerModel {
     var sizing: BoardSizing = .fit
     private let localMatrixPresentation: MatrixPresentation
     let matrixTransitionStyle: MatrixTransitionStyle
-    var matrixPresentation: MatrixPresentation { snapshot.panel?.matrixPresentation ?? localMatrixPresentation }
+    var matrixPresentation: MatrixPresentation { snapshot.panel?.effectiveMatrixPresentation(fallback: localMatrixPresentation) ?? localMatrixPresentation }
     var boardMissing: Bool { snapshot.panel?.boardMissing == true }
 
     /// Which panel this model is bound to.

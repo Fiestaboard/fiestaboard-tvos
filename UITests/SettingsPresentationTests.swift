@@ -16,7 +16,7 @@ final class SettingsPresentationTests: XCTestCase {
         super.tearDown()
     }
 
-    private func launchSettings(includeSecondPanel: Bool = false, matrixPanel: Bool = false) -> XCUIApplication {
+    private func launchSettings(includeSecondPanel: Bool = false, matrixPanel: Bool = false, localSettings: Bool = true) -> XCUIApplication {
         let frameLoaded = expectation(description: "Viewer loaded")
         let secondPanel = Fixtures.panelJSON
             .replacingOccurrences(of: "abc123def456", with: "kitchen-panel")
@@ -28,6 +28,8 @@ final class SettingsPresentationTests: XCTestCase {
         if matrixPanel {
             var panel = try! JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
             panel["render_style"] = "led_matrix"
+            panel["matrix_sizing"] = NSNull()
+            panel["matrix_pitch_mm"] = 6
             panel["device_model_spec"] = ["geometry": ["kind": "pixels", "width": 192, "height": 96]]
             panels = String(decoding: try! JSONSerialization.data(withJSONObject: ["panels": [panel], "total": 1]), as: UTF8.self)
         }
@@ -57,6 +59,12 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(app.buttons["Settings"].hasFocus)
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.staticTexts["Settings"].waitForExistence(timeout: 5))
+        if localSettings {
+            // Viewer opens shared appearance; explicitly choose local controls
+            // for tests of this TV's preferences. Focus starts on the first category.
+            waitForRowFocus("This Apple TV", in: app)
+            XCUIRemote.shared.press(.select)
+        }
         return app
     }
 
@@ -126,6 +134,20 @@ final class SettingsPresentationTests: XCTestCase {
         expectation(for: message, evaluatedWith: app.otherElements["settings.panelPreview"])
         waitForExpectations(timeout: 5)
         attachScreenshot("Settings — Panel appearance", app: app)
+    }
+
+    func testCurrentPanelHasCompleteSharedDisplayControls() {
+        let app = launchSettings(matrixPanel: true, localSettings: false)
+        XCTAssertTrue(app.staticTexts["Applies to every viewer of this panel."].waitForExistence(timeout: 3))
+        XCUIRemote.shared.press(.right)
+        openRow("All display settings", in: app)
+        XCTAssertTrue(app.textFields["panelSettings.name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["panelSettings.name"].value as? String, "Living Room")
+        attachScreenshot("Shared panel display settings", app: app)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.otherElements["settings.panelPreview"].waitForExistence(timeout: 3))
+        XCUIRemote.shared.press(.menu)
+        XCTAssertFalse(app.staticTexts["Settings"].exists)
     }
 
     func testMatrixAppearanceExposesItsTransitionSwitch() {

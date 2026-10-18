@@ -30,7 +30,7 @@ struct SettingsScreen: View {
     private enum Destination: Hashable {
         case panelSelection, launchPanel, flapSizing, matrixSizing, matrixTransition
         case matrixDiagonal, matrixPitch, autoDim, screenDiagonal, displayStyle(String)
-        case resize(String), calibration(String), topShelf, privacy, screenProtection
+        case displaySettings(String), resize(String), calibration(String), topShelf, privacy, screenProtection
     }
 
     var body: some View {
@@ -65,7 +65,10 @@ struct SettingsScreen: View {
             Text("This Apple TV will forget \(model?.boardName ?? "this board") — its address and its saved password — and go back to looking for a board.")
         }
         .task(id: panelsReload) {
-            if model == nil { model = SettingsModel(app: app) }
+            if model == nil {
+                model = SettingsModel(app: app)
+                if app.settingsPanelRef != nil { category = .appearance }
+            }
             await model?.load()
             reconcilePanelSelection()
         }
@@ -157,7 +160,7 @@ struct SettingsScreen: View {
                     NavigationLink("Home screen shortcut", value: Destination.topShelf)
                     NavigationLink("Screen protection & dimming", value: Destination.screenProtection)
                     NavigationLink("Privacy", value: Destination.privacy)
-                } footer: { Text("Manage content and dimming schedules on your board's web page.") }
+                } footer: { Text("Edit panel display settings in Panel appearance. Manage content on your board's web page.") }
             }
         }
     }
@@ -287,6 +290,9 @@ struct SettingsScreen: View {
                         if case .unavailable = model?.previewState(for: panel) {
                             Button("Retry preview") { previewReload += 1 }
                         }
+                        NavigationLink("All display settings", value: Destination.displaySettings(panel.id))
+                            .accessibilityIdentifier("settings.allDisplaySettings")
+                            .disabled(model?.isSavingPanel(panel) == true)
                         if panel.supportsRenderStyle {
                             choiceLink("Display style", value: panel.renderStyle == .splitFlap ? "Split flap" : "LED matrix",
                                        destination: .displayStyle(panel.id))
@@ -382,6 +388,10 @@ struct SettingsScreen: View {
             if let panel = model?.panels.first(where: { $0.id == id }) {
                 choices("Display style", options: [(PanelRenderStyle.splitFlap, "Split flap"), (.ledMatrix, "LED matrix")], selection: styleBinding(for: panel))
                     .disabled(model?.isSavingPanel(panel) == true)
+            }
+        case .displaySettings(let id):
+            if let model, let panel = model.panels.first(where: { $0.id == id }) {
+                PanelDisplaySettingsScreen(panel: panel, model: model)
             }
         case .resize(let id):
             if let panel = model?.panels.first(where: { $0.id == id && $0.renderStyle == .splitFlap }) {
@@ -501,15 +511,16 @@ struct SettingsScreen: View {
 
     /// Pinned by SettingsScreenTests and aligned with the published policy.
     static let privacyBody = """
-        Nothing you enter here goes to FiestaBoard's servers, to us, or to \
-        any third party: no analytics, no tracking, no account with anybody. \
-        What you type goes to the board you chose and to no one else — the \
-        board this app found on your network, or the one at the address you \
-        typed, wherever that board lives. The board's address and your \
-        display preferences are kept in this device's app preferences; your \
-        password is kept in this device's Keychain and sent to that board \
-        each time this Apple TV signs in. The app collects nothing, shares \
-        nothing, and tracks nobody.
+        The app sends your requests to the board you chose, at the address you typed \
+        or selected. FiestaBot also sends conversation and relevant board content \
+        through that board to its configured AI provider, which may be a third party. \
+        The provider's data handling applies to those requests. Siri dictation uses \
+        Apple's system keyboard and privacy settings. FiestaBoard's servers and the \
+        app developer receive no analytics or tracking from this app. The board's \
+        address and display preferences are kept in this device's app preferences; \
+        your password is kept in this device's Keychain and sent to that board when \
+        this Apple TV signs in. Chat history stays in app memory until a new chat, \
+        sign-out, or app restart; your board and AI provider may retain their own records.
         """
 
     private static let privacyFooter = """

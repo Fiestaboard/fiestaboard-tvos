@@ -40,13 +40,23 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     public let deviceModelSpec: MatrixDisplay?
     private let rawMatrixSizing: String?
     public let matrixPitchMillimeters: Double?
+    public let supportsMatrixSettings: Bool
+    public var matrixSizing: MatrixSizing? { MatrixSizing(serverValue: rawMatrixSizing) }
     public var matrixPresentation: MatrixPresentation? {
         guard renderStyle == .ledMatrix, let mode = MatrixSizing(serverValue: rawMatrixSizing) else { return nil }
-        return .init(sizing: mode, diagonalInches: screenDiagonalInches, pitchMillimeters: matrixPitchMillimeters ?? 6)
+        return .init(sizing: mode, diagonalInches: screenDiagonalInches, pitchMillimeters: matrixPitchMillimeters ?? 6, calibrationScale: calibrationScale)
     }
+    /// Shared calibration also applies when sizing follows this TV's preference.
+    public func effectiveMatrixPresentation(fallback: MatrixPresentation) -> MatrixPresentation {
+        matrixPresentation ?? MatrixPresentation(sizing: fallback.sizing, diagonalInches: fallback.diagonalInches,
+                                                  pitchMillimeters: fallback.pitchMillimeters, calibrationScale: calibrationScale)
+    }
+
     public var renderStyle: PanelRenderStyle { rawRenderStyle.flatMap(PanelRenderStyle.init(rawValue:)) ?? .splitFlap }
     public var supportsRenderStyle: Bool { rawRenderStyle != nil }
-    public var matrixDisplay: MatrixDisplay { deviceModelSpec ?? .standard }
+    public var matrixDisplay: MatrixDisplay {
+        (deviceModelSpec ?? .standard).containingCellGrid(rows: rows, columns: cols)
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -99,8 +109,38 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         code62Glyph = rawCode62.flatMap(Code62Glyph.init(rawValue:))
         rawRenderStyle = try c.decodeIfPresent(String.self, forKey: .rawRenderStyle)
         deviceModelSpec = try c.decodeIfPresent(MatrixDisplay.self, forKey: .deviceModelSpec)
+        supportsMatrixSettings = c.contains(.rawMatrixSizing) && c.contains(.matrixPitchMillimeters)
         rawMatrixSizing = try c.decodeIfPresent(String.self, forKey: .rawMatrixSizing)
         matrixPitchMillimeters = try c.decodeIfPresent(Double.self, forKey: .matrixPitchMillimeters)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(shortCode, forKey: .shortCode)
+        try c.encode(name, forKey: .name)
+        try c.encode(boardId, forKey: .boardId)
+        try c.encode(screenDiagonalInches, forKey: .screenDiagonalInches)
+        try c.encode(screenAspectW, forKey: .screenAspectW)
+        try c.encode(screenAspectH, forKey: .screenAspectH)
+        try c.encode(calibrationScale, forKey: .calibrationScale)
+        try c.encode(animationsEnabled, forKey: .animationsEnabled)
+        try c.encode(backdrop, forKey: .backdrop)
+        try c.encode(autoDim, forKey: .autoDim)
+        try c.encode(boardMissing, forKey: .boardMissing)
+        try c.encodeIfPresent(deviceType, forKey: .deviceType)
+        try c.encodeIfPresent(rows, forKey: .rows)
+        try c.encodeIfPresent(cols, forKey: .cols)
+        try c.encodeIfPresent(boardColor, forKey: .boardColor)
+        try c.encodeIfPresent(code62Glyph, forKey: .code62Glyph)
+        try c.encodeIfPresent(rawRenderStyle, forKey: .rawRenderStyle)
+        try c.encodeIfPresent(deviceModelSpec, forKey: .deviceModelSpec)
+        try c.encodeIfPresent(matrixPitchMillimeters, forKey: .matrixPitchMillimeters)
+        if supportsMatrixSettings {
+            try c.encode(rawMatrixSizing, forKey: .rawMatrixSizing)
+        } else {
+            try c.encodeIfPresent(rawMatrixSizing, forKey: .rawMatrixSizing)
+        }
     }
 
     /// The glyph this panel's device actually prints for code 62.

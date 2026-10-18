@@ -210,7 +210,8 @@ struct ViewerScreen: View {
         ViewerOverlay(panelName: model?.snapshot.panel?.name ?? "Panel",
                       onInteraction: { model?.keepOverlayAlive() },
                       onPanels: { model?.stop(); app.showPanels() },
-                      onSettings: { model?.stop(); app.showSettings() })
+                      onSettings: { model?.stop(); app.showSettings() },
+                      onFiestaBot: { model?.stop(); app.showFiestaBot() })
     }
 
     /// Amber, and the words say the app is still trying: the frame on the
