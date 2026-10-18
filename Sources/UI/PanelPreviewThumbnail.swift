@@ -14,6 +14,18 @@ struct PanelPreviewThumbnail: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
+        #if DEBUG
+        if PanelNavigationProbe.blankPreviews {
+            Color.black.accessibilityHidden(true)
+        } else {
+            thumbnail
+        }
+        #else
+        thumbnail
+        #endif
+    }
+
+    private var thumbnail: some View {
         GeometryReader { proxy in
             let request = PanelPreviewImageCache.Request(
                 panel: panel, preview: preview, size: proxy.size,

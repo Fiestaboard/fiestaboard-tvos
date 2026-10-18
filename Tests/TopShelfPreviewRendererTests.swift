@@ -1,4 +1,6 @@
 import UIKit
+import ImageIO
+import os
 import XCTest
 @testable import FiestaBoardTV
 
@@ -6,6 +8,143 @@ import XCTest
 final class TopShelfPreviewRendererTests: XCTestCase {
     override func setUp() { super.setUp(); StubURLProtocol.reset() }
     override func tearDown() { StubURLProtocol.reset(); super.tearDown() }
+
+    func testPublishingReturnsBeforeWritingTheShelf() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        let connection = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        let panel = try MatrixDisplayTests.panel()
+
+        let publication = TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
+
+        XCTAssertTrue(store.items().isEmpty,
+                      "Publishing must give input a turn before drawing, encoding or writing the shelf")
+        await publication?.value
+        XCTAssertEqual(store.items().map(\.panelID), [panel.id])
+    }
+
+    func testEncodingLeavesMainActorFreeAndCoalescesArrivalsToTheLatestFrame() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        let connection = try await connected()
+        let panel = try MatrixDisplayTests.panel()
+        let encoding = expectation(description: "first PNG encoding held off main")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let count = OSAllocatedUnfairLock(initialState: 0)
+        let cache = TopShelfPreviewPublisher.Cache { image in
+            XCTAssertFalse(Thread.isMainThread, "PNG compression must not block focus updates")
+            let number = count.withLock { $0 += 1; return $0 }
+            if number == 1 {
+                encoding.fulfill()
+                XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            }
+            return Self.png(image)
+        }
+        TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
+                                         connection: connection, store: store, cache: cache)
+        await fulfillment(of: [encoding], timeout: 3)
+        // This main-actor code must run while the encoder is still blocked.
+        // Reverting to synchronous encoding fails the gate, independently of
+        // how quickly the particular simulator usually compresses PNGs.
+        TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.green)],
+                                         connection: connection, store: store, cache: cache)
+        let latest = TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.blue)],
+                                                     connection: connection, store: store, cache: cache)
+        XCTAssertTrue(store.items().isEmpty)
+        release.signal()
+        await latest?.value
+
+        XCTAssertEqual(count.withLock { $0 }, 2, "The superseded pending frame must never be encoded")
+        let item = try XCTUnwrap(store.items().first)
+        let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: item))))
+        let pixel = try XCTUnwrap(image.pixel(x: 960, y: 250))
+        XCTAssertGreaterThan(pixel.b, pixel.r, "Only the latest blue frame belongs on Home")
+        XCTAssertEqual(cache.images[panel.id]?.state, color(.blue))
+    }
+
+    func testClearDuringEncodingCannotBeUndoneByTheOldPublication() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        try store.replace([.init(panelID: "old", name: "Old", imageData: Data([1]))])
+        let connection = try await connected()
+        let panel = try MatrixDisplayTests.panel()
+        let encoding = expectation(description: "old image encoding held")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let cache = TopShelfPreviewPublisher.Cache { image in
+            encoding.fulfill()
+            XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            return Self.png(image)
+        }
+        TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
+                                         connection: connection, store: store, cache: cache)
+        await fulfillment(of: [encoding], timeout: 3)
+        connection.signOut()
+        let cleanup = TopShelfPreviewPublisher.clear(store: store, cache: cache)
+        // A new connection before the old encoding ends defeats a simple
+        // signed-out check. Generation invalidation must still reject it.
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://new-board:4420")!, displayName: "New")
+        release.signal()
+        await cleanup?.value
+        XCTAssertTrue(store.items().isEmpty)
+        XCTAssertTrue(cache.images.isEmpty)
+    }
+
+    func testRefreshInvalidationDiscardsEncodingEvenWithoutAReplacementPublication() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        try store.replace([.init(panelID: "kept", name: "Kept", imageData: Data([1]))])
+        let connection = try await connected()
+        let panel = try MatrixDisplayTests.panel()
+        let encoding = expectation(description: "superseded refresh encoding held")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let cache = TopShelfPreviewPublisher.Cache { image in
+            encoding.fulfill()
+            XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            return Self.png(image)
+        }
+        let publication = TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
+                                                          connection: connection, store: store, cache: cache)
+        await fulfillment(of: [encoding], timeout: 3)
+        cache.invalidate()
+        release.signal()
+        await publication?.value
+        XCTAssertEqual(store.items().map(\.panelID), ["kept"])
+        XCTAssertTrue(cache.images.isEmpty)
+    }
+
+    private func connected() async throws -> ConnectionStore {
+        let connection = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        return connection
+    }
+
+    private func color(_ color: BoardColor) -> PanelPreviewState {
+        .ready(PanelPreview(rows: 1, cols: 1, cells: [[.color(color)]], message: nil))
+    }
+
+    nonisolated private static func png(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
+    }
 
     func testFetchedPanelContentReplacesBrandArtworkWithoutDuplicateRequests() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -64,12 +203,13 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let refresh = Task { await model.refreshPreviews(for: [panel]) }
         await fulfillment(of: [received], timeout: 3)
         connection.signOut()
-        app.clearTopShelf()
+        let cleanup = app.clearTopShelf()
         // Reconnecting makes a simple isSignedOut check insufficient.
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://new-board:4420")!, displayName: "New Board")
         release?()
         await refresh.value
+        await cleanup?.value
         XCTAssertTrue(store.items().isEmpty, "A previous board must not return to Home after its cache was cleared")
         XCTAssertNil(model.previews[panel.id], "A stale response must not become the current panel picture either")
     }
@@ -80,8 +220,8 @@ final class TopShelfPreviewRendererTests: XCTestCase {
             let panel = try MatrixDisplayTests.panel(["render_style": "led_matrix", "device_model_spec": [
                 "geometry": ["kind": "pixels", "width": 192, "height": 96],
                 "appearance": ["pixelShape": shape, "dotRatio": 0.82]]])
-            let png = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
-            let image = try XCTUnwrap(UIImage(data: png))
+            let pixels = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
+            let image = UIImage(cgImage: pixels)
             let attachment = XCTAttachment(image: image)
             attachment.name = "Top Shelf \(shape) LEDs"
             attachment.lifetime = .keepAlways
@@ -98,8 +238,8 @@ final class TopShelfPreviewRendererTests: XCTestCase {
     func testBoardContentStaysClearOfHomeCardRoundedEdges() throws {
         let preview = PanelPreview(rows: 1, cols: 1, cells: [[.color(.red)]], message: "RED")
         let panel = try MatrixDisplayTests.panel(["render_style": "led_matrix"])
-        let png = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
-        let image = try XCTUnwrap(UIImage(data: png))
+        let pixels = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
+        let image = UIImage(cgImage: pixels)
         // Home crops the corners and adds a focus rim. Lit edge LEDs need
         // breathing room inside the image instead of touching that crop.
         XCTAssertLessThan(try XCTUnwrap(image.pixel(x: 5, y: 65)).r, 80)
@@ -120,14 +260,14 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
         StubURLProtocol.reset()
 
-        TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
+        await TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)?.value
 
         let item = try XCTUnwrap(store.items().first)
         XCTAssertEqual(item.panelID, panel.id)
         XCTAssertEqual(item.name, panel.name)
         let image = try Data(contentsOf: store.imageURL(for: item))
         XCTAssertNotNil(UIImage(data: image))
-        XCTAssertEqual(image, TopShelfPreviewRenderer.unavailable,
+        XCTAssertEqual(image, Self.png(try XCTUnwrap(TopShelfPreviewRenderer.unavailable)),
                        "No fetched frame means an explicit unavailable picture, never invented board content")
         // Fetching belongs to the caller; publishing only writes local images.
         XCTAssertTrue(StubURLProtocol.requests.isEmpty,
@@ -151,7 +291,7 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let panel = try JSONDecoder().decode(Panel.self, from: Data(missing.utf8))
         XCTAssertTrue(panel.boardMissing, "fixture should describe a panel with no board")
 
-        TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
+        await TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)?.value
 
         XCTAssertTrue(store.items().isEmpty,
                       "a panel with no board has nothing to open into")
@@ -174,7 +314,7 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         connection.signOut()
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
 
-        TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)
+        await TopShelfPreviewPublisher.publish(panels: [panel], connection: connection, store: store)?.value
 
         let retained = try XCTUnwrap(store.items().first)
         XCTAssertEqual(retained.panelID, "one")

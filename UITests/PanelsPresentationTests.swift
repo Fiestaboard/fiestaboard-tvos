@@ -43,7 +43,7 @@ final class PanelsPresentationTests: XCTestCase {
         let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Home FiestaBoard\"}"
         let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
-        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
         app.launch()
         func card(_ name: String) -> XCUIElement {
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
@@ -125,7 +125,7 @@ final class PanelsPresentationTests: XCTestCase {
         let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Stress fixture\"}"
         let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
-        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
         app.launch()
         func card(_ index: Int) -> XCUIElement {
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Stress \(index),")).firstMatch
@@ -171,6 +171,62 @@ final class PanelsPresentationTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
         waitForFocus(card(13), "Returning should restore the distant right-column card")
         capture(app, "Panel browser — restored distant right-column card")
+    }
+
+    /// Controlled profiling experiment: identical cards and focus treatment,
+    /// with the board image present or replaced by a plain field. Timings are
+    /// diagnostic evidence; simulator frame budgets are not device assertions.
+    func testWarmHorizontalFocusWithAndWithoutPreviewImages() throws {
+        continueAfterFailure = false
+        var panels: [String] = []
+        var byID: [String: String] = [:]
+        for index in 0..<2 {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+            let id = "warm-\(index)"
+            object["id"] = id
+            object["name"] = "Warm \(index)"
+            object["render_style"] = "led_matrix"
+            object["device_model_spec"] = ["geometry": ["kind": "pixels", "width": 636, "height": 352]]
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            panels.append(json)
+            byID[id] = json
+        }
+        let cells = Array(repeating: Array(repeating: 63, count: 30), count: 12)
+        let frame = String(decoding: try JSONSerialization.data(withJSONObject:
+            ["characters": cells, "rows": 12, "cols": 30, "message": "Warm preview"]), as: UTF8.self)
+        let server = try FixtureHTTPServer(frameBody: frame,
+            panelsBody: "{\"panels\":[\(panels.joined(separator: ","))],\"total\":2}", additionalPanels: byID)
+        self.server = server
+        let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Warm fixture\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        for blank in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO",
+                                   "-fiestaboard.panelProfile", "YES", "-fiestaboard.panelProfileBlank", blank ? "YES" : "NO"]
+            app.launch()
+            let cards = (0..<2).map { index in
+                app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Warm \(index),")).firstMatch
+            }
+            XCTAssertTrue(cards[0].waitForExistence(timeout: 10))
+            for card in cards {
+                let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Board reads:"), object: card)
+                XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+            }
+            waitForFocus(cards[0])
+            // Deliberately exclude startup/initial image work from this warm
+            // interaction experiment. Readiness assertions above are separate.
+            Thread.sleep(forTimeInterval: 3)
+            for _ in 0..<6 {
+                XCUIRemote.shared.press(.right)
+                waitForFocus(cards[1])
+                XCUIRemote.shared.press(.left)
+                waitForFocus(cards[0])
+            }
+            // Leaving the grid flushes the app's opt-in timing recording.
+            XCUIRemote.shared.press(.select)
+            XCTAssertTrue(app.buttons["Warm 0"].waitForExistence(timeout: 5))
+            app.terminate()
+        }
     }
 
     /// Remote presses can return while tvOS is still transferring focus and
