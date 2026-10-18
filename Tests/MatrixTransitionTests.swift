@@ -250,7 +250,8 @@ final class MatrixTransitionTests: XCTestCase {
             ($0.animation(forKey: "message") as? CAKeyframeAnimation)?.keyPath == "position.x"
                 && $0.position.x < 0
         })
-        let retained = try XCTUnwrap(outgoing.contents as? CGImage)
+        let retainedContents = try XCTUnwrap(outgoing.contents)
+        let retained = retainedContents as! CGImage
         XCTAssertEqual(retained.width, 48)
         XCTAssertEqual(retained.height, 8)
         let retainedImage = UIImage(cgImage: retained)
