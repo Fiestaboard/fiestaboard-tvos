@@ -4,6 +4,8 @@ struct PanelsScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: PanelsModel?
     @State private var restoredInitialFocus = false
+    @State private var previewImages = PanelPreviewImageCache()
+    @State private var pendingFocusTarget: String?
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
@@ -44,7 +46,11 @@ struct PanelsScreen: View {
             model = fresh
             await fresh.load()
         }
-        .onDisappear { model?.stopPreviews() }
+        .onDisappear {
+            model?.stopPreviews()
+            previewImages.removeAll()
+            pendingFocusTarget = nil
+        }
     }
 
     private var panelIDs: [String] { model?.panels.map(\.id) ?? [] }
@@ -66,6 +72,28 @@ struct PanelsScreen: View {
         let available = panels.filter { !$0.boardMissing }
         return available.first { $0.id == preferredRef || String($0.shortCode) == preferredRef }?.id
             ?? available.first?.id
+    }
+
+    /// Fallback for a vertical move the native focus engine could not resolve
+    /// because the adjacent lazy row has not been materialized yet.
+    static func verticalFocusTarget(in panels: [Panel], from id: String,
+                                    direction: MoveCommandDirection) -> String? {
+        guard direction == .up || direction == .down,
+              let index = panels.firstIndex(where: { $0.id == id }) else { return nil }
+        let step = direction == .down ? 2 : -2
+        let column = index % 2
+        var row = index - column + step
+        while row >= 0 && row < panels.count {
+            // Prefer the same column, then the other available card in this
+            // row. A removed board must never become a focus target.
+            for candidate in [row + column, row + 1 - column] {
+                if candidate < panels.count, !panels[candidate].boardMissing {
+                    return panels[candidate].id
+                }
+            }
+            row += step
+        }
+        return nil
     }
 
     private var header: some View {
@@ -226,6 +254,23 @@ struct PanelsScreen: View {
                 .padding(.horizontal, -Self.focusInset)
                 .focusScope(gridScope)
                 .focusSection()
+                .onMoveCommand { direction in
+                    // Successful native focus moves consume their command.
+                    // Only recover an unhandled vertical move inside the grid.
+                    guard let id = focusedPanel else { return }
+                    pendingFocusTarget = Self.verticalFocusTarget(
+                        in: model?.panels ?? [], from: id, direction: direction)
+                }
+                .task(id: pendingFocusTarget) {
+                    guard let target = pendingFocusTarget else { return }
+                    scroll.scrollTo(target, anchor: .center)
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    if model?.panels.contains(where: { $0.id == target && !$0.boardMissing }) == true {
+                        focusedPanel = target
+                    }
+                    pendingFocusTarget = nil
+                }
                 .task(id: panelIDs) {
                     guard !restoredInitialFocus, !panelIDs.isEmpty else { return }
                     restoredInitialFocus = true
@@ -242,7 +287,8 @@ struct PanelsScreen: View {
     private func card(for panel: Panel, width: CGFloat) -> some View {
         PanelCard(panel: panel,
                   preview: model?.previewState(for: panel) ?? .loading,
-                  action: { app.openPanel(ref: panel.id) }, cardWidth: width)
+                  action: { app.openPanel(ref: panel.id) }, cardWidth: width,
+                  previewImages: previewImages)
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
     }

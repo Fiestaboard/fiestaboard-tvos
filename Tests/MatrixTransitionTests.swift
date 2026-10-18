@@ -238,12 +238,41 @@ final class MatrixTransitionTests: XCTestCase {
     func testInterruptedMarqueeRetainsVisibleNativePixelsAndAcceptsNewestMessage() async throws {
         let (window, surface) = host(size: CGSize(width: 576, height: 96))
         defer { window.isHidden = true }
+        func state() -> String {
+            "bounds=\(surface.bounds) scale=\(surface.traitCollection.displayScale) "
+                + imageLayers(in: surface.layer).map {
+                    "[position=\($0.position) animationKeys=\($0.animationKeys() ?? [])]"
+                }.joined(separator: " ")
+        }
         surface.update(request(0xff0000, width: 48, height: 8, style: .marquee), animated: true)
         surface.update(request(0x0000ff, width: 48, height: 8, style: .marquee), animated: true)
+        // Retain the compositor fields before yielding. Core Animation can
+        // discard animation records on this offscreen test window, but these
+        // are the actual native images that retargeting must replace.
+        let outgoing = try XCTUnwrap(imageLayers(in: surface.layer).first {
+            ($0.animation(forKey: "message") as? CAKeyframeAnimation)?.keyPath == "position.x"
+                && $0.position.x < 0
+        }, state())
+        let incoming = try XCTUnwrap(imageLayers(in: surface.layer).first {
+            ($0.animation(forKey: "message") as? CAKeyframeAnimation)?.keyPath == "position.x"
+                && $0.position.x > 0
+        }, state())
         try await Task.sleep(for: .milliseconds(110))
         surface.update(request(0x00ff00, width: 48, height: 8, style: .marquee), animated: true)
-        XCTAssertEqual(try XCTUnwrap(sample(surface, x: 6, y: 6)).r, 255)
-        XCTAssertEqual(try XCTUnwrap(sample(surface, x: 570, y: 90)).b, 255)
+        // Sampling visibleImage() twice races the new marquee: after just
+        // one 60 Hz step its rightmost pixel is legitimately green. Inspect
+        // the retained source instead, and verify the final visible frame.
+        let retainedContents = try XCTUnwrap(outgoing.contents)
+        let retained = retainedContents as! CGImage
+        XCTAssertEqual(retained.width, 48)
+        XCTAssertEqual(retained.height, 8)
+        let retainedImage = UIImage(cgImage: retained)
+        XCTAssertEqual(try XCTUnwrap(retainedImage.pixel(x: 0, y: 0)).r, 255, state())
+        XCTAssertEqual(try XCTUnwrap(retainedImage.pixel(x: 47, y: 7)).b, 255, state())
+        let incomingContents = try XCTUnwrap(incoming.contents)
+        let newest = UIImage(cgImage: incomingContents as! CGImage)
+        XCTAssertEqual(try XCTUnwrap(newest.pixel(x: 0, y: 0)).g, 255, state())
+        XCTAssertEqual(try XCTUnwrap(newest.pixel(x: 47, y: 7)).g, 255, state())
         try await Task.sleep(for: .milliseconds(850))
         XCTAssertEqual(try XCTUnwrap(sample(surface, x: 6, y: 6)).g, 255)
         XCTAssertEqual(try XCTUnwrap(sample(surface, x: 570, y: 90)).g, 255)

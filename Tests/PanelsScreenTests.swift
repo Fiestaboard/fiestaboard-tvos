@@ -147,6 +147,24 @@ final class PanelsScreenTests: XCTestCase {
 
 extension PanelsScreenTests {
 
+    func testVerticalFocusRecoveryKeepsTheColumnAndStopsAtGridEdges() throws {
+        let panels = try (0..<14).map { try decodedPanel(id: "p\($0)") }
+        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p11", direction: .down), "p13")
+        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p12", direction: .up), "p10")
+        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p13", direction: .down))
+        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .up))
+        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .right))
+        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "gone", direction: .down))
+        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: [], from: "p1", direction: .down))
+    }
+
+    func testVerticalFocusRecoverySkipsRemovedBoardsAndReachesAnOddLastRow() throws {
+        let panels = try (0..<7).map { try decodedPanel(id: "p\($0)", boardMissing: [2, 3, 5].contains($0)) }
+        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .down), "p4")
+        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p4", direction: .down), "p6")
+        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p6", direction: .up), "p4")
+    }
+
     /// `n` panels with distinct ids, from the one-panel fixture.
     private func panelsList(count: Int, boardMissing: Bool = false) -> String {
         let panels = (0..<count).map { index -> String in
@@ -314,7 +332,8 @@ extension PanelsScreenTests {
                                    message: nil)
         let size = CGSize(width: PanelCard.width + 40,
                           height: PanelCard.previewHeight + PanelCard.detailHeight + 40)
-        let image = RenderHarness.image(PanelCard(panel: panel, preview: .ready(preview)) {},
+        let image = RenderHarness.image(PanelCard(panel: panel, preview: .ready(preview), action: {},
+                                                 previewImages: PanelPreviewImageCache()),
                                         size: size)
         var redPixels = 0
         for y in stride(from: 10, to: Int(PanelCard.previewHeight), by: 8) {

@@ -12,6 +12,27 @@ Xcode's signed-in Apple account must have access to that team and its signing
 certificate. The unsigned Release archive in
 CI checks compilation and bundle assembly; it is not an App Store upload.
 
+CI also retains `release-xcarchive` for seven days. Its `.tar.gz` preserves
+executable permissions; extract it to inspect the unsigned archive. Use only
+an archive from the intended commit after both required CI checks pass.
+
+For the first internal TestFlight build, create the app record in App Store
+Connect with bundle ID `com.fiestaboard.tv`. In Xcode, archive the Release
+scheme using your configured team, validate the archive in Organizer, then
+choose **Distribute App → TestFlight Internal Only**. Automatic distribution
+signing requires access to that team in Xcode and its distribution certificates
+or cloud-managed signing. Development profiles alone do not establish that
+distribution signing works. Confirm both targets retain the App Group.
+
+`Config/ExportOptions-TestFlight.plist` provides the equivalent command-line
+upload options. Use it with `xcodebuild -exportArchive`, the validated archive
+path, an export output directory, and `-allowProvisioningUpdates`. For an
+unsigned CI archive, supply your team ID in a local copy of that plist.
+The options allow Xcode to manage build numbers and restrict the upload to
+internal testing; that build cannot later be submitted for public release.
+After processing finishes, add the build to the intended internal tester group
+in App Store Connect and verify that it is available in TestFlight.
+
 Archive with a **tvOS 26 or newer SDK**. Apple rejects uploads built against
 an older one, and the deployment target stays at 18.0 — the SDK you build
 with and the OS you support are different numbers. CI asserts the SDK version
