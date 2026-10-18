@@ -71,6 +71,37 @@ final class BoardLayoutTests: XCTestCase {
         XCTAssertEqual(layout.width, 0)
     }
 
+    /// A grid the wire should never have produced must come back empty
+    /// rather than take the process with it: `reserveCapacity(rows * cols)`
+    /// is an unchecked Int multiply, and a configured TV relaunches straight
+    /// into the viewer, so one bad payload made the app unlaunchable. This
+    /// test passing at all — the process still alive — is most of its value.
+    func testAbsurdGridsProduceNoTilesRatherThanTrapping() {
+        let layout = BoardLayout.make(rows: 5000, cols: 5000, cells: [], tileHeight: 10)
+        XCTAssertTrue(layout.tiles.isEmpty)
+        XCTAssertEqual(layout.width, 0)
+        XCTAssertEqual(layout.height, 0)
+    }
+
+    /// The ceiling here is the same one the decoder clamps to, so a frame
+    /// that survived decoding always draws.
+    func testTheCeilingIsTheDecodedFrameCeiling() {
+        let atCeiling = BoardLayout.make(rows: PanelFrame.maxDimension, cols: 1,
+                                         cells: [], tileHeight: 10)
+        XCTAssertEqual(atCeiling.tiles.count, PanelFrame.maxDimension)
+
+        let overCeiling = BoardLayout.make(rows: PanelFrame.maxDimension + 1, cols: 1,
+                                           cells: [], tileHeight: 10)
+        XCTAssertTrue(overCeiling.tiles.isEmpty)
+    }
+
+    /// Int.max in one dimension is the case that traps on the multiply
+    /// rather than merely allocating forever.
+    func testAnOverflowingGridIsRejected() {
+        let layout = BoardLayout.make(rows: Int.max, cols: Int.max, cells: [], tileHeight: 10)
+        XCTAssertTrue(layout.tiles.isEmpty)
+    }
+
     // MARK: Fitting to a screen
 
     func testFitModeFillsTheScreenWithoutOverflowing() throws {

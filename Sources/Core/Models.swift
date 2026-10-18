@@ -36,6 +36,17 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     public let cols: Int?
     public let boardColor: String?
     public let code62Glyph: Code62Glyph?
+    private let rawRenderStyle: String?
+    public let deviceModelSpec: MatrixDisplay?
+    private let rawMatrixSizing: String?
+    public let matrixPitchMillimeters: Double?
+    public var matrixPresentation: MatrixPresentation? {
+        guard renderStyle == .ledMatrix, let mode = MatrixSizing(serverValue: rawMatrixSizing) else { return nil }
+        return .init(sizing: mode, diagonalInches: screenDiagonalInches, pitchMillimeters: matrixPitchMillimeters ?? 6)
+    }
+    public var renderStyle: PanelRenderStyle { rawRenderStyle.flatMap(PanelRenderStyle.init(rawValue:)) ?? .splitFlap }
+    public var supportsRenderStyle: Bool { rawRenderStyle != nil }
+    public var matrixDisplay: MatrixDisplay { deviceModelSpec ?? .standard }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -54,6 +65,10 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         case rows, cols
         case boardColor = "board_color"
         case code62Glyph = "code62_glyph"
+        case rawRenderStyle = "render_style"
+        case deviceModelSpec = "device_model_spec"
+        case rawMatrixSizing = "matrix_sizing"
+        case matrixPitchMillimeters = "matrix_pitch_mm"
     }
 
     public init(from decoder: Decoder) throws {
@@ -74,7 +89,18 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         rows = try c.decodeIfPresent(Int.self, forKey: .rows)
         cols = try c.decodeIfPresent(Int.self, forKey: .cols)
         boardColor = try c.decodeIfPresent(String.self, forKey: .boardColor)
-        code62Glyph = try c.decodeIfPresent(Code62Glyph.self, forKey: .code62Glyph)
+        // Decoded as a raw String and mapped, the way `boardColor` above is.
+        // `decodeIfPresent` on a RawRepresentable returns nil only for an
+        // absent or null key: an unrecognised *value* throws and takes the
+        // whole Panel with it. The viewer re-reads this config every ten
+        // seconds, so the day the server learns a new glyph, every shipped
+        // TV would stop polling over a field it can already default.
+        let rawCode62 = try c.decodeIfPresent(String.self, forKey: .code62Glyph)
+        code62Glyph = rawCode62.flatMap(Code62Glyph.init(rawValue:))
+        rawRenderStyle = try c.decodeIfPresent(String.self, forKey: .rawRenderStyle)
+        deviceModelSpec = try c.decodeIfPresent(MatrixDisplay.self, forKey: .deviceModelSpec)
+        rawMatrixSizing = try c.decodeIfPresent(String.self, forKey: .rawMatrixSizing)
+        matrixPitchMillimeters = try c.decodeIfPresent(Double.self, forKey: .matrixPitchMillimeters)
     }
 
     /// The glyph this panel's device actually prints for code 62.
@@ -90,7 +116,21 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
 
 /// The virtual board's current content.
 public struct PanelFrame: Decodable, Equatable, Sendable {
+    /// The largest grid this app will believe from the wire.
+    ///
+    /// The biggest real board is 45x18. Unbounded, `rows * cols` reached
+    /// `BoardLayout.make`'s `reserveCapacity` as an unchecked Int multiply,
+    /// so `{"rows":4000000000,"cols":4000000000}` trapped and 100000 squared
+    /// was a ten-billion-element append loop — and a configured TV relaunches
+    /// straight into the viewer, so either one made the app unlaunchable with
+    /// no way back out from the remote. Clamping in this initialiser rather
+    /// than in a consumer is deliberate: it is the one point every consumer
+    /// passes through, including the panel list, which builds its preview
+    /// straight off the decoded frame.
+    public static let maxDimension = 256
+
     public let characters: [[Int]]?
+    public let richCells: [[MatrixCell]]?
     public let message: String?
     public let rows: Int
     public let cols: Int
@@ -98,15 +138,25 @@ public struct PanelFrame: Decodable, Equatable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case characters, message, rows, cols
+        case richCells = "cells"
         case updatedAt = "updated_at"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        characters = try c.decodeIfPresent([[Int]].self, forKey: .characters)
         message = try c.decodeIfPresent(String.self, forKey: .message)
-        rows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
-        cols = try c.decodeIfPresent(Int.self, forKey: .cols) ?? 0
+        let rawRows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
+        let rawCols = try c.decodeIfPresent(Int.self, forKey: .cols) ?? 0
+        rows = min(max(rawRows, 0), Self.maxDimension)
+        cols = min(max(rawCols, 0), Self.maxDimension)
+        let rowLimit = rows
+        let colLimit = cols
+        characters = try c.decodeIfPresent([[Int]].self, forKey: .characters).map {
+            $0.prefix(rowLimit).map { Array($0.prefix(colLimit)) }
+        }
+        richCells = try c.decodeIfPresent([[MatrixCell]].self, forKey: .richCells).map {
+            $0.prefix(rowLimit).map { Array($0.prefix(colLimit)) }
+        }
         if let raw = try c.decodeIfPresent(String.self, forKey: .updatedAt) {
             updatedAt = ISO8601DateFormatter.fiestaDate(from: raw)
         } else {
@@ -114,12 +164,13 @@ public struct PanelFrame: Decodable, Equatable, Sendable {
         }
     }
 
-    public init(characters: [[Int]]?, message: String?, rows: Int, cols: Int, updatedAt: Date?) {
+    public init(characters: [[Int]]?, message: String?, rows: Int, cols: Int, updatedAt: Date?, richCells: [[MatrixCell]]? = nil) {
         self.characters = characters
         self.message = message
-        self.rows = rows
-        self.cols = cols
+        self.rows = min(max(rows, 0), Self.maxDimension)
+        self.cols = min(max(cols, 0), Self.maxDimension)
         self.updatedAt = updatedAt
+        self.richCells = richCells
     }
 }
 
@@ -162,6 +213,22 @@ public struct IncompatibleReference: Decodable, Equatable, Sendable {
     public let type: String?
     public let id: String?
     public let name: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, id, name, surface
+        case pageID = "page_id"
+        case pageName = "page_name"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+        type = try fields.decodeIfPresent(String.self, forKey: .surface)
+            ?? fields.decodeIfPresent(String.self, forKey: .type)
+        id = try fields.decodeIfPresent(String.self, forKey: .pageID)
+            ?? fields.decodeIfPresent(String.self, forKey: .id)
+        name = try fields.decodeIfPresent(String.self, forKey: .pageName)
+            ?? fields.decodeIfPresent(String.self, forKey: .name)
+    }
 }
 
 public struct PanelUpdateResult: Sendable {
@@ -173,6 +240,17 @@ public enum FiestaError: Error, Equatable {
     case unauthorized
     case setupRequired
     case notFound(String)
+    /// The board answered, but is not serving yet.
+    ///
+    /// Deliberately carries no detail. The only 503 this app can receive is
+    /// the fixed `{"detail":"Service is starting up, please try again
+    /// shortly"}` nginx returns from its own `@api_starting` location while
+    /// FastAPI is still coming up: none of the endpoints this app calls
+    /// (`/auth/*`, `/panels`, `/panel/*`) declares an application 503, and
+    /// nginx keeps `proxy_intercept_errors off` so the ones that do elsewhere
+    /// never reach here. A fixed internal string is worse on a TV than the
+    /// app's own copy below, and a payload nothing reads only invites one.
+    case unavailable
     case http(Int)
     case transport(String)
     case decoding(String)
@@ -194,9 +272,24 @@ public enum FiestaError: Error, Equatable {
         case .unauthorized:
             return "Your saved sign-in was refused. Sign in again."
         case .setupRequired:
-            return "This FiestaBoard has no account yet. Finish setup in the FiestaBoard app."
+            // "Finish setup in the FiestaBoard app" was circular: this *is*
+            // the FiestaBoard app as far as the person reading it is
+            // concerned. Account creation only exists on the board's own
+            // web page. This is the only copy of it: `AppModel` reads it from
+            // here, because two spellings of the first sentence a brand-new
+            // board's owner ever reads will drift the first time one is edited.
+            return "This FiestaBoard has no account yet. Open your board's web page in a browser "
+                 + "on a phone or computer, create your account there, then choose the board "
+                 + "again here."
         case .notFound(let detail):
             return detail
+        case .unavailable:
+            // nginx answers 503 "Service is starting up" for the 30-60s
+            // after a power cut, before FastAPI is listening. That is the
+            // most common failure anyone actually sees, and the 5xx line
+            // below sent them to read the logs of a machine that is merely
+            // booting.
+            return "Your FiestaBoard is still starting up. This usually takes under a minute."
         case .http(429):
             return "Your FiestaBoard is refusing sign-ins after too many failed attempts. "
                  + "Wait a minute, then sign in again."
@@ -214,7 +307,9 @@ public enum FiestaError: Error, Equatable {
 extension Panel {
     /// "30 × 12", or a plain statement when the virtual board is gone.
     public var gridDescription: String {
-        guard !boardMissing, let rows, let cols else { return "No board" }
+        // `board_missing` is the server saying the board row was deleted,
+        // not that one is waiting to be attached.
+        guard !boardMissing, let rows, let cols else { return "Board removed" }
         return "\(cols) × \(rows)"
     }
 

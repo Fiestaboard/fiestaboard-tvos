@@ -8,6 +8,7 @@ struct BoardFlipTransition {
         let next: BoardCell
         let progress: Double
         let isAnimating: Bool
+        var drumCode: Int? = nil
 
         /// The face on screen. The leaf shows its back (the next glyph) once
         /// it has passed edge-on, which `FlapPhysics` puts before half way
@@ -62,7 +63,7 @@ struct BoardFlipTransition {
         let progress = (elapsed - Double(step) * Self.stepDuration) / Self.stepDuration
         return Sample(previous: BoardTables.cell(forCode: previousCode, code62: code62),
                       next: BoardTables.cell(forCode: nextCode, code62: code62),
-                      progress: min(1, max(0, progress)), isAnimating: true)
+                      progress: min(1, max(0, progress)), isAnimating: true, drumCode: previousCode)
     }
 
     func retargeted(to newTarget: [BoardCell], at date: Date) -> BoardFlipTransition {

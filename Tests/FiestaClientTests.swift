@@ -119,7 +119,24 @@ final class FiestaClientTests: XCTestCase {
         XCTAssertEqual(frame.characters?[0], [8, 9, 0])
         XCTAssertEqual(frame.rows, 2)
         XCTAssertEqual(frame.cols, 3)
-        XCTAssertNotNil(frame.updatedAt)
+        // The instant, not merely "something parsed": a formatter reading
+        // that string as a different moment satisfied `XCTAssertNotNil` too.
+        XCTAssertEqual(try XCTUnwrap(frame.updatedAt).timeIntervalSince1970,
+                       1_789_813_800, accuracy: 0.001)  // 2026-09-19T10:30:00Z
+    }
+
+    /// `fiestaDate` tries a fractional-seconds formatter before a plain one
+    /// because the server emits both spellings. Every fixture in this file is
+    /// the plain one, so nothing entered the branch that exists for the other
+    /// — deleting it would have left `updatedAt` nil on half the server's
+    /// paths with the suite still green.
+    func testAFractionalSecondsTimestampAlsoDecodes() async throws {
+        StubURLProtocol.enqueue(
+            .json(#"{"characters":null,"rows":1,"cols":1,"updated_at":"2026-09-19T10:30:00.250Z"}"#),
+            for: "/frame")
+        let frame = try await client.frame(ref: "abc123def456")
+        XCTAssertEqual(try XCTUnwrap(frame.updatedAt).timeIntervalSince1970,
+                       1_789_813_800.25, accuracy: 0.001)
     }
 
     /// A board nothing has been sent to yet is blank, not broken.
@@ -129,6 +146,56 @@ final class FiestaClientTests: XCTestCase {
         XCTAssertNil(frame.characters)
         XCTAssertNil(frame.updatedAt)
         XCTAssertEqual(frame.cols, 30)
+    }
+
+    /// The server's grid dimensions are clamped where they are decoded,
+    /// because that is the one point every consumer passes through — the
+    /// panel-list preview builds straight off a decoded frame and never
+    /// goes near `PanelStore`. Unclamped, `rows * cols` reached
+    /// `reserveCapacity` as an unchecked multiply and took the app down on
+    /// every launch, since a configured TV relaunches into the viewer.
+    func testAbsurdFrameDimensionsAreClampedAtTheDecodeBoundary() async throws {
+        StubURLProtocol.enqueue(.json(#"{"characters":null,"rows":100000,"cols":100000}"#),
+                                for: "/frame")
+        let frame = try await client.frame(ref: "abc123def456")
+        XCTAssertEqual(frame.rows, PanelFrame.maxDimension)
+        XCTAssertEqual(frame.cols, PanelFrame.maxDimension)
+    }
+
+    func testNegativeFrameDimensionsDecodeAsAnEmptyGrid() async throws {
+        StubURLProtocol.enqueue(.json(#"{"rows":-4,"cols":-1}"#), for: "/frame")
+        let frame = try await client.frame(ref: "abc123def456")
+        XCTAssertEqual(frame.rows, 0)
+        XCTAssertEqual(frame.cols, 0)
+    }
+
+    /// A real board stays under the ceiling, so nothing anyone owns is
+    /// altered on the way in.
+    func testRealBoardDimensionsPassThroughUntouched() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.emptyFrameJSON), for: "/frame")
+        let frame = try await client.frame(ref: "abc123def456")
+        XCTAssertEqual(frame.rows, 12)
+        XCTAssertEqual(frame.cols, 30)
+    }
+
+    /// The viewer re-reads the panel config every ten seconds. Decoding
+    /// `code62_glyph` as the enum threw on any value this build has never
+    /// heard of and failed the whole `Panel`, so the day the server learns a
+    /// new glyph every shipped TV would stop polling over a field it can
+    /// already default.
+    func testAnUnrecognisedCode62GlyphDoesNotFailTheWholePanel() async throws {
+        let json = Fixtures.panelsList
+            .replacingOccurrences(of: #""code62_glyph":"heart""#,
+                                  with: #""code62_glyph":"sparkle""#)
+            .replacingOccurrences(of: #""device_type":"note_array""#,
+                                  with: #""device_type":"flagship""#)
+        StubURLProtocol.enqueue(.json(json), for: "/api/panels")
+
+        let panels = try await client.panels()
+        let panel = try XCTUnwrap(panels.first)
+        XCTAssertEqual(panel.name, "Living Room")
+        XCTAssertNil(panel.code62Glyph)
+        XCTAssertEqual(panel.effectiveCode62, .degree)
     }
 
     func testDeletedPanelIsNotFound() async {
@@ -153,8 +220,45 @@ final class FiestaClientTests: XCTestCase {
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: request.body!) as? [String: Any])
         XCTAssertEqual(json["screen_diagonal_inches"] as? Double, 55)
         XCTAssertEqual(json["screen_aspect_w"] as? Double, 16)
-        XCTAssertNil(json["name"], "an unset field must not be sent")
-        XCTAssertNil(json["calibration_scale"], "an unset field must not be sent")
+        // `name` was the assertion here, and `updatePanel` takes no name —
+        // no edit to it could have put one in the body. The keys it CAN send
+        // are the ones worth pinning: a default sent for any of them clears a
+        // setting on the board that nobody asked to change.
+        XCTAssertEqual(Set(json.keys),
+                       ["screen_diagonal_inches", "screen_aspect_w", "screen_aspect_h"],
+                       "an unset field must not be sent: \(json.keys.sorted())")
+    }
+
+    func testCurrentNextPanelUpdateDecodesFlatResponseAndPageWarnings() async throws {
+        var response = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
+        response["render_style"] = "led_matrix"
+        response["incompatible_references"] = [["page_id": "p1", "page_name": "Welcome", "surface": "schedule", "schedule_id": "s1"]]
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: response), as: UTF8.self)
+        StubURLProtocol.enqueue(.json(json), for: "/api/panels/")
+        let result = try await client.updatePanel(id: "abc123def456", renderStyle: .ledMatrix)
+        XCTAssertEqual(result.panel.id, "abc123def456")
+        XCTAssertEqual(result.panel.renderStyle, .ledMatrix)
+        XCTAssertEqual(result.incompatibleReferences.first?.id, "p1")
+        XCTAssertEqual(result.incompatibleReferences.first?.name, "Welcome")
+        XCTAssertEqual(result.incompatibleReferences.first?.type, "schedule")
+    }
+
+    func testCurrentNextPanelUpdateAcceptsNullWarnings() async throws {
+        var response = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
+        response["incompatible_references"] = NSNull()
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: response), as: UTF8.self)
+        StubURLProtocol.enqueue(.json(json), for: "/api/panels/")
+        let result = try await client.updatePanel(id: "abc123def456", calibration: 1.1)
+        XCTAssertEqual(result.panel.name, "Living Room")
+        XCTAssertTrue(result.incompatibleReferences.isEmpty)
+    }
+
+    func testMalformedPanelUpdateStillReportsDecodingFailure() async throws {
+        StubURLProtocol.enqueue(.json(#"{"status":"success"}"#), for: "/api/panels/")
+        do {
+            _ = try await client.updatePanel(id: "abc123def456", calibration: 1.1)
+            XCTFail("A response without a valid panel cannot confirm a save")
+        } catch FiestaError.decoding { }
     }
 
     /// Reshaping a grid can strand pages authored for the old one. The server
@@ -168,6 +272,50 @@ final class FiestaClientTests: XCTestCase {
         let result = try await client.updatePanel(id: "abc123def456", diagonal: 85)
         XCTAssertEqual(result.incompatibleReferences.count, 1)
         XCTAssertEqual(result.incompatibleReferences.first?.name, "Welcome")
+    }
+
+    /// nginx answers 503 for the 30-60s after a power cut, before FastAPI
+    /// is listening. It is the most common failure anyone sees, and it is
+    /// not the generic 5xx "check its logs" case.
+    func testABootingBoardIsUnavailableRatherThanAServerError() async {
+        StubURLProtocol.enqueue(
+            .json(#"{"detail":"Service is starting up, please try again shortly"}"#, status: 503),
+            for: "/api/auth/status")
+        do {
+            _ = try await client.authStatus()
+            XCTFail("expected unavailable")
+        } catch let error as FiestaError {
+            // The exact case, not merely "a FiestaError": the regression this
+            // guards is 503 falling through to `.http(503)`, and a bare
+            // `catch FiestaError` would have been satisfied by that too.
+            XCTAssertEqual(error, .unavailable)
+            XCTAssertFalse(error.userMessage.contains("Check its logs"), error.userMessage)
+        } catch {
+            XCTFail("expected .unavailable, got \(error)")
+        }
+    }
+
+    func testTheStartupMessageNeverSendsAnyoneToTheLogs() {
+        XCTAssertEqual(FiestaError.unavailable.userMessage,
+                       "Your FiestaBoard is still starting up. This usually takes under a minute.")
+        // 503 must not be reached by the 500-range clause, and 429 must keep
+        // matching ahead of it.
+        XCTAssertTrue(FiestaError.http(500).userMessage.contains("Check its logs"))
+        XCTAssertTrue(FiestaError.http(429).userMessage.contains("too many failed attempts"))
+    }
+
+    /// Every other 5xx still reaches `.http`, which several call sites
+    /// pattern-match on by status.
+    func testOtherServerErrorsKeepTheirStatusCode() async {
+        StubURLProtocol.enqueue(.json(#"{"detail":"boom"}"#, status: 502), for: "/api/auth/status")
+        do {
+            _ = try await client.authStatus()
+            XCTFail("expected http(502)")
+        } catch FiestaError.http(let status) {
+            XCTAssertEqual(status, 502)
+        } catch {
+            XCTFail("expected .http(502), got \(error)")
+        }
     }
 
     func testTransportFailuresAreWrapped() async {

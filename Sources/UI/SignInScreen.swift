@@ -6,8 +6,8 @@ import Observation
 final class SignInModel {
     var username = ""
     var password = ""
-    var errorMessage: String?
-    var isSubmitting = false
+    private(set) var errorMessage: String?
+    private(set) var isSubmitting = false
 
     private let app: AppModel
 
@@ -25,27 +25,82 @@ final class SignInModel {
     /// reflex, and losing the saved connection to one would be a surprise.
     func back() { app.route = .connect }
 
+    // MARK: Editing
+
+    /// Editing clears the last failure.
+    ///
+    /// The message is a verdict on the credential that was just refused.
+    /// Leaving it above the fields while someone types a new one means the
+    /// screen — and VoiceOver, reading down the list — contradicts the thing
+    /// the user is in the middle of fixing.
+    func setUsername(_ value: String) {
+        username = value
+        clearError()
+    }
+
+    func setPassword(_ value: String) {
+        password = value
+        clearError()
+    }
+
+    private func clearError() {
+        // @Observable notifies on every set, not only on a change, and this
+        // runs once per character from the on-screen keyboard. Only touch it
+        // when there is something to clear.
+        if errorMessage != nil { errorMessage = nil }
+    }
+
+    // MARK: Submitting
+
     func submit() async {
         guard !isSubmitting else { return }
-        guard !username.isEmpty, !password.isEmpty else {
-            errorMessage = "Enter your username and password."
+
+        // Trim the username, never the password.
+        //
+        // The board refuses to create a username with leading or trailing
+        // whitespace at all (`_validate_username` in the server's auth
+        // service), so a stray space off the on-screen keyboard can only
+        // ever produce "that didn't work" — and the way that reads to
+        // someone holding a remote is "retype the password". Two of those
+        // and the board's ten-failures-a-minute lockout takes over. The same
+        // trim keeps a stray newline out of the credential the keychain
+        // stores.
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !password.isEmpty else {
+            fail("Enter your username and password.")
             return
         }
+        username = name
+
         isSubmitting = true
-        errorMessage = nil
+        clearError()
+        // Otherwise a sign-in against a board that has gone quiet is up to
+        // twenty seconds of a screen that never acknowledged the press.
+        Announce.say("Signing in…")
         defer { isSubmitting = false }
         do {
-            try await app.connection.signIn(username: username, password: password)
+            try await app.connection.signIn(username: name, password: password)
             app.route = .panels
         } catch FiestaError.unauthorized {
-            errorMessage = "That username or password didn't work."
+            fail("That username or password didn't work.")
         } catch let error as FiestaError {
             // A lockout in particular must not read as a wrong password —
             // the board is refusing to even consider one for a minute.
-            errorMessage = error.userMessage
+            fail(error.userMessage)
         } catch {
-            errorMessage = FiestaError.transport("\(error)").userMessage
+            fail(FiestaError.transport("\(error)").userMessage)
         }
+    }
+
+    /// Record a failure and say it out loud — see
+    /// `Announce.say(_:recordingIn:)`, whose argument this screen is the
+    /// worked example of.
+    ///
+    /// Deliberately **not** accompanied by clearing `password`: retyping a
+    /// password on a remote is punishing enough that it is worth leaving a
+    /// wrong one on screen to be corrected.
+    private func fail(_ message: String) {
+        Announce.say(message, recordingIn: &errorMessage)
     }
 }
 
@@ -79,11 +134,22 @@ struct SignInScreen: View {
         app.connection.saved?.displayName ?? "FiestaBoard"
     }
 
+    /// Whether the password is about to cross the network in the clear.
+    ///
+    /// A FiestaBoard serves no TLS, so on a LAN this is true of every board
+    /// and it is the ordinary case rather than the alarming one — which is
+    /// why the disclosure below is a plain footer line and not a warning in
+    /// amber. Nil `saved` claims nothing: we do not know the scheme.
+    private var isUnencrypted: Bool {
+        app.connection.saved?.host.scheme?.lowercased() == "http"
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Sign in")
                 .font(.system(size: 56, weight: .bold))
                 .foregroundStyle(Fiesta.Colors.foreground)
+                .accessibilityAddTraits(.isHeader)
             Text(boardName)
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
@@ -96,6 +162,9 @@ struct SignInScreen: View {
     // MARK: Sections
 
     /// One place for failures, in the error colour, above the fields.
+    ///
+    /// Nothing here is focusable, so this is what a sighted user reads and
+    /// `SignInModel.fail` is what everyone else hears. Both are needed.
     @ViewBuilder
     private var errorSection: some View {
         if let message = model?.errorMessage {
@@ -114,24 +183,59 @@ struct SignInScreen: View {
                 .autocorrectionDisabled()
                 .accessibilityLabel("Username")
 
+            // A real SecureField, and no show/hide toggle: a password
+            // revealed on a sixty-five inch screen in a living room is a
+            // worse default than the typing it saves.
             SecureField("Password", text: passwordBinding)
                 .textContentType(.password)
                 .accessibilityLabel("Password")
         } header: {
             Text("Your FiestaBoard account")
         } footer: {
+            credentialsFooter
+        }
+    }
+
+    /// Two facts about the password: where it is kept, and how it travels.
+    ///
+    /// Built as a named property rather than inline in the `Section` — a
+    /// conditional inside a footer builder is exactly the shape that puts
+    /// this file past the type checker's budget (see docs/tvos-design.md).
+    private var credentialsFooter: some View {
+        VStack(alignment: .leading, spacing: 8) {
             // Said plainly because it is a real commitment: the credential is
             // kept so a lapsed session never sends anyone back to a remote.
             Text("Your sign-in is stored on this Apple TV so it stays connected.")
+
+            if isUnencrypted {
+                Text("The connection to this board isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")
+            }
         }
+        // One passage, not two rows to swipe through.
+        .accessibilityElement(children: .combine)
     }
 
     private var submitSection: some View {
         Section {
+            // Deliberately not `.disabled(isSubmitting)`. This button is the
+            // focus owner at the moment it is pressed, and disabling the
+            // focused control on tvOS moves focus off it and does not
+            // reliably bring it back. `SignInModel.submit`'s `guard
+            // !isSubmitting` is the re-entrancy guard instead.
             Button("Sign in") { Task { await model?.submit() } }
                 .accessibilityLabel("Sign in to \(boardName)")
         } footer: {
-            if model?.isSubmitting ?? false {
+            submitFooter
+        }
+    }
+
+    @ViewBuilder
+    private var submitFooter: some View {
+        if model?.isSubmitting ?? false {
+            HStack(spacing: 12) {
+                ProgressView()
+                    .tint(Fiesta.Colors.brand)
+                    .accessibilityHidden(true)
                 Text("Signing in…")
             }
         }
@@ -156,11 +260,11 @@ struct SignInScreen: View {
 
     private var usernameBinding: Binding<String> {
         Binding(get: { model?.username ?? "" },
-                set: { model?.username = $0 })
+                set: { model?.setUsername($0) })
     }
 
     private var passwordBinding: Binding<String> {
         Binding(get: { model?.password ?? "" },
-                set: { model?.password = $0 })
+                set: { model?.setPassword($0) })
     }
 }

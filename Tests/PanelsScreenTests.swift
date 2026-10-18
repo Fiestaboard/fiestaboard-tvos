@@ -103,6 +103,21 @@ final class PanelsScreenTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
 
+    /// This *is* the FiestaBoard app — `CFBundleDisplayName` is exactly
+    /// `FiestaBoard` — so "create one in the FiestaBoard app" sent someone
+    /// with no panels to the icon they were already looking at. Panels are
+    /// made on the board's own web page, and the path to them there is the
+    /// half of the sentence that still has to survive.
+    func testTheEmptyStateSendsPeopleToTheBoardsWebPage() {
+        let copy = PanelsScreen.emptyStateDetail
+        XCTAssertFalse(copy.contains("FiestaBoard app"),
+                       "this IS the FiestaBoard app: \(copy)")
+        XCTAssertTrue(copy.contains("board's web page in a browser on a phone or computer"),
+                      "same wording as every other place that sends people there: \(copy)")
+        XCTAssertTrue(copy.contains("Settings → Hardware → FiestaPanel"),
+                      "the web page is big; the path is what makes this actionable: \(copy)")
+    }
+
     func testPanelDescribesItsGridAndScreen() throws {
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
         XCTAssertEqual(panel.gridDescription, "30 × 12")
@@ -118,7 +133,7 @@ final class PanelsScreenTests: XCTestCase {
             .replacingOccurrences(of: "\"cols\":30", with: "\"cols\":null")
         let panel = try JSONDecoder().decode(Panel.self, from: Data(orphan.utf8))
         XCTAssertTrue(panel.boardMissing)
-        XCTAssertEqual(panel.gridDescription, "No board")
+        XCTAssertEqual(panel.gridDescription, "Board removed")
     }
 
     func testScreenRendersLoadedEmptyAndErrorStates() async {
@@ -365,12 +380,17 @@ extension PanelsScreenTests {
         XCTAssertEqual(PanelsScreen.defaultFocusPanel(in: panels), "real")
     }
 
-    /// Every panel orphaned: still name one, rather than leaving the focus
-    /// engine to guess.
-    func testDefaultFocusFallsBackWhenEveryPanelIsOrphaned() throws {
+    /// Every panel orphaned: name nobody.
+    ///
+    /// This used to fall back to the first panel, which on a list like this
+    /// one is a card `PanelCard` has `.disabled()`. `prefersDefaultFocus` on
+    /// a disabled view is a target the focus engine must refuse, and the
+    /// screen came up with nothing focused at all. Nil hands the choice back
+    /// to tvOS, which lands on the header.
+    func testDefaultFocusIsNothingWhenEveryPanelIsOrphaned() throws {
         let panels = [try decodedPanel(id: "one", boardMissing: true),
                       try decodedPanel(id: "two", boardMissing: true)]
-        XCTAssertEqual(PanelsScreen.defaultFocusPanel(in: panels), "one")
+        XCTAssertNil(PanelsScreen.defaultFocusPanel(in: panels))
     }
 
     func testDefaultFocusOfAnEmptyListIsNothing() {
@@ -399,11 +419,15 @@ extension PanelsScreenTests {
                        "30 × 12 · Built for a 65\" screen")
     }
 
+    /// `board_missing` means the virtual board was DELETED on the server, not
+    /// that the app failed to find one. "No board" read as a fault someone
+    /// could wait out; the card has to say the thing that actually happened.
     func testAnOrphanedCardSaysSoRatherThanQuotingABoard() throws {
         let panel = try decodedPanel(boardMissing: true)
         let card = PanelCard(panel: panel, preview: .unavailable) {}
-        XCTAssertEqual(card.subtitle, "No board")
-        XCTAssertTrue(card.accessibilityLabel.contains("No board"))
+        XCTAssertEqual(card.subtitle, "Board removed")
+        XCTAssertTrue(card.accessibilityLabel.contains("Board removed"))
+        XCTAssertTrue(card.accessibilityLabel.contains("can't be shown"))
     }
 
     /// Two cards to a row at 1920 x 1080, inside the safe inset and the
@@ -528,4 +552,318 @@ extension PanelsScreenTests {
         XCTAssertGreaterThan(luma(ground), 4,
                              "the app ground must not be true black — that is the viewer's")
     }
+}
+
+// MARK: - When the list does not arrive
+
+extension PanelsScreenTests {
+
+    /// A failed load used to be one line of red text over an empty grid:
+    /// nothing that said what had happened, and no control anywhere on the
+    /// screen. "Try again" has to actually reload, not merely redraw.
+    func testAFailedLoadCanBeRetriedAndSucceeds() async {
+        let app = await makeApp()
+        let model = PanelsModel(app: app)
+        await model.load()   // nothing enqueued -> transport failure
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertTrue(model.panels.isEmpty)
+
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        await model.load()   // what the "Try again" button does
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(model.panels.count, 1)
+    }
+
+    /// Loading, loaded-and-empty and failed are three different screens.
+    /// Rendering each is what proves the third branch exists at all — a
+    /// failed load used to fall through to the grid.
+    ///
+    /// Each model is handed over already in the state it is meant to draw,
+    /// and the screen leaves it there. It used to reload whatever it was
+    /// given, so every render here cost a second `/api/panels` request and
+    /// an in-flight reload that dequeued the *next* case's response slid
+    /// the whole sequence by one.
+    func testTheScreenRendersEachOutcomeOfALoad() async {
+        let app = await makeApp()
+
+        let failed = PanelsModel(app: app)
+        await failed.load()   // nothing enqueued
+        XCTAssertNotNil(failed.errorMessage)
+        RenderHarness.render(PanelsScreen(model: failed).environment(app))
+
+        StubURLProtocol.enqueue(.json(#"{"panels":[],"total":0}"#), for: "/api/panels")
+        let empty = PanelsModel(app: app)
+        await empty.load()
+        XCTAssertNil(empty.errorMessage)
+        XCTAssertTrue(empty.panels.isEmpty)
+        RenderHarness.render(PanelsScreen(model: empty).environment(app))
+
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        let loaded = PanelsModel(app: app)
+        await loaded.load()
+        XCTAssertEqual(loaded.panels.count, 1)
+        RenderHarness.render(PanelsScreen(model: loaded).environment(app))
+    }
+
+    /// Home's carousel is published from the panel list, not only from the
+    /// viewer-launch path. A TV whose owner never sets a default panel never
+    /// takes that path — and used to get no carousel at all, while the
+    /// README said it would.
+    func testLoadingThePanelListPublishesTheTopShelfCarousel() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("topshelf-panels-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        let connection = ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.panels.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        let app = AppModel(connection: connection, topShelfStore: store)
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+
+        await PanelsModel(app: app).load()
+
+        XCTAssertEqual(store.items().map(\.panelID), ["abc123def456"])
+    }
+
+    /// A load that fails publishes nothing: an empty carousel would be a
+    /// worse lie than a stale one, and Home keeps showing what it has.
+    func testAFailedLoadLeavesTheCarouselAlone() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("topshelf-panels-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TopShelfSnapshotStore(directory: directory)
+        try store.replace([.init(panelID: "kept", name: "Kitchen", imageData: Data([1]))])
+        let connection = ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.panels.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        let app = AppModel(connection: connection, topShelfStore: store)
+
+        await PanelsModel(app: app).load()   // nothing enqueued
+
+        XCTAssertEqual(store.items().map(\.panelID), ["kept"])
+    }
+}
+
+// MARK: - What stays on screen while the list refreshes
+
+extension PanelsScreenTests {
+
+    /// An app whose traffic runs through `GatedURLProtocol`.
+    private func makeGatedApp() async -> AppModel {
+        GatedURLProtocol.reset()
+        GatedURLProtocol.respond(Fixtures.authStatusDisabled, for: "/api/auth/status")
+        let app = AppModel(connection: ConnectionStore(
+            defaults: UserDefaults(suiteName: "tv.panels.\(UUID().uuidString)")!,
+            credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: GatedURLProtocol.makeSession()) }))
+        _ = try? await app.connection.connect(to: URL(string: "http://host:4420")!,
+                                              displayName: "Board")
+        return app
+    }
+
+    /// Wait until a load is actually in flight. The request it is waiting
+    /// on is held open, so this cannot race past the state it is after.
+    private func loadIsInFlight(_ model: PanelsModel) async -> Bool {
+        for _ in 0..<300 {
+            if model.isLoading { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return false
+    }
+
+    private func screenState(_ model: PanelsModel) -> PanelsScreen.ContentState {
+        PanelsScreen.contentState(hasPanels: !model.panels.isEmpty,
+                                  isLoading: model.isLoading,
+                                  errorMessage: model.errorMessage)
+    }
+
+    /// The cards a refresh is refreshing stay on screen while it runs.
+    /// `isLoading` used to be asked first, so the walk back from the viewer
+    /// — the most-travelled path in the app — replaced a perfectly true
+    /// grid with a full-screen spinner.
+    func testTheCardsStayOnScreenWhileTheListRefreshes() async {
+        let app = await makeGatedApp()
+        GatedURLProtocol.respond(Fixtures.panelsList, for: "/api/panels")
+        let model = PanelsModel(app: app)
+        await model.load()
+        XCTAssertEqual(model.panels.count, 1)
+
+        GatedURLProtocol.hold("/api/panels")
+        let refresh = Task { await model.load() }
+        let refreshStarted = await loadIsInFlight(model)
+        XCTAssertTrue(refreshStarted, "the refresh never started")
+
+        XCTAssertEqual(model.panels.count, 1, "the cards were dropped mid-refresh")
+        XCTAssertEqual(screenState(model), .grid(banner: nil),
+                       "a refresh must not replace the cards with a spinner")
+
+        GatedURLProtocol.release()
+        await refresh.value
+        XCTAssertEqual(screenState(model), .grid(banner: nil))
+    }
+
+    /// A refresh that fails has to say so — and keep the cards, which are
+    /// still true, only no longer fresh.
+    func testAFailedRefreshShowsTheBannerAndKeepsTheCards() async {
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        let model = PanelsModel(app: app)
+        await model.load()
+        XCTAssertEqual(model.panels.count, 1)
+
+        await model.load()   // nothing enqueued -> the refresh fails
+        let message = try! XCTUnwrap(model.errorMessage)
+        XCTAssertEqual(model.panels.count, 1, "a failed refresh must not empty the grid")
+        XCTAssertEqual(screenState(model), .grid(banner: message))
+    }
+
+    /// Pressing "Try again" used to take the button out of the tree: the
+    /// message it was drawn from was cleared at the top of `load()`, the
+    /// failure screen gave way to the spinner, and focus fell back to the
+    /// header for every single retry.
+    func testTryAgainStaysOnScreenWhileTheRetryRuns() async {
+        let app = await makeGatedApp()
+        let model = PanelsModel(app: app)
+        await model.load()   // no panels response -> the load fails
+        let failure = try! XCTUnwrap(model.errorMessage)
+        XCTAssertEqual(screenState(model), .failure(failure))
+
+        GatedURLProtocol.respond(Fixtures.panelsList, for: "/api/panels")
+        GatedURLProtocol.hold("/api/panels")
+        let retry = Task { await model.load() }   // what the button does
+        let retryStarted = await loadIsInFlight(model)
+        XCTAssertTrue(retryStarted, "the retry never started")
+
+        XCTAssertEqual(model.errorMessage, failure,
+                       "dropping the message mid-retry unmounts the button that started it")
+        XCTAssertEqual(screenState(model), .failure(failure),
+                       "the failure screen holds until the retry lands")
+
+        GatedURLProtocol.release()
+        await retry.value
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(screenState(model), .grid(banner: nil))
+    }
+
+    /// The full-screen spinner is for having nothing to show yet, and a
+    /// list that came back empty is still "No panels yet" rather than a
+    /// spinner that never ends.
+    func testTheFullScreenSpinnerIsOnlyForHavingNothingYet() {
+        XCTAssertEqual(PanelsScreen.contentState(hasPanels: false, isLoading: true,
+                                                 errorMessage: nil), .loading)
+        XCTAssertEqual(PanelsScreen.contentState(hasPanels: false, isLoading: false,
+                                                 errorMessage: nil), .empty)
+        XCTAssertEqual(PanelsScreen.contentState(hasPanels: false, isLoading: false,
+                                                 errorMessage: "down"), .failure("down"))
+        XCTAssertEqual(PanelsScreen.contentState(hasPanels: true, isLoading: true,
+                                                 errorMessage: nil), .grid(banner: nil))
+    }
+
+    /// The initializer's model is the test's: the screen renders it rather
+    /// than reloading over the top of it. The `.task` used to fetch
+    /// unconditionally, which made the seam a trap — whatever the stub
+    /// answered next replaced the state the test had set up.
+    func testAnInjectedModelIsRenderedRatherThanReloaded() async {
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        let model = PanelsModel(app: app)
+        await model.load()
+        let asked = panelListRequests()
+
+        RenderHarness.render(PanelsScreen(model: model).environment(app))
+        // Long enough for a reload to have gone out, if the screen still
+        // makes one: there is nothing to wait *for* when it does not.
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(panelListRequests(), asked,
+                       "the screen reloaded the model it was handed")
+        XCTAssertEqual(model.panels.count, 1)
+    }
+
+    /// `/api/panel/<ref>/frame` does not contain `/api/panels`, so preview
+    /// traffic never counts here.
+    private func panelListRequests() -> Int {
+        StubURLProtocol.requests.filter { $0.url.path.contains("/api/panels") }.count
+    }
+}
+
+/// A stub that can hold one request open, so a test can look at the state of
+/// the screen while a load is genuinely in flight. `StubURLProtocol` answers
+/// instantly, which is the one moment it cannot show.
+private final class GatedURLProtocol: URLProtocol {
+
+    private static let lock = NSLock()
+    private static let gate = DispatchSemaphore(value: 0)
+    nonisolated(unsafe) private static var responses: [String: String] = [:]
+    nonisolated(unsafe) private static var heldFragment: String?
+
+    static func reset() {
+        lock.lock()
+        responses = [:]
+        heldFragment = nil
+        lock.unlock()
+        while gate.wait(timeout: .now()) == .success {}
+    }
+
+    /// Answer any request whose path contains `fragment` with `json`.
+    static func respond(_ json: String, for fragment: String) {
+        lock.lock(); defer { lock.unlock() }
+        responses[fragment] = json
+    }
+
+    /// Requests whose path contains `fragment` block until `release()`.
+    static func hold(_ fragment: String) {
+        lock.lock(); defer { lock.unlock() }
+        heldFragment = fragment
+    }
+
+    static func release() {
+        lock.lock()
+        heldFragment = nil
+        lock.unlock()
+        gate.signal()
+    }
+
+    static func makeSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [GatedURLProtocol.self]
+        return URLSession(configuration: config)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let path = request.url?.path ?? ""
+        Self.lock.lock()
+        let held = Self.heldFragment.map { path.contains($0) } ?? false
+        // Longest matching fragment wins, as in `StubURLProtocol`.
+        let json = Self.responses
+            .filter { path.contains($0.key) }
+            .max(by: { $0.key.count < $1.key.count })?.value
+        Self.lock.unlock()
+
+        // A held request occupies one of the session's worker threads for
+        // as long as the test needs it; the timeout is there so a test that
+        // fails before releasing the gate still finishes.
+        if held { _ = Self.gate.wait(timeout: .now() + 5) }
+
+        guard let json, let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+            return
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(json.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

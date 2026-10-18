@@ -30,11 +30,11 @@ struct ViewerMessage: View {
             Text(title)
                 .font(.title)
                 .fontWeight(.semibold)
-                .foregroundStyle(Fiesta.Colors.foreground)
+                .foregroundStyle(.primary)
 
             Text(detail)
                 .font(.title3)
-                .foregroundStyle(Fiesta.Colors.mutedForeground)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             actions.padding(.top, 16)
@@ -43,7 +43,7 @@ struct ViewerMessage: View {
         .frame(maxWidth: 840)
         .padding(.horizontal, 56)
         .padding(.vertical, 48)
-        .background(Fiesta.Colors.surface, in: cardShape)
+        .background(.regularMaterial, in: cardShape)
         .overlay(cardShape.strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         // Lifts the card off a live board behind it.
         .shadow(color: .black.opacity(0.7), radius: 40, y: 16)

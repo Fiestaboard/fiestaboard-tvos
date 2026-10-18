@@ -4,14 +4,15 @@ import SwiftUI
 ///
 /// One `Canvas` rather than a view per flap: an 85" panel is 45×18 = 810
 /// tiles, which is a great deal of view identity for what is really a grid
-/// of rounded rectangles. Each distinct (character, color) pair resolves to
-/// a `GraphicsContext.ResolvedText` once — about 72 of them — and every tile
-/// is then a rect fill plus a cached glyph draw. Steady state is one redraw
-/// per frame change, roughly every two seconds.
+/// of rounded rectangles. Large animated boards reuse prepared moving-face
+/// textures; smaller and static boards resolve each distinct glyph once per
+/// draw. One shared animation clock pauses when a transition finishes.
 public struct BoardCanvas: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var transition: BoardFlipTransition?
+    @State private var atlas: FlapAtlas?
+    @Environment(\.displayScale) private var displayScale
 
     private let layout: BoardLayout
     private let background: BoardColor
@@ -26,13 +27,29 @@ public struct BoardCanvas: View {
         self.code62 = code62
     }
 
+    private var atlasKey: FlapAtlas.Key? {
+        guard animated, !reduceMotion, layout.tiles.count >= 256, layout.tileHeight <= 120 else { return nil }
+        return .init(tileHeight: layout.tileHeight, background: background, code62: code62, scale: displayScale)
+    }
+
     public var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0,
                                 paused: transition == nil || !animated || reduceMotion)) { timeline in
             Canvas(opaque: false, rendersAsynchronously: false) { context, _ in
-                Self.paint(layout, background: background,
-                           transition: animated && !reduceMotion ? transition : nil,
-                           at: timeline.date, in: &context)
+                #if DEBUG
+                let began = CACurrentMediaTime()
+                #endif
+                let active = animated && !reduceMotion ? transition : nil
+                if let atlas, atlas.key == atlasKey {
+                    atlas.paint(layout, transition: active, at: timeline.date, in: &context)
+                } else {
+                    Self.paint(layout, background: background, transition: active,
+                               at: timeline.date, in: &context)
+                }
+                #if DEBUG
+                RenderPacingProbe.shared.record(began: began, sample: timeline.date.timeIntervalSince1970,
+                                                cost: CACurrentMediaTime() - began, active: transition != nil)
+                #endif
             }
         }
         .frame(width: layout.width, height: layout.height)
@@ -50,6 +67,12 @@ public struct BoardCanvas: View {
                 ?? BoardFlipTransition(from: old, to: new, code62: code62,
                                        startedAt: now)
         }
+        .task(id: atlasKey) {
+            guard let key = atlasKey else { atlas = nil; return }
+            guard atlas?.key != key else { return }
+            atlas = FlapAtlas(tileHeight: key.tileHeight, background: key.background,
+                              code62: key.code62, scale: key.scale)
+        }
         .task(id: transition?.startedAt) {
             guard let startedAt = transition?.startedAt else { return }
             try? await Task.sleep(nanoseconds: UInt64((transition?.duration ?? 0) * 1_000_000_000))
@@ -58,12 +81,34 @@ public struct BoardCanvas: View {
         }
     }
 
+    static func paintPreparedFace(_ tile: TileRect, code: Int, progress: Double?,
+                                  background: BoardColor, code62: Code62Glyph,
+                                  in context: inout GraphicsContext) {
+        let white = background == .white
+        let unlit = white ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
+        let ink = white ? Color.black : Color(hex: "#f0f0e8")
+        let font = BoardFont.glyph(size: tile.height * BoardLayout.fontSizeRatio)
+        var resolved: [Character: GraphicsContext.ResolvedText] = [:]
+        if let progress {
+            let sample = BoardFlipTransition.Sample(previous: tile.cell,
+                next: BoardTables.cell(forCode: (code + 1) % 72, code62: code62),
+                progress: progress, isAnimating: true, drumCode: code)
+            paintSplit(tile: tile, sample: sample, in: &context, resolved: &resolved,
+                       font: font, unlit: unlit, ink: ink, whiteHardware: white)
+        } else {
+            draw(tile: tile, cell: tile.cell, in: &context, resolved: &resolved,
+                 font: font, unlit: unlit, ink: ink, whiteHardware: white)
+        }
+        drawSeam(tile: tile, seam: seam(forTileHeight: tile.height), whiteHardware: white, in: &context)
+    }
+
     static func paint(_ layout: BoardLayout, background: BoardColor,
                       transition: BoardFlipTransition?, at date: Date,
                       in context: inout GraphicsContext) {
         let font = BoardFont.glyph(size: layout.fontSize)
         let whiteHardware = background == .white
-        let unlit = whiteHardware ? Color(hex: "#e8e8e8") : Color.black
+        // The face reflects room light; only the hardware gaps are OLED black.
+        let unlit = whiteHardware ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
         let ink = whiteHardware ? Color.black : Color(hex: "#f0f0e8")
 
         // Resolve each distinct glyph once, then stamp it.
@@ -232,7 +277,7 @@ public struct BoardCanvas: View {
                 if whiteHardware && color == .white { pigment = .black }
                 else if whiteHardware && color == .black { pigment = .white }
                 else { pigment = color }
-                context.fill(shape, with: .color(pigment == .black ? .black : pigment.swiftUI))
+                context.fill(shape, with: .color(pigment.swiftUI))
 
             case .character(let character):
                 context.fill(shape, with: .color(unlit))
@@ -247,3 +292,29 @@ public struct BoardCanvas: View {
         }
     }
 }
+
+#if DEBUG
+/// Opt-in live-viewer diagnostic. Bounded samples and off-thread writes keep
+/// the probe from becoming the animation bottleneck it measures.
+private final class RenderPacingProbe {
+    static let shared = RenderPacingProbe()
+    private let enabled = UserDefaults.standard.bool(forKey: "fiestaboard.renderProfile")
+    private var frames: [[String: Double]] = []
+    private let writer = DispatchQueue(label: "FiestaBoard.animationMetrics", qos: .utility)
+    func record(began: Double, sample: Double, cost: Double, active: Bool) {
+        guard enabled, active else { return }
+        if frames.count >= 1800 { frames.removeFirst(600) }
+        frames.append(["begin": began, "sample": sample, "cost": cost])
+        if frames.count % 60 == 0 {
+            let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("flap-pacing.json")
+            let captured = frames
+            writer.async {
+                if let data = try? JSONSerialization.data(withJSONObject: captured) {
+                    try? data.write(to: url, options: .atomic)
+                }
+            }
+        }
+    }
+}
+#endif

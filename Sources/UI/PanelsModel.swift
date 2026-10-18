@@ -13,6 +13,7 @@ struct PanelPreview: Equatable, Sendable {
     /// The frame's plain-text message, for VoiceOver. The board itself is
     /// `.accessibilityHidden` — 360 flaps is not browsable.
     let message: String?
+    var richCells: [[MatrixCell]]? = nil
 
     static func make(from frame: PanelFrame, code62: Code62Glyph) -> PanelPreview {
         let cells: [[BoardCell]]
@@ -24,7 +25,7 @@ struct PanelPreview: Equatable, Sendable {
             cells = []
         }
         return PanelPreview(rows: frame.rows, cols: frame.cols,
-                            cells: cells, message: frame.message)
+                            cells: cells, message: frame.message, richCells: frame.richCells)
     }
 }
 
@@ -54,6 +55,8 @@ final class PanelsModel {
 
     private let app: AppModel
     @ObservationIgnored private var previewTask: Task<Void, Never>?
+    @ObservationIgnored private var previewGeneration = UUID()
+    @ObservationIgnored private var previewClient: FiestaClient?
 
     init(app: AppModel) { self.app = app }
 
@@ -62,43 +65,82 @@ final class PanelsModel {
         previews[panel.id] ?? .unavailable
     }
 
+    /// Fetch the panel list.
+    ///
+    /// The last attempt's message stays up until this one has finished.
+    /// Clearing it here took the failure screen down the instant "Try
+    /// again" was pressed — along with the button that had just been
+    /// pressed, so focus fell back to the header and the next retry meant
+    /// walking down the screen again.
     func load() async {
+        guard !Task.isCancelled else { return }
+        let generation = app.beginTopShelfUpdate()
+        let client = app.connection.client
+        stopPreviews()
+        app.activePanelsModel = self
         isLoading = true
-        errorMessage = nil
         defer { isLoading = false }
         do {
             let loaded = try await app.connection.authorized { try await $0.panels() }
+            guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
+            let retainedIDs = Set(loaded.filter { next in
+                panels.contains { $0.id == next.id && $0.boardId == next.boardId }
+            }.map(\.id))
+            previews = previewClient === client ? previews.filter { retainedIDs.contains($0.key) } : [:]
+            previewClient = client
+            errorMessage = nil
             panels = loaded
-            if let store = app.topShelfStore {
-                TopShelfPreviewPublisher.publish(panels: loaded,
-                                                 connection: app.connection,
-                                                 store: store)
-            }
+            // This is the app's only fetch of the panel list, so it is also
+            // the app's only chance to keep Home's carousel honest. It used
+            // to be published from the viewer-launch path alone, which meant
+            // a TV whose owner never set a default panel published nothing,
+            // ever — and the README claimed otherwise.
             // The list is on screen the moment it arrives; the pictures
             // catch up behind it.
             startPreviews(for: loaded)
+            app.publishTopShelf(panels: loaded, previews: previews)
         } catch FiestaError.unauthorized {
+            guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             // The stored credential could not recover the session — the only
-            // useful next step is asking for one.
+            // useful next step is asking for one. This attempt did not fail
+            // with something to read, so an older message must not outlive
+            // it on the screen behind the sign-in.
+            errorMessage = nil
             app.route = .signIn
         } catch let error as FiestaError {
-            errorMessage = error.userMessage
+            guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
+            fail(with: error.userMessage)
         } catch {
-            errorMessage = FiestaError.transport("\(error)").userMessage
+            guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
+            fail(with: FiestaError.transport("\(error)").userMessage)
         }
+    }
+
+    /// Record the failure and say it out loud — see
+    /// `Announce.say(_:recordingIn:)`.
+    private func fail(with message: String) {
+        Announce.say(message, recordingIn: &errorMessage)
     }
 
     /// Begin filling in the board pictures for `panels`.
     func startPreviews(for panels: [Panel]) {
-        previewTask?.cancel()
+        stopPreviews()
+        app.activePanelsModel = self
         seedPreviews(for: panels)
-        previewTask = Task { [weak self] in await self?.refreshPreviews(for: panels) }
+        let generation = app.topShelfGeneration
+        let client = app.connection.client
+        previewTask = Task { [weak self] in
+            guard let self, app.isCurrentTopShelfUpdate(generation, client: client) else { return }
+            await refreshPreviews(for: panels)
+        }
     }
 
     /// Stop fetching frames — the screen has gone away.
     func stopPreviews() {
         previewTask?.cancel()
         previewTask = nil
+        previewGeneration = UUID()
+        if app.activePanelsModel === self { app.activePanelsModel = nil }
     }
 
     /// Fetch every panel's current frame, a few at a time, publishing each
@@ -107,8 +149,16 @@ final class PanelsModel {
         // A panel with no board has nothing to preview; asking for its
         // frame is a round trip that can only 404.
         let targets = panels.filter { !$0.boardMissing }
-        guard !targets.isEmpty else { return }
         let connection = app.connection
+        let client = connection.client
+        let generation = app.topShelfGeneration
+        let run = previewGeneration
+        guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
+        if previewClient !== client { previews = [:]; previewClient = client }
+        guard !targets.isEmpty else {
+            app.publishTopShelf(panels: panels)
+            return
+        }
 
         await withTaskGroup(of: (String, PanelPreviewState).self) { group in
             var pending = targets.makeIterator()
@@ -118,14 +168,18 @@ final class PanelsModel {
                 started += 1
             }
             while let result = await group.next() {
-                if Task.isCancelled {
+                if run != previewGeneration || !app.isCurrentTopShelfUpdate(generation, client: client) {
                     group.cancelAll()
                     continue
                 }
                 previews[result.0] = result.1
+                app.publishTopShelf(panels: panels, previews: previews)
                 if let next = pending.next() {
                     group.addTask { await Self.fetchPreview(for: next, connection: connection) }
                 }
+                // Several completed frames can be waiting in the group.
+                // Give focus/input a turn between static image renders.
+                await Task.yield()
             }
         }
     }

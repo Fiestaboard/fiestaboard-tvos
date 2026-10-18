@@ -34,7 +34,13 @@ Lay cards out in a `LazyVGrid` or a row.
 **Settings-like screens — choices, switches, values:**
 `List` of `Section`s, `.listStyle(.grouped)`. Put explanatory copy in the
 Section `footer`, not in a `Text` above the control. `SettingsScreen` is the
-worked example.
+worked example. Its two-column layout has a short category list and a detail
+pane: This Apple TV, Panel appearance, Connection, About & help. Select changes
+category; merely moving focus does not replace the controls. TV preferences
+and shared panel changes have distinct scope labels. Show only the selected
+panel's controls and preview. Calibration draws at true scale in the full
+viewport with controls overlaid, so adjusting the value changes what is seen.
+Menu pops a detail before leaving settings.
 
 **Single-select:** a row per choice with a `checkmark` on the current one.
 Never a button whose title grows a tick.
@@ -51,20 +57,25 @@ Never a button whose title grows a tick.
 - **Screen edges** use `Fiesta.Metrics.safeInset`. Overscan is still real.
 - **Typography** is the system face at system-ish sizes. Spline Sans Mono is
   for board glyphs only — it is the board's voice, not the app's.
-- **Colour** comes from `Fiesta.Colors`. Amber for selection, accents and
-  warnings. The app's ground is near-black, not grey: a TV is a very large
-  bright surface in a dark room, and theme.css's dark ground — correct on a
-  monitor — reads as flat grey at sixty-five inches. `background`, `surface`
-  and `surfaceRaised` are deliberately darker than FiestaUI's values for
-  that reason; every other token is FiestaUI's untouched.
+- **Colour** comes from `Fiesta.Colors`. Neutral charcoal separates app
+  ground (`#0c0c0e`), cards (`#1c1c1e`) and raised content (`#2c2c2e`).
+  Keep FiestaBoard amber for accents and warnings. The app deliberately
+  stays dark even though tvOS offers Light, Dark and Automatic appearance.
+  Native controls own their focus colours.
+- **Materials** use the platform's own rendering. Viewer overlays use
+  `.regularMaterial` with semantic text colours for legibility over a live
+  board. Stock controls supply system focus effects; avoid adding custom
+  glow or glass to settings rows. LED lens lighting belongs to the board's
+  `Canvas`, independent of the surrounding interface material.
 - **Three different blacks, and they are not interchangeable.** The app
-  ground is `#0e0d0b`. The viewer's surround is `#000000`, so an OLED can
+  ground is `#0c0c0e`. The viewer's surround is `#000000`, so an OLED can
   switch the pixel off entirely. Board black — an unlit flap — is `#1a1a1a`,
   because a real flap reflects light and pure black reads as a dead panel.
 - **Keep accessibility labels.** Anything focusable needs one, and the board
   itself stays `.accessibilityHidden(true)` — 810 flaps is not browsable.
-- **Every screen that is not the root handles `.onExitCommand`.** Unhandled,
-  tvOS takes the Menu press and quits the app.
+- **Every screen that is not the root handles Menu.** A native navigation
+  stack returns to its parent; the settings root's `.onExitCommand` returns
+  to the viewer or panel list. Unhandled at the app root, Menu exits to Home.
 
 ## Build hazard
 
@@ -81,3 +92,30 @@ private var sizingBinding: Binding<BoardSizing> {
 
 A clean build of `SettingsScreen.swift` went from over two minutes to about
 three seconds on that change alone.
+
+Measure before repeating that claim about any other file. The only signal
+worth acting on is the compiler's; SourceKit's index for this project is not
+configured for the generated `.xcodeproj` and reports both missing modules and
+type-checking cost that a real build does not have.
+
+```bash
+xcrun swiftc -typecheck -sdk "$(xcrun --sdk appletvsimulator --show-sdk-path)" \
+  -target arm64-apple-tvos18.0-simulator \
+  Sources/UI/*.swift Sources/Core/*.swift Sources/Render/*.swift \
+  -Xfrontend -warn-long-expression-type-checking=300 \
+  -Xfrontend -warn-long-function-bodies=300
+```
+
+That writes nothing into `build/`, so it is safe to run while something else
+is building. Today it is silent: the whole 43-file type-check finishes
+in about five seconds, and lowering the threshold to 20ms turns up only
+`BoardCanvas.body` (31ms), `DiscoveredBoardCard.body` (25ms),
+`BoardFont.init(hex:)` (24ms) and `SettingsScreen.body` (23ms) — the last of
+those being the file quoted above, now that its bindings are properties.
+
+Note the size of the gap before you factor a view for build time.
+`ViewerScreen.body` measures 18ms as it stands and 42ms with all of its layer
+properties inlined back into one expression: a real difference, and still
+three orders of magnitude short of a hazard whose symptom is a file that will
+not compile at all. Split a view up because it reads better. Do not report it
+as a compile fix without numbers like these.

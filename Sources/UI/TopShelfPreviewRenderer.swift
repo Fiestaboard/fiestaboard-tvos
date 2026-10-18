@@ -1,29 +1,34 @@
 import SwiftUI
 
-/// The poster Apple TV Home shows for a panel.
-///
-/// Deliberately the brand mark rather than a picture of the board. A board
-/// preview is a black rectangle of small white text: on a Home screen, next
-/// to everything else Apple TV shows there, it reads as a screenshot someone
-/// pasted in rather than as an app. The panel's name is carried by the
-/// carousel item itself, so the art needs no text of its own.
+/// A static picture of the latest fetched frame, using the same rendering
+/// as the panel grid. Home reads only this local image, never the server.
 @MainActor
 enum TopShelfPreviewRenderer {
     static let size = CGSize(width: 1920, height: 1080)
 
-    /// Rendered once and shared by every item: the poster does not vary by
-    /// panel, so there is nothing to recompute per panel — and nothing to
-    /// fetch, which is what took a round trip per panel off every load of
-    /// the panel list.
-    static let poster: Data? = {
-        let content = ZStack {
-            Fiesta.Colors.brand
-            TacoMarkView().padding(size.height * 0.16)
-        }
-        .frame(width: size.width, height: size.height)
+    static func image(panel: Panel, preview: PanelPreview) -> Data? {
+        guard preview.rows > 0, preview.cols > 0 else { return unavailable }
+        BoardFont.registerIfNeeded()
+        return render(PanelPreviewBoard(panel: panel, preview: preview))
+    }
 
-        let renderer = ImageRenderer(content: content)
+    /// A failed frame must never look like an invented board message.
+    static let unavailable: Data? = render(
+        VStack(spacing: 30) {
+            Image(systemName: "rectangle.slash").font(.system(size: 100))
+            Text("Preview unavailable").font(.system(size: 64, weight: .medium))
+        }
+        .foregroundStyle(.white.opacity(0.7)))
+
+    private static func render(_ content: some View) -> Data? {
+        let canvas = content
+        .frame(width: size.width, height: size.height)
+        .background(.black)
+        .environment(\.colorScheme, .dark)
+        .environment(\.displayScale, 1)
+        let renderer = ImageRenderer(content: canvas)
         renderer.scale = 1
+        renderer.isOpaque = true
         return renderer.uiImage?.pngData()
-    }()
+    }
 }

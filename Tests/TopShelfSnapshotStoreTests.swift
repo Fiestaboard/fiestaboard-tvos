@@ -32,6 +32,14 @@ final class TopShelfSnapshotStoreTests: XCTestCase {
 
         try store.clear()
         XCTAssertTrue(store.items().isEmpty)
+        // An empty manifest is not an empty store. This lives in the group
+        // container's `Library/Caches`, which tvOS purges on its own terms
+        // and which the app has no other way to tidy — so a clear that only
+        // rewrote the manifest would leave every poster it ever published
+        // behind, and `items().isEmpty` would say nothing about it.
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasSuffix(".png") }
+        XCTAssertEqual(leftovers, [])
     }
 
     /// Home caches a Top Shelf image against its URL, so new artwork has to
@@ -84,5 +92,34 @@ final class TopShelfSnapshotStoreTests: XCTestCase {
         XCTAssertEqual(Set(items.map(\.imageFile)).count, 1)
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertEqual(files.filter { $0.hasSuffix(".png") }.count, 1)
+    }
+
+    /// The bug that cost the feature its entire life.
+    ///
+    /// `shared()` used to hand back the ROOT of the app-group container,
+    /// which tvOS lets neither the app nor the extension write to: every
+    /// `replace()` threw on real hardware, `items()` stayed empty, and Home
+    /// fell back to a static poster that looks exactly like a working
+    /// carousel item. The simulator does not enforce the restriction, so the
+    /// other tests in this file — which all run against a temp directory —
+    /// could never have caught it.
+    ///
+    /// This one deliberately uses the real container. The unit target is
+    /// hosted by the app, so it runs under the app's entitlements and the
+    /// group resolves for real.
+    func testTheSharedStoreResolvesAWritableContainer() throws {
+        let store = try XCTUnwrap(TopShelfSnapshotStore.shared(),
+                                  "the app-group entitlement should resolve a container")
+        defer { try? store.clear() }
+
+        XCTAssertEqual(Array(store.directory.pathComponents.suffix(3)),
+                       ["Library", "Caches", "TopShelf"],
+                       "only Library/Caches inside the group container is writable on tvOS")
+
+        try store.replace([.init(panelID: "one", name: "Kitchen", imageData: Data([1, 2, 3]))])
+        let item = try XCTUnwrap(store.items().first,
+                                 "a round trip through the real container must work")
+        XCTAssertEqual(item.panelID, "one")
+        XCTAssertEqual(try Data(contentsOf: store.imageURL(for: item)), Data([1, 2, 3]))
     }
 }

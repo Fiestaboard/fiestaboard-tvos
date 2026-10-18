@@ -39,6 +39,11 @@ public final class AppModel {
     /// Where Settings was opened from, so leaving it goes back there.
     private var routeBeforeSettings: Route?
     private var previewTask: Task<Void, Never>?
+    @ObservationIgnored private var panelReloadTask: Task<Void, Never>?
+    @ObservationIgnored weak var activePanelsModel: PanelsModel?
+    @ObservationIgnored private(set) var topShelfGeneration = UUID()
+    @ObservationIgnored private let topShelfImages = TopShelfPreviewPublisher.Cache()
+    @ObservationIgnored private var topShelfClient: FiestaClient?
 
     public let connection: ConnectionStore
     let topShelfStore: TopShelfSnapshotStore?
@@ -52,7 +57,16 @@ public final class AppModel {
         self.screenAwake = ScreenAwake()
         // A wake request is not a fact the system remembers on the app's
         // behalf. Coming back to the foreground, say what we want again.
-        screenAwake.onForeground = { [weak self] in self?.applyScreenAwake() }
+        //
+        // The card row is republished on the same beat, for the same reason:
+        // it lives in the group container's `Library/Caches`, the only place
+        // tvOS lets us write, and that is purgeable. Foreground is the one
+        // moment the app is certainly running and certainly able to say what
+        // Home should be showing.
+        screenAwake.onForeground = { [weak self] in
+            self?.applyScreenAwake()
+            self?.refreshTopShelf()
+        }
     }
 
     /// Whether a board is on screen. The whole case for keeping the display
@@ -86,7 +100,7 @@ public final class AppModel {
         }
         if let ref = saved.defaultPanelRef {
             route = .viewer(ref)
-            refreshTopShelfForViewerLaunch()
+            refreshTopShelf()
         } else {
             route = .panels
         }
@@ -102,8 +116,10 @@ public final class AppModel {
             route = .signIn
         case .needsSetup:
             // Only the web app can create the first account, so sending
-            // someone to a sign-in form here would waste their time.
-            errorMessage = "This FiestaBoard has no account yet. Finish setup in the FiestaBoard app, then connect again."
+            // someone to a sign-in form here would waste their time. The
+            // wording lives with `FiestaError.setupRequired`, which is the
+            // same state arriving from the other direction.
+            errorMessage = FiestaError.setupRequired.userMessage
             route = .connect
         }
     }
@@ -124,8 +140,11 @@ public final class AppModel {
               components.count == 1,
               connection.saved != nil, connection.client != nil,
               !connection.isSignedOut else { return }
+        // No republish here. Opening a Top Shelf card brings the app to the
+        // foreground, and the foreground hook above already refreshes — doing
+        // it again on a cold launch into a default panel fired two panel
+        // fetches at a Raspberry Pi a runloop turn apart.
         openPanel(ref: String(components[0]))
-        refreshTopShelfForViewerLaunch()
     }
 
     public func showPanels() {
@@ -138,6 +157,13 @@ public final class AppModel {
         // Opening Settings twice must not lose the original origin.
         if route != .settings { routeBeforeSettings = route }
         route = .settings
+    }
+
+    /// Select the panel being watched when Settings opens. References may
+    /// be either a panel id or its short code; the loaded panel list resolves it.
+    var settingsPanelRef: String? {
+        guard route == .settings, case .viewer(let ref) = routeBeforeSettings else { return nil }
+        return ref
     }
 
     /// Leave Settings for wherever it was opened from.
@@ -159,20 +185,71 @@ public final class AppModel {
     }
 
     func clearTopShelf() {
-        previewTask?.cancel()
+        beginTopShelfUpdate()
+        panelReloadTask?.cancel()
+        panelReloadTask = nil
+        activePanelsModel = nil
+        topShelfImages.images.removeAll()
+        topShelfClient = nil
         TopShelfPreviewPublisher.clear(store: topShelfStore)
     }
 
-    private func refreshTopShelfForViewerLaunch() {
-        guard let topShelfStore else { return }
+    /// Invalidate outstanding list/frame replies before another refresh or
+    /// a sign-out can change what Home is entitled to show.
+    @discardableResult
+    func beginTopShelfUpdate() -> UUID {
         previewTask?.cancel()
+        previewTask = nil
+        topShelfGeneration = UUID()
+        return topShelfGeneration
+    }
+
+    func isCurrentTopShelfUpdate(_ generation: UUID, client: FiestaClient?) -> Bool {
+        !Task.isCancelled && generation == topShelfGeneration && client != nil
+            && connection.client === client && connection.saved != nil && !connection.isSignedOut
+    }
+
+    /// Publish the carousel from a panel list the caller already holds.
+    ///
+    /// `PanelsModel` owns the app's only fetch of the panel list, so this is
+    /// the entry point it calls the moment the list lands. Without it, a TV
+    /// whose owner never sets a default panel would never publish anything
+    /// and Home would have no carousel at all.
+    func publishTopShelf(panels: [Panel], previews: [String: PanelPreviewState] = [:]) {
+        guard let topShelfStore, connection.saved != nil, !connection.isSignedOut else { return }
+        if topShelfClient !== connection.client { topShelfImages.images.removeAll() }
+        topShelfClient = connection.client
+        TopShelfPreviewPublisher.publish(panels: panels, previews: previews,
+                                         connection: connection,
+                                         store: topShelfStore, cache: topShelfImages)
+    }
+
+    /// Fetch the panel list and republish the card row.
+    ///
+    /// For the paths that have no list to hand — a cold launch straight into
+    /// a board, and every return to the foreground. Quiet on failure by
+    /// design: the carousel is never worth a message on screen.
+    func refreshTopShelf() {
+        guard topShelfStore != nil else { return }
+        // The visible panel grid owns its frame requests. Ask it to reload
+        // both metadata and frames, so edits made while backgrounded appear
+        // in the grid and Home through one shared four-at-a-time batch.
+        if route == .panels {
+            guard let activePanelsModel else { return } // Its first load is about to start.
+            panelReloadTask?.cancel()
+            panelReloadTask = Task { [weak activePanelsModel] in await activePanelsModel?.load() }
+            return
+        }
+        let generation = beginTopShelfUpdate()
+        let client = connection.client
         previewTask = Task { [weak self] in
             guard let self,
                   let panels = try? await connection.authorized({ try await $0.panels() }),
-                  !Task.isCancelled else { return }
-            TopShelfPreviewPublisher.publish(panels: panels,
-                                             connection: connection,
-                                             store: topShelfStore)
+                  isCurrentTopShelfUpdate(generation, client: client) else { return }
+            if panels.isEmpty { publishTopShelf(panels: []) }
+            // The same four-at-a-time fetcher serves the grid and this path.
+            // It publishes each completed frame, including truthful failures.
+            await PanelsModel(app: self).refreshPreviews(for: panels)
         }
     }
 }

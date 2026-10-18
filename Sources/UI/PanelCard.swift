@@ -79,7 +79,12 @@ struct PanelCard: View {
     @ViewBuilder
     private var previewContent: some View {
         if panel.boardMissing {
-            placeholder("No board to show")
+            // "No board to show" reads as a display fault the app might
+            // recover from. Server-side `board_missing` means the virtual
+            // board row was DELETED, so say the thing that actually
+            // happened — the card, the viewer and `gridDescription` all say
+            // it the same way.
+            placeholder("Board was removed")
         } else {
             switch preview {
             case .loading:
@@ -134,7 +139,7 @@ struct PanelCard: View {
     var accessibilityLabel: String {
         var parts: [String] = [panel.name]
         if panel.boardMissing {
-            parts.append("No board. This panel cannot be shown.")
+            parts.append("Board removed. This panel can't be shown.")
             return parts.joined(separator: ", ")
         }
         parts.append(panel.gridDescription)
@@ -148,6 +153,9 @@ struct PanelCard: View {
     /// 13pt rendering of them.
     private var boardMessage: String? {
         guard case .ready(let ready) = preview else { return nil }
+        if panel.renderStyle == .ledMatrix {
+            return MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells).spoken(message: ready.message)
+        }
         guard let message = ready.message else { return nil }
         let flattened = message
             .replacingOccurrences(of: "\n", with: " ")

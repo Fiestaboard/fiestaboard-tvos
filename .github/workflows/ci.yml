@@ -10,13 +10,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The job branch protection should require. It runs everything except
+  # `HomeTopShelfUITests`, which walks the real tvOS Home screen and is
+  # order-dependent (docs/HANDOFF.md hazard 3); that one runs in `ui-tests`
+  # below, where a flake costs a re-run and not a blocked merge.
+  #
+  # Only that one test is demoted, deliberately. `ViewerNavigationUITests` is
+  # four deterministic remote-control paths — Menu out of the viewer, Select
+  # into the overlay, right-to-Settings, and the focus wash — and they cover
+  # exactly the code most likely to regress: the viewer's teardown, the
+  # overlay timer, and the focus sections. Skipping the whole bundle to
+  # quarantine one test was silently dropping those four.
   build-and-test:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.app || xcode-select -p
+      # This used to be `sudo xcode-select -s /Applications/Xcode_16.app ||
+      # xcode-select -p`, which asserted nothing twice over: macos-latest is
+      # macos-26 and ships no Xcode 16, and the `||` swallowed the failure, so
+      # the job silently ran on whatever Xcode the image happened to have.
+      # What actually matters is the SDK an App Store archive is built
+      # against, so assert that instead of pinning an app bundle by name.
+      - name: Require a tvOS 26+ SDK
+        run: |
+          xcodebuild -version
+          SDK=$(xcrun --sdk appletvsimulator --show-sdk-version)
+          echo "tvOS simulator SDK: $SDK"
+          if [ "${SDK%%.*}" -lt 26 ]; then
+            echo "App Store submissions must be built with a tvOS 26 or newer SDK; this runner has $SDK." >&2
+            echo "Pick a newer runner image, or xcode-select an Xcode that ships one." >&2
+            exit 1
+          fi
 
       - name: Layering guard
         run: ./scripts/check-layering.sh
@@ -25,7 +50,12 @@ jobs:
         run: ./scripts/check-brand-assets.swift
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          brew install xcodegen
+          # The generator's version decides what lands in the two Info.plists,
+          # which are not committed. When a build disagrees with a local one,
+          # this line is the first thing to compare.
+          xcodegen --version
 
       - name: Generate project
         run: xcodegen generate
@@ -43,7 +73,21 @@ jobs:
             -scheme FiestaBoardTV \
             -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -derivedDataPath build \
+            -resultBundlePath build/unit-tests.xcresult \
+            -skip-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
             test
+
+      # A failing pixel assertion says only "the sample was black". The result
+      # bundle carries the failure's attachments, which is where the rendered
+      # image actually is.
+      - name: Upload result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-tests-xcresult
+          path: build/unit-tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Archive (unsigned)
         run: |
@@ -54,3 +98,73 @@ jobs:
             -derivedDataPath build \
             archive -archivePath build/FiestaBoardTV.xcarchive \
             CODE_SIGNING_ALLOWED=NO
+
+  # Informational. Do NOT add this job to branch protection's required checks.
+  # `HomeTopShelfUITests` walks the Home screen and depends on which icon Home
+  # last focused, so it fails in ways that are about the simulator rather than
+  # about the diff. It is here to be looked at, and its screenshot attachment
+  # is the pre-submission record of what Home actually shows.
+  #
+  # Budgeted for a stall that is not a test failure. After the UI-test bundle
+  # finishes, Xcode collects simulator diagnostics, and on CI that step hangs
+  # its full 600-second limit before giving up:
+  #
+  #   IDETestOperationsObserverDebug: Failure collecting diagnostics from
+  #   simulator: Timed out after 600.0 seconds while waiting for a response
+  #   from the invoked process
+  #
+  # The run still reports Passed with 0 failures — the last one took 662s
+  # wall-clock for about 60s of actual tests. So do not debug this as a test
+  # hang, and do not set a timeout tight enough to kill a passing run. If it
+  # ever has to be suppressed rather than absorbed, the documented lever is
+  # xcodebuild's `-collect-test-diagnostics never`, at the cost of the
+  # diagnostics on a real failure.
+  ui-tests:
+    name: Home Top Shelf screenshot (informational, not required)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require a tvOS 26+ SDK
+        run: |
+          SDK=$(xcrun --sdk appletvsimulator --show-sdk-version)
+          echo "tvOS simulator SDK: $SDK"
+          if [ "${SDK%%.*}" -lt 26 ]; then
+            echo "Need a tvOS 26 or newer SDK; this runner has $SDK." >&2
+            exit 1
+          fi
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Resolve a tvOS simulator
+        id: sim
+        run: |
+          ID=$(xcrun simctl list devices available | ./scripts/select-tvos-simulator.sh)
+          if [ -z "$ID" ]; then echo "No Apple TV simulator on this runner." >&2; exit 1; fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: UI tests
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj \
+            -scheme FiestaBoardTV \
+            -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build \
+            -resultBundlePath build/ui-tests.xcresult \
+            -only-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
+            test
+
+      - name: Upload result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-tests-xcresult
+          path: build/ui-tests.xcresult
+          if-no-files-found: warn
+          retention-days: 7

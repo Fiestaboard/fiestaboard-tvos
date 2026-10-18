@@ -76,12 +76,34 @@ public final class SignageSettings: @unchecked Sendable {
     private enum Key {
         static let autoDimOverride = "fiestaboard.signage.autoDimOverride"
         static let drift = "fiestaboard.signage.driftEnabled"
+        static let matrixPresentation = "fiestaboard.matrix.presentation"
+        static let matrixTransitionStyle = "fiestaboard.matrix.transitionStyle"
     }
 
     private let defaults: UserDefaults
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+    }
+
+    public var matrixPresentation: MatrixPresentation {
+        get {
+            guard let data = defaults.data(forKey: Key.matrixPresentation),
+                  let value = try? JSONDecoder().decode(MatrixPresentation.self, from: data) else { return .init() }
+            return value
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) { defaults.set(data, forKey: Key.matrixPresentation) }
+        }
+    }
+
+    /// Hardware-style LED transitions are a preference of this TV.
+    public var matrixTransitionStyle: MatrixTransitionStyle {
+        get {
+            defaults.string(forKey: Key.matrixTransitionStyle)
+                .flatMap(MatrixTransitionStyle.init(rawValue:)) ?? .characterWipe
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.matrixTransitionStyle) }
     }
 
     /// What this TV does with the panel's nightly dim window.

@@ -11,11 +11,20 @@ final class SettingsModel {
 
     var panels: [Panel] = []
     var isLoading = false
+    /// Whether `panels` describes a list the board actually sent.
+    ///
+    /// Not the same question as `panels.isEmpty`: a board with genuinely no
+    /// panels and a board that could not be reached both leave the array
+    /// empty, and `autoDimSummary` has to say very different things about
+    /// them.
+    var hasLoaded = false
     var errorMessage: String?
     var warningMessage: String?
     var resizeDiagonal: Double = 65
     var customDiagonalText = ""
     var sizing: BoardSizing = .fit
+    var matrixPresentation: MatrixPresentation
+    var matrixTransitionStyle: MatrixTransitionStyle
     var defaultPanelRef: String?
     /// This TV's say in the panel's nightly dim window.
     var autoDimOverride: AutoDimOverride = .followPanel
@@ -24,6 +33,12 @@ final class SettingsModel {
     private var calibrations: [String: Double] = [:]
     /// Switches the user has flipped but the board has not confirmed yet.
     private var pendingAnimation: [String: Bool] = [:]
+    private var pendingStyle: [String: PanelRenderStyle] = [:]
+    private var pendingPanelWrites: Set<String> = []
+    private var previewPanelID: String?
+    private var preview: PanelPreviewState = .loading
+    @ObservationIgnored private var previewGeneration = UUID()
+    @ObservationIgnored private var loadGeneration = UUID()
 
     private let app: AppModel
     private let signage: SignageSettings
@@ -35,6 +50,8 @@ final class SettingsModel {
         self.app = app
         self.signage = signage
         self.clock = clock
+        matrixPresentation = signage.matrixPresentation
+        matrixTransitionStyle = signage.matrixTransitionStyle
         defaultPanelRef = app.connection.saved?.defaultPanelRef
         autoDimOverride = signage.autoDimOverride
         driftEnabled = signage.driftEnabled
@@ -47,6 +64,37 @@ final class SettingsModel {
     var boardName: String { app.connection.saved?.displayName ?? "Not connected" }
 
     var boardAddress: String { app.connection.saved?.host.absoluteString ?? "" }
+
+    func previewState(for panel: Panel) -> PanelPreviewState {
+        guard !current(panel).boardMissing else { return .unavailable }
+        return previewPanelID == panel.id ? preview : .loading
+    }
+
+    /// Fetch only the selected panel. The caller's SwiftUI task owns cancellation;
+    /// a generation also rejects late replies from overlapping retries.
+    func loadPreview(for panel: Panel) async {
+        guard !Task.isCancelled else { return }
+        let panel = current(panel)
+        let generation = UUID()
+        previewGeneration = generation
+        previewPanelID = panel.id
+        preview = panel.boardMissing ? .unavailable : .loading
+        guard !panel.boardMissing else { return }
+        do {
+            let frame = try await app.connection.authorized { try await $0.frame(ref: panel.id) }
+            guard previewGeneration == generation else { return }
+            guard !Task.isCancelled else { preview = .unavailable; return }
+            preview = .ready(PanelPreview.make(from: frame, code62: panel.effectiveCode62))
+        } catch {
+            guard previewGeneration == generation else { return }
+            preview = .unavailable
+            guard !Task.isCancelled else { return }
+            if let error = error as? FiestaError, error == .unauthorized {
+                app.route = .signIn
+            }
+            // A missing preview must not replace an unrelated settings-save error.
+        }
+    }
 
     private var customDiagonalIsValid: Bool {
         customDiagonalText.isEmpty || (Double(customDiagonalText).map { $0 > 0 } ?? false)
@@ -64,18 +112,38 @@ final class SettingsModel {
     }
 
     func load() async {
+        guard !Task.isCancelled else { return }
+        let generation = UUID()
+        loadGeneration = generation
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer { if loadGeneration == generation { isLoading = false } }
         do {
-            panels = try await app.connection.authorized { try await $0.panels() }
-        } catch FiestaError.unauthorized {
-            app.route = .signIn
-        } catch let error as FiestaError {
-            errorMessage = error.userMessage
+            let loaded = try await app.connection.authorized { try await $0.panels() }
+            guard loadGeneration == generation, !Task.isCancelled else { return }
+            panels = loaded
+            hasLoaded = true
         } catch {
-            errorMessage = FiestaError.transport("\(error)").userMessage
+            guard loadGeneration == generation, !Task.isCancelled else { return }
+            if let error = error as? FiestaError {
+                if error == .unauthorized { app.route = .signIn }
+                else { report(error: error.userMessage) }
+            } else {
+                report(error: FiestaError.transport("\(error)").userMessage)
+            }
         }
+    }
+
+    /// Record an error or a warning and say it out loud — see
+    /// `Announce.say(_:recordingIn:)`. The two messages are separate because
+    /// they sit in separate places at the top of the list: a resize can warn
+    /// about pages authored for the old grid and still have succeeded.
+    private func report(error message: String) {
+        Announce.say(message, recordingIn: &errorMessage)
+    }
+
+    private func report(warning message: String) {
+        Announce.say(message, recordingIn: &warningMessage)
     }
 
     func setDefaultPanel(_ ref: String?) {
@@ -86,6 +154,65 @@ final class SettingsModel {
     func setSizing(_ sizing: BoardSizing) {
         self.sizing = sizing
         UserDefaults.standard.set(sizing.rawValue, forKey: "fiestaboard.sizing")
+    }
+
+    func setMatrixSizing(_ sizing: MatrixSizing) {
+        saveMatrixPresentation(.init(sizing: sizing, diagonalInches: matrixPresentation.diagonalInches,
+                                     pitchMillimeters: matrixPresentation.pitchMillimeters))
+    }
+
+    func setMatrixTransitionStyle(_ style: MatrixTransitionStyle) {
+        matrixTransitionStyle = style
+        signage.matrixTransitionStyle = style
+    }
+
+    func setMatrixDiagonal(_ inches: Double) {
+        saveMatrixPresentation(.init(sizing: matrixPresentation.sizing, diagonalInches: inches,
+                                     pitchMillimeters: matrixPresentation.pitchMillimeters))
+    }
+
+    func setMatrixPitch(_ millimeters: Double) {
+        saveMatrixPresentation(.init(sizing: matrixPresentation.sizing, diagonalInches: matrixPresentation.diagonalInches,
+                                     pitchMillimeters: millimeters))
+    }
+
+    private func saveMatrixPresentation(_ value: MatrixPresentation) {
+        matrixPresentation = value
+        signage.matrixPresentation = value
+    }
+
+    private func current(_ panel: Panel) -> Panel {
+        panels.first { $0.id == panel.id } ?? panel
+    }
+
+    var stylePanels: [Panel] { panels.filter(\.supportsRenderStyle) }
+    var flapPanels: [Panel] { panels.filter { $0.renderStyle == .splitFlap } }
+
+    func renderStyle(for panel: Panel) -> PanelRenderStyle {
+        pendingStyle[panel.id] ?? current(panel).renderStyle
+    }
+
+    func isSavingRenderStyle(for panel: Panel) -> Bool { pendingStyle[panel.id] != nil }
+    func isSavingPanel(_ panel: Panel) -> Bool { pendingPanelWrites.contains(panel.id) }
+
+    func setRenderStyle(_ style: PanelRenderStyle, for panel: Panel) async {
+        guard current(panel).supportsRenderStyle, pendingPanelWrites.insert(panel.id).inserted else { return }
+        defer { pendingPanelWrites.remove(panel.id) }
+        errorMessage = nil
+        pendingStyle[panel.id] = style
+        defer { pendingStyle[panel.id] = nil }
+        do {
+            let result = try await app.connection.authorized {
+                try await $0.updatePanel(id: panel.id, renderStyle: style)
+            }
+            if let index = panels.firstIndex(where: { $0.id == panel.id }) { panels[index] = result.panel }
+        } catch FiestaError.unauthorized {
+            app.route = .signIn
+        } catch let error as FiestaError {
+            report(error: "Couldn't save the display style. " + error.userMessage)
+        } catch {
+            report(error: "Couldn't save the display style.")
+        }
     }
 
     /// Whether this panel's flaps animate.
@@ -104,6 +231,8 @@ final class SettingsModel {
     }
 
     func setAnimationEnabled(_ enabled: Bool, for panel: Panel) async {
+        guard current(panel).renderStyle == .splitFlap, pendingPanelWrites.insert(panel.id).inserted else { return }
+        defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
         pendingAnimation[panel.id] = enabled
         // However this ends, the switch goes back to describing the board.
@@ -118,9 +247,9 @@ final class SettingsModel {
         } catch FiestaError.unauthorized {
             app.route = .signIn
         } catch let error as FiestaError {
-            errorMessage = "Couldn't save the animation setting. " + error.userMessage
+            report(error: "Couldn't save the animation setting. " + error.userMessage)
         } catch {
-            errorMessage = "Couldn't save the animation setting."
+            report(error: "Couldn't save the animation setting.")
         }
     }
 
@@ -144,6 +273,15 @@ final class SettingsModel {
     /// FiestaBoard is *not* the culprit, because two of the three things
     /// that dim a wall-mounted TV are not this app.
     var autoDimSummary: String {
+        // "No panel on this board is set to dim" is a claim about a list we
+        // have. This used to be reached by every failure path in `load()`
+        // too, because an unreachable board leaves `panels` empty exactly
+        // like a board with nothing scheduled — so the screen that exists to
+        // explain a dimmed board answered a question it had not asked the
+        // board. `hasLoaded`, not `panels.isEmpty`, is what tells them apart.
+        guard hasLoaded else {
+            return isLoading ? Self.dimScheduleLoading : Self.dimScheduleUnknown
+        }
         let scheduled = panels.filter { $0.autoDim.enabled }
         guard !scheduled.isEmpty else {
             return "No panel on this board is set to dim. If the picture still fades, it is the Apple TV's screen saver or the TV's own panel protection, not FiestaBoard."
@@ -158,9 +296,20 @@ final class SettingsModel {
         } else if let dimming = scheduled.first(where: { isDimmingNow($0) }) {
             lines.append("\(dimming.name) is dimmed right now.")
         }
-        lines.append("The schedule itself belongs to the panel and is changed in the FiestaBoard app.")
+        // Not "in the FiestaBoard app": the icon this is being read from is
+        // labelled FiestaBoard. The schedule is edited on the board's own
+        // web page, which is the thing that actually does the job.
+        lines.append("The schedule itself belongs to the panel and is changed on your board's web page.")
         return lines.joined(separator: " ")
     }
+
+    static let dimScheduleLoading = "Checking this board's dim schedule…"
+
+    static let dimScheduleUnknown = """
+        Couldn't reach this board, so whether any panel dims on a schedule is \
+        unknown. If the picture has faded it could be that schedule, the Apple \
+        TV's screen saver, or the TV's own panel protection.
+        """
 
     private func isDimmingNow(_ panel: Panel) -> Bool {
         AutoDimWindow.isDimmed(panel.autoDim, at: clock())
@@ -201,27 +350,37 @@ final class SettingsModel {
         calibrations[panel.id] = min(1.15, max(0.85, value))
     }
 
-    func saveCalibration(panel: Panel) async {
+    @discardableResult
+    func saveCalibration(panel: Panel) async -> Bool {
+        guard current(panel).renderStyle == .splitFlap, pendingPanelWrites.insert(panel.id).inserted else { return false }
+        defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
         do {
             let scale = calibration(for: panel)
-            _ = try await app.connection.authorized {
+            let result = try await app.connection.authorized {
                 try await $0.updatePanel(id: panel.id, calibration: scale)
             }
+            if let index = panels.firstIndex(where: { $0.id == panel.id }) {
+                panels[index] = result.panel
+            }
+            return true
         } catch FiestaError.unauthorized {
             app.route = .signIn
         } catch let error as FiestaError {
-            errorMessage = "Couldn't save the calibration. " + error.userMessage
+            report(error: "Couldn't save the calibration. " + error.userMessage)
         } catch {
-            errorMessage = "Couldn't save the calibration."
+            report(error: "Couldn't save the calibration.")
         }
+        return false
     }
 
     func resize(panel: Panel) async {
+        guard current(panel).renderStyle == .splitFlap, pendingPanelWrites.insert(panel.id).inserted else { return }
+        defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
         warningMessage = nil
         guard customDiagonalIsValid else {
-            errorMessage = "Enter a positive screen size in inches."
+            report(error: "Enter a positive screen size in inches.")
             return
         }
         do {
@@ -232,13 +391,23 @@ final class SettingsModel {
             if !result.incompatibleReferences.isEmpty {
                 let count = result.incompatibleReferences.count
                 let noun = count == 1 ? "page was" : "pages were"
-                warningMessage = "The grid changed. \(count) \(noun) authored for the old size and won't fill this one — edit them in the FiestaBoard app."
+                report(warning: "The grid changed. \(count) \(noun) authored for the old size and won't fill this one — edit them on your board's web page.")
             }
-            await load()
+            // The PATCH already returns the resized panel. A list reload can
+            // arrive after another panel's style save and overwrite it with
+            // an older value, despite each panel's own write guard.
+            if let index = panels.firstIndex(where: { $0.id == panel.id }) {
+                panels[index] = result.panel
+            }
         } catch FiestaError.unauthorized {
             app.route = .signIn
+        } catch let error as FiestaError {
+            // The bare catch here threw the typed error away and blamed the
+            // resize, so a board that answered 429 or replied in a shape this
+            // app can't read looked identical to one that refused the grid.
+            report(error: "Couldn't resize this panel. " + error.userMessage)
         } catch {
-            errorMessage = "Couldn't resize this panel."
+            report(error: "Couldn't resize this panel.")
         }
     }
 

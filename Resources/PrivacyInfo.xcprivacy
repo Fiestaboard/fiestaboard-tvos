@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    The app collects nothing and tracks nobody, but it does call one
+    required-reason API: UserDefaults, in ConnectionStore, SignageSettings,
+    ViewerModel and SettingsModel. Apple's rule covers first-party code, not
+    just third-party SDKs, so without this file the upload comes back as
+    ITMS-91053.
+
+    The reason is CA92.1 — defaults readable only by this app. It is NOT
+    1C8F.1: the App Group entitlement exists for the Top Shelf snapshot
+    *container*, and no UserDefaults suite is ever opened against the group
+    (the `suiteName:` hits in the repo are all per-test scratch suites). If a
+    store ever moves to the group suite, this reason has to move with it.
+
+    Only the app target carries a manifest. The extension compiles
+    ContentProvider.swift and TopShelfSnapshotStore.swift, which touch
+    FileManager and CryptoKit and no required-reason API.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -10,6 +10,7 @@ final class StubURLProtocol: URLProtocol {
         let status: Int
         let body: Data
         let headers: [String: String]
+        var beforeReply: ((@escaping () -> Void) -> Void)? = nil
 
         init(status: Int = 200, body: Data = Data(), headers: [String: String] = [:]) {
             self.status = status
@@ -93,11 +94,14 @@ final class StubURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
         }
-        let response = HTTPURLResponse(url: url, statusCode: stub.status,
-                                       httpVersion: "HTTP/1.1", headerFields: stub.headers)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: stub.body)
-        client?.urlProtocolDidFinishLoading(self)
+        let reply = {
+            let response = HTTPURLResponse(url: url, statusCode: stub.status,
+                                           httpVersion: "HTTP/1.1", headerFields: stub.headers)!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: stub.body)
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+        if let beforeReply = stub.beforeReply { beforeReply(reply) } else { reply() }
     }
 
     override func stopLoading() {}

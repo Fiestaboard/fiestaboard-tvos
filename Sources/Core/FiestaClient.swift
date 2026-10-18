@@ -25,6 +25,10 @@ public final class FiestaClient: @unchecked Sendable {
             config.httpCookieStorage = HTTPCookieStorage.shared
             config.httpShouldSetCookies = true
             config.requestCachePolicy = .reloadIgnoringLocalCacheData
+            // 10s, not URLSession's default 60. The board is a Raspberry Pi
+            // one hop away, so anything slower than this is a board that is
+            // off — and a TV showing a frozen spinner for a full minute
+            // reads as a hung app to someone holding a remote.
             config.timeoutIntervalForRequest = 10
             self.session = URLSession(configuration: config)
         }
@@ -65,7 +69,8 @@ public final class FiestaClient: @unchecked Sendable {
                             aspectW: Double? = nil,
                             aspectH: Double? = nil,
                             calibration: Double? = nil,
-                            animationsEnabled: Bool? = nil) async throws -> PanelUpdateResult {
+                            animationsEnabled: Bool? = nil,
+                            renderStyle: PanelRenderStyle? = nil) async throws -> PanelUpdateResult {
         var body: [String: Any] = [:]
         // Only send what was asked for: PanelUpdate treats every field as
         // optional, and sending nulls would clear settings we never touched.
@@ -74,6 +79,7 @@ public final class FiestaClient: @unchecked Sendable {
         if let aspectH { body["screen_aspect_h"] = aspectH }
         if let calibration { body["calibration_scale"] = calibration }
         if let animationsEnabled { body["animations_enabled"] = animationsEnabled }
+        if let renderStyle { body["render_style"] = renderStyle.rawValue }
 
         let data = try await send(method: "PATCH", path: "/panels/\(id)", body: body)
         struct Envelope: Decodable {
@@ -82,6 +88,16 @@ public final class FiestaClient: @unchecked Sendable {
             enum CodingKeys: String, CodingKey {
                 case panel
                 case incompatibleReferences = "incompatible_references"
+            }
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                // Current servers return PanelUpdateResponse at the top level.
+                // Also accept the wrapped shape used by earlier client fixtures.
+                panel = try container.contains(.panel)
+                    ? container.decode(Panel.self, forKey: .panel)
+                    : Panel(from: decoder)
+                incompatibleReferences = try container.decodeIfPresent(
+                    [IncompatibleReference].self, forKey: .incompatibleReferences)
             }
         }
         do {
@@ -142,6 +158,14 @@ public final class FiestaClient: @unchecked Sendable {
         case 409:
             // The middleware answers 409 for "no user provisioned yet".
             throw FiestaError.setupRequired
+        case 503:
+            // nginx answers 503 while FastAPI is still coming up — the normal
+            // state for the first half-minute after a power cut. Falling
+            // through to the generic 5xx told people to go and read the logs
+            // of a board that was doing nothing wrong. Its detail is a fixed
+            // string nginx writes itself, so it is not carried: see
+            // `FiestaError.unavailable`.
+            throw FiestaError.unavailable
         default:
             throw FiestaError.http(http.statusCode)
         }

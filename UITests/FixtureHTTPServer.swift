@@ -8,6 +8,10 @@ final class FixtureHTTPServer {
     private let onFrame: () -> Void
     private let onPanels: () -> Void
     private let frameBody: String
+    private let frameProvider: (() -> String)?
+    private let panelsBody: String
+    private let additionalPanels: [String: String]
+    private let additionalFrames: [String: String]
     private let lock = NSLock()
     private var sawFrame = false
     private var sawPanels = false
@@ -15,11 +19,19 @@ final class FixtureHTTPServer {
     var port: UInt16 { listener.port!.rawValue }
 
     init(frameBody: String = Fixtures.emptyFrameJSON,
+         frameProvider: (() -> String)? = nil,
+         panelsBody: String = Fixtures.panelsList,
+         additionalPanels: [String: String] = [:],
+         additionalFrames: [String: String] = [:],
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
         self.onPanels = onPanels
         self.frameBody = frameBody
+        self.frameProvider = frameProvider
+        self.panelsBody = panelsBody
+        self.additionalPanels = additionalPanels
+        self.additionalFrames = additionalFrames
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -52,20 +64,28 @@ final class FixtureHTTPServer {
             switch path {
             case "/api/panel/1", "/api/panel/abc123def456": body = Fixtures.panelJSON
             case "/api/panel/1/frame", "/api/panel/abc123def456/frame":
-                body = frameBody
+                body = frameProvider?() ?? frameBody
                 self.lock.lock()
                 let firstFrame = !self.sawFrame
                 self.sawFrame = true
                 self.lock.unlock()
                 if firstFrame { self.onFrame() }
             case "/api/panels":
-                body = Fixtures.panelsList
+                body = panelsBody
                 self.lock.lock()
                 let firstPanels = !self.sawPanels
                 self.sawPanels = true
                 self.lock.unlock()
                 if firstPanels { self.onPanels() }
-            default: body = #"{"detail":"Not found"}"#
+            default:
+                let parts = path.split(separator: "/")
+                if parts.count >= 3, parts[0] == "api", parts[1] == "panel",
+                   let panelBody = additionalPanels[String(parts[2])] {
+                    body = parts.count == 4 && parts[3] == "frame"
+                        ? (additionalFrames[String(parts[2])] ?? frameProvider?() ?? frameBody) : panelBody
+                } else {
+                    body = #"{"detail":"Not found"}"#
+                }
             }
             let payload = Data(body.utf8)
             let header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"

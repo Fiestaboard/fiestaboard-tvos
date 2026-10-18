@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-public struct StoredCredential: Equatable, Sendable {
+public struct StoredCredential: Codable, Equatable, Sendable {
     public let username: String
     public let password: String
 
@@ -19,6 +19,12 @@ public protocol CredentialStore: AnyObject {
     func save(_ credential: StoredCredential, for account: String) throws
     func load(for account: String) -> StoredCredential?
     func delete(for account: String) throws
+    /// Every credential this app owns, regardless of account.
+    ///
+    /// Needed because one board is routinely remembered under two spellings
+    /// — `http://kitchen.local:4420` from Bonjour and `http://192.168.1.50:4420`
+    /// typed by hand — so deleting by host alone leaves a password behind.
+    func deleteAll() throws
 }
 
 public enum KeychainError: Error, Equatable {
@@ -45,10 +51,20 @@ public final class KeychainCredentialStore: CredentialStore {
     }
 
     public func save(_ credential: StoredCredential, for account: String) throws {
-        // The stored blob is "username\npassword" so one item carries both.
-        let blob = Data("\(credential.username)\n\(credential.password)".utf8)
+        // JSON, not "username\npassword". The old blob split on the first
+        // newline, so a username containing one round-tripped as a different
+        // pair with no error at all — which presents as "the board keeps
+        // logging me out", because every silent re-login then fails and trips
+        // the rejected-credential cooldown.
+        let blob = try JSONEncoder().encode(credential)
 
-        let update: [String: Any] = [kSecValueData as String: blob]
+        // Restate accessibility on update too. SecItemUpdate preserves
+        // attributes it isn't given, so today this is redundant — but it makes
+        // the guarantee a property of both write paths rather than of one.
+        let update: [String: Any] = [
+            kSecValueData as String: blob,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
         let status = SecItemUpdate(query(for: account) as CFDictionary, update as CFDictionary)
         if status == errSecSuccess { return }
 
@@ -68,17 +84,36 @@ public final class KeychainCredentialStore: CredentialStore {
 
         var item: CFTypeRef?
         guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let blob = String(data: data, encoding: .utf8) else { return nil }
+              let data = item as? Data else { return nil }
 
-        // Split on the FIRST newline only: a password may contain more.
-        guard let separator = blob.firstIndex(of: "\n") else { return nil }
+        if let credential = try? JSONDecoder().decode(StoredCredential.self, from: data) {
+            return credential
+        }
+
+        // Fallback for the pre-JSON blob, "username\npassword" split on the
+        // FIRST newline. It is here only so a credential written by a build
+        // that is already on someone's Apple TV keeps working: failing to
+        // decode would silently sign them out and ask for a password again.
+        // Delete this branch once no pre-JSON build is in the field.
+        guard let blob = String(data: data, encoding: .utf8),
+              let separator = blob.firstIndex(of: "\n") else { return nil }
         return StoredCredential(username: String(blob[blob.startIndex..<separator]),
                                 password: String(blob[blob.index(after: separator)...]))
     }
 
     public func delete(for account: String) throws {
         let status = SecItemDelete(query(for: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+    }
+
+    public func deleteAll() throws {
+        // No account in the query, so this matches every item this app wrote
+        // under its own service — and nothing any other app owns.
+        let all: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                  kSecAttrService as String: service]
+        let status = SecItemDelete(all as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
         }
@@ -98,4 +133,6 @@ public final class InMemoryCredentialStore: CredentialStore {
     public func load(for account: String) -> StoredCredential? { items[account] }
 
     public func delete(for account: String) throws { items[account] = nil }
+
+    public func deleteAll() throws { items.removeAll() }
 }

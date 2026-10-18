@@ -28,7 +28,10 @@ struct PanelPreviewBoard: View {
 
     @ViewBuilder
     private func board(in size: CGSize) -> some View {
-        if let layout = Self.layout(panel: panel, preview: preview, in: size) {
+        if panel.renderStyle == .ledMatrix {
+            MatrixCanvas(raster: MatrixRaster.make(panel: panel, cells: preview.cells, richCells: preview.richCells),
+                         display: panel.matrixDisplay)
+        } else if let layout = Self.layout(panel: panel, preview: preview, in: size) {
             BoardCanvas(layout: layout,
                         background: panel.backgroundColor,
                         animated: false,

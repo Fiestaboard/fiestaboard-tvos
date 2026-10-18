@@ -57,7 +57,13 @@ public struct BoardLayout: Sendable {
     }
 
     public static func make(rows: Int, cols: Int, cells: [[BoardCell]], tileHeight: Double) -> BoardLayout {
-        guard rows > 0, cols > 0, tileHeight > 0 else {
+        // The dimension ceiling is a second belt behind `PanelFrame`'s decode
+        // clamp: `rows * cols` below is an unchecked Int multiply feeding
+        // `reserveCapacity`, and a grid assembled in code rather than decoded
+        // would otherwise still reach it. An empty layout is what every
+        // caller already handles for a grid it cannot draw.
+        guard rows > 0, cols > 0, tileHeight > 0,
+              rows <= PanelFrame.maxDimension, cols <= PanelFrame.maxDimension else {
             return BoardLayout(tiles: [], width: 0, height: 0, tileHeight: max(tileHeight, 0))
         }
 

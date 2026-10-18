@@ -1,0 +1,39 @@
+{
+  "configurations": [
+    {
+      "id": "DA1F1969-82CC-47D7-9B72-F84845D0714A",
+      "name": "Native animation review",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "environmentVariableEntries": [
+      {
+        "key": "FIESTA_RECORD_REVIEW",
+        "value": "1"
+      }
+    ],
+    "preferredScreenCaptureFormat": "video",
+    "targetForVariableExpansion": {
+      "containerPath": "container:FiestaBoardTV.xcodeproj",
+      "identifier": "5E7735FEF1E4C8CD0846D9A8",
+      "name": "FiestaBoardTV"
+    },
+    "uiTestingScreenshotsLifetime": "keepAlways"
+  },
+  "testTargets": [
+    {
+      "parallelizable": false,
+      "selectedTests": [
+        "AnimationReviewUITests",
+        "HomeTopShelfUITests"
+      ],
+      "target": {
+        "containerPath": "container:FiestaBoardTV.xcodeproj",
+        "identifier": "655FAE035C67BF67D974AFE5",
+        "name": "FiestaBoardTVUITests"
+      }
+    }
+  ],
+  "version": 1
+}

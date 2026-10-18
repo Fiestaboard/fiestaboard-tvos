@@ -24,13 +24,33 @@ public struct TopShelfSnapshotStore {
         public let imageFile: String
     }
 
-    private let directory: URL
+    public let directory: URL
     private var manifestURL: URL { directory.appendingPathComponent("manifest.json") }
 
+    /// The group container's ROOT is not writable on tvOS. Only
+    /// `Library/Caches` inside it is, and these three components are the
+    /// difference between a working carousel and no carousel at all.
+    ///
+    /// Without them `replace()`'s `createDirectory` threw on every real Apple
+    /// TV, the manifest was never written, `items()` came back empty, and the
+    /// extension handed Home nothing — which Home answers with the static
+    /// poster from the asset catalogue, a picture pixel-identical to the one
+    /// a working carousel item would show. So the feature looked plausible
+    /// and had never once run. The simulator does not enforce the
+    /// restriction, which is why the tests stayed green throughout.
+    ///
+    /// Do not "tidy" this path back to the container root. The cost of
+    /// `Library/Caches` is that tvOS may purge it whenever it likes, which is
+    /// why the app republishes on every foreground rather than trusting what
+    /// it wrote last week to still be there.
     public static func shared() -> TopShelfSnapshotStore? {
-        guard let directory = FileManager.default.containerURL(
+        guard let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: groupIdentifier) else { return nil }
-        return TopShelfSnapshotStore(directory: directory.appendingPathComponent("TopShelf"))
+        let directory = container
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Caches", isDirectory: true)
+            .appendingPathComponent("TopShelf", isDirectory: true)
+        return TopShelfSnapshotStore(directory: directory)
     }
 
     public init(directory: URL) { self.directory = directory }

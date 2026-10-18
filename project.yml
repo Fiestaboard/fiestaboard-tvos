@@ -22,11 +22,48 @@ targets:
       - path: Spec
         type: folder
       - path: Resources
+        excludes:
+          - Matrix/LICENSE
+      - path: Resources/Matrix/LICENSE
+        buildPhase: resources
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: FiestaBoard for Apple TV
-        NSLocalNetworkUsageDescription: FiestaBoard finds your board on this network so your TV can show its panels.
+        # "FiestaBoard for Apple TV" is the App Store *listing* name. The
+        # bundle name is what sits under the Home-screen icon, where 24
+        # characters truncate, and Apple's guidelines keep their word mark out
+        # of a product name.
+        CFBundleDisplayName: FiestaBoard
+        # Both targets set GENERATE_INFOPLIST_FILE: NO, and XcodeGen fills the
+        # version keys with hard-coded 1.0/1 unless they are named here — so
+        # bumping MARKETING_VERSION above would ship nothing and the second
+        # upload would come back ITMS-90062. Xcode expands $(...) during
+        # plist processing regardless of GENERATE_INFOPLIST_FILE.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # The only cryptography is Apple's own: CryptoKit SHA-256 for cache
+        # filenames and the Keychain. Both are exempt; without this key every
+        # build sits in App Store Connect flagged "Missing Compliance".
+        ITSAppUsesNonExemptEncryption: false
+        # Both of these keys are inert on tvOS as it stands. tvOS is the one
+        # platform that does not implement local network privacy: nothing ever
+        # presents this string, and there is no Settings › Privacy › Local
+        # Network toggle behind it. Apple's TN3179 platform table lists tvOS
+        # "no" (revised 2026-02-17, so it covers this SDK), and the Apple TV
+        # Privacy & Security screen has no such row. They stay anyway — Apple's
+        # own reference pages mark both keys tvOS 14.0+, and the day tvOS
+        # adopts what iOS 14 and macOS 15 already have, an app with no purpose
+        # string and no declared browse type is a Connect screen that finds
+        # nothing. Do not read them as load-bearing today; see the
+        # local-network entry in docs/HANDOFF.md.
+        #
+        # Kept to one sentence for that day, because it would appear in a
+        # system alert, not a document. It used to say only that the app
+        # "finds your board", which reads as discovery-only next to a sign-in
+        # that POSTs a password to that board. This string is one of four
+        # coupled privacy artifacts — see the privacy section of
+        # docs/PUBLISHING.md before editing it.
+        NSLocalNetworkUsageDescription: FiestaBoard talks only to the board you choose — to sign in and show its panels. Nothing is sent to anyone else.
         NSBonjourServices: ["_http._tcp"]
         UIAppFonts: [SplineSansMono.ttf]
         CFBundleURLTypes:
@@ -52,11 +89,17 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: TopShelf/ContentProvider.swift
+      - path: Sources/UI/TopShelfContent.swift
       - path: Sources/Core/TopShelfSnapshotStore.swift
     info:
       path: TopShelf/Info.plist
       properties:
         CFBundleDisplayName: FiestaBoard Previews
+        # An extension whose version disagrees with its host app is an upload
+        # rejection, and XcodeGen's default here is a hard-coded 1.0/1 that no
+        # version bump ever reaches.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.tv-top-shelf
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ContentProvider"
@@ -95,6 +138,15 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
+  AnimationReview:
+    build:
+      targets:
+        FiestaBoardTV: all
+        FiestaBoardTVUITests: [test]
+    test:
+      testPlans:
+        - path: AnimationReview.xctestplan
+          defaultPlan: true
   FiestaBoardTV:
     build:
       targets:

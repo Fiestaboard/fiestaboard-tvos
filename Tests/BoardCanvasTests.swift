@@ -115,7 +115,7 @@ final class BoardCanvasTests: XCTestCase {
         XCTAssertGreaterThan(Int(bottom.r), 160, "the cast shadow should not erase the old red")
     }
 
-    func testUnlitFlapHasAVisibleHingeWithoutLightingItsFace() throws {
+    func testDarkFlapHasAVisibleHingeAboveItsReflectiveFace() throws {
         let board = layout(cells: [[.blank]], tileHeight: 200)
         let image = RenderHarness.image(BoardCanvas(layout: board, background: .black),
                                         size: CGSize(width: board.width, height: board.height))
@@ -126,8 +126,8 @@ final class BoardCanvasTests: XCTestCase {
         let highlightY = Int(100 + metrics.thickness * 1.5)
         XCTAssertEqual(highlightY, 103)
         let seam = try XCTUnwrap(image.pixel(x: Int(board.width / 2), y: highlightY))
-        XCTAssertLessThanOrEqual(Int(face.r), 2)
-        XCTAssertGreaterThan(Int(seam.r), 12, "the split should read on an OLED black tile")
+        XCTAssertEqual(Int(face.r), 26, accuracy: 1)
+        XCTAssertGreaterThan(Int(seam.r), Int(face.r) + 12, "the hinge catches light above the dark face")
     }
 
     /// The split is a physical gap and scales with the flap. Below a pixel
@@ -141,18 +141,26 @@ final class BoardCanvasTests: XCTestCase {
         XCTAssertEqual(BoardCanvas.seam(forTileHeight: 19), .init(thickness: 1, ink: 0.3))
         XCTAssertEqual(BoardCanvas.seam(forTileHeight: 4), .init(thickness: 1, ink: 0.3), "a trace survives any size")
 
-        func brightestSeamPixel(tileHeight: Double) throws -> Int {
+        func seamContrast(tileHeight: Double) throws -> Int {
             let board = layout(cells: [[.blank]], tileHeight: tileHeight)
             let image = smallBoardImage(BoardCanvas(layout: board, background: .black),
                                         size: CGSize(width: board.width, height: board.height))
             let x = Int(board.width / 2)
-            return try (0..<Int(board.height)).map { y in Int(try XCTUnwrap(image.pixel(x: x, y: y)).r) }.max() ?? 0
+            let face = try XCTUnwrap(image.pixel(x: x, y: Int(tileHeight / 4)))
+            XCTAssertEqual(Int(face.r), 26, accuracy: 1, "measure the hinge against a painted reflective face")
+            XCTAssertGreaterThanOrEqual(Int(face.a), 250)
+            return try (Int(tileHeight / 2)..<Int(tileHeight / 2) + 5).map { y in
+                Int(try XCTUnwrap(image.pixel(x: x, y: y)).r) - Int(face.r)
+            }.max() ?? 0
         }
-        let preview = try brightestSeamPixel(tileHeight: 19)
+        let preview = try seamContrast(tileHeight: 19)
         XCTAssertGreaterThan(preview, 4, "the split still reads on a preview tile")
         XCTAssertLessThan(preview, 18, "but no longer as a stripe")
-        let viewerSize = try brightestSeamPixel(tileHeight: 75)
-        XCTAssertGreaterThan(viewerSize, 24, "unchanged at viewer size: a 0.13 white hairline")
+        let viewerSize = try seamContrast(tileHeight: 75)
+        // The old >24 bound measured absolute light on a pure-black face.
+        // A reflective face changes composited contrast; preserve the visual
+        // requirement that the full-size hinge is stronger than its preview.
+        XCTAssertGreaterThan(viewerSize, preview * 2, "the viewer's hinge should read more strongly than the preview's")
         XCTAssertLessThan(viewerSize, 40)
     }
 
@@ -271,14 +279,19 @@ final class BoardCanvasTests: XCTestCase {
         XCTAssertGreaterThan(Int(tile.r), 0xc0, "a white flap must be lit")
     }
 
-    func testBlackFlapsAndGutterAreTrueBlackForOLED() throws {
+    func testDarkFlapsReflectLightWhileTheGutterStaysOLEDTrueBlack() throws {
         let board = layout(cells: [[.blank, .color(.black)]], tileHeight: 200)
         let image = RenderHarness.image(BoardCanvas(layout: board, background: .black),
                                         size: CGSize(width: board.width, height: board.height))
         let first = try XCTUnwrap(image.pixel(x: Int(board.tiles[0].width / 2), y: 80))
         let gutter = try XCTUnwrap(image.pixel(x: Int(board.tiles[0].width + 10), y: 80))
         let second = try XCTUnwrap(image.pixel(x: Int(board.tiles[1].x + board.tiles[1].width / 2), y: 80))
-        for pixel in [first, gutter, second] {
+        for pixel in [first, second] {
+            XCTAssertEqual(Int(pixel.r), 26, accuracy: 1)
+            XCTAssertEqual(Int(pixel.g), 26, accuracy: 1)
+            XCTAssertEqual(Int(pixel.b), 26, accuracy: 1)
+        }
+        for pixel in [gutter] {
             XCTAssertLessThanOrEqual(Int(pixel.r), 2)
             XCTAssertLessThanOrEqual(Int(pixel.g), 2)
             XCTAssertLessThanOrEqual(Int(pixel.b), 2)
