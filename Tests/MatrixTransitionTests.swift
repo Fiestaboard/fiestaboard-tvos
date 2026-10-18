@@ -242,8 +242,20 @@ final class MatrixTransitionTests: XCTestCase {
         surface.update(request(0x0000ff, width: 48, height: 8, style: .marquee), animated: true)
         try await Task.sleep(for: .milliseconds(110))
         surface.update(request(0x00ff00, width: 48, height: 8, style: .marquee), animated: true)
-        XCTAssertEqual(try XCTUnwrap(sample(surface, x: 6, y: 6)).r, 255)
-        XCTAssertEqual(try XCTUnwrap(sample(surface, x: 570, y: 90)).b, 255)
+        // Inspect the outgoing native image captured by retargeting. Sampling
+        // visibleImage() twice races the new marquee: after just one 60 Hz
+        // step its rightmost pixel is legitimately green, and rendering the
+        // first sample can take longer than that on a busy simulator.
+        let outgoing = try XCTUnwrap(imageLayers(in: surface.layer).first {
+            ($0.animation(forKey: "message") as? CAKeyframeAnimation)?.keyPath == "position.x"
+                && $0.position.x < 0
+        })
+        let retained = try XCTUnwrap(outgoing.contents as? CGImage)
+        XCTAssertEqual(retained.width, 48)
+        XCTAssertEqual(retained.height, 8)
+        let retainedImage = UIImage(cgImage: retained)
+        XCTAssertEqual(try XCTUnwrap(retainedImage.pixel(x: 0, y: 0)).r, 255)
+        XCTAssertEqual(try XCTUnwrap(retainedImage.pixel(x: 47, y: 7)).b, 255)
         try await Task.sleep(for: .milliseconds(850))
         XCTAssertEqual(try XCTUnwrap(sample(surface, x: 6, y: 6)).g, 255)
         XCTAssertEqual(try XCTUnwrap(sample(surface, x: 570, y: 90)).g, 255)
