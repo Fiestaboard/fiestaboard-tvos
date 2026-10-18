@@ -92,6 +92,15 @@ final class SettingsPresentationTests: XCTestCase {
         XCUIRemote.shared.press(.right)
     }
 
+    private func waitForRowFocus(_ label: String, in app: XCUIApplication,
+                                 file: StaticString = #filePath, line: UInt = #line) {
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in
+            rowHasFocus(label, in: app)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed,
+                       "Closing a choice list must restore focus to \(label)", file: file, line: line)
+    }
+
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
@@ -165,13 +174,16 @@ final class SettingsPresentationTests: XCTestCase {
         openRow("Open at launch", in: app)
         XCTAssertTrue(app.buttons["Panel list"].waitForExistence(timeout: 3))
         openRow("Living Room", in: app)
+        waitForRowFocus("Open at launch", in: app)
         openRow("Split-flap size", in: app)
         openRow("True flap size", in: app)
+        waitForRowFocus("Split-flap size", in: app)
         XCTAssertEqual(app.buttons["Split-flap size"].value as? String, "True flap size")
         openCategory("This Apple TV", in: app)
         openRow("Split-flap size", in: app)
         for _ in 0..<3 { XCUIRemote.shared.press(.up) }
         openRow("Fit the screen", in: app)
+        waitForRowFocus("Split-flap size", in: app)
         XCTAssertEqual(app.buttons["Split-flap size"].value as? String, "Fit the screen")
     }
 

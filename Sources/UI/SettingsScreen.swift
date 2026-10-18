@@ -12,7 +12,6 @@ struct SettingsScreen: View {
     @State private var panelsReload = 0
     @State private var confirmingForget = false
     @State private var path: [Destination] = []
-    @FocusState private var focusedCategory: Category?
 
     private enum Category: String, CaseIterable, Identifiable {
         case tv = "This Apple TV", appearance = "Panel appearance"
@@ -49,7 +48,9 @@ struct SettingsScreen: View {
             .padding(.bottom, 32)
             .background(Fiesta.Colors.background)
             .navigationTitle("Settings")
-            .defaultFocus($focusedCategory, .tv)
+            // Let NavigationStack restore the originating row after a choice
+            // closes. A default focus request for the first category can win
+            // that restoration race and send focus into the left column.
             .navigationDestination(for: Destination.self) { detail(for: $0) }
         }
         .onExitCommand {
@@ -86,7 +87,6 @@ struct SettingsScreen: View {
                     }
                     .accessibilityLabel(item.rawValue)
                     .accessibilityValue(category == item ? "Selected" : "")
-                    .focused($focusedCategory, equals: item)
                 }
             }
             Section { Button("Done") { app.dismissSettings() } }
