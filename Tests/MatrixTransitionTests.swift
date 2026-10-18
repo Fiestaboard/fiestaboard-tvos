@@ -238,9 +238,18 @@ final class MatrixTransitionTests: XCTestCase {
     func testInterruptedMarqueeRetainsVisibleNativePixelsAndAcceptsNewestMessage() async throws {
         let (window, surface) = host(size: CGSize(width: 576, height: 96))
         defer { window.isHidden = true }
+        func state() -> String {
+            "bounds=\(surface.bounds) scale=\(surface.traitCollection.displayScale) "
+                + imageLayers(in: surface.layer).map {
+                    "[\(type(of: $0)) bounds=\($0.bounds) position=\($0.position) "
+                        + "animation=\(String(describing: $0.animation(forKey: "message")))]"
+                }.joined(separator: " ")
+        }
         surface.update(request(0xff0000, width: 48, height: 8, style: .marquee), animated: true)
         surface.update(request(0x0000ff, width: 48, height: 8, style: .marquee), animated: true)
+        let initialState = state()
         try await Task.sleep(for: .milliseconds(110))
+        let beforeRetarget = state()
         surface.update(request(0x00ff00, width: 48, height: 8, style: .marquee), animated: true)
         // Inspect the outgoing native image captured by retargeting. Sampling
         // visibleImage() twice races the new marquee: after just one 60 Hz
@@ -249,7 +258,7 @@ final class MatrixTransitionTests: XCTestCase {
         let outgoing = try XCTUnwrap(imageLayers(in: surface.layer).first {
             ($0.animation(forKey: "message") as? CAKeyframeAnimation)?.keyPath == "position.x"
                 && $0.position.x < 0
-        })
+        }, "initial: \(initialState) before: \(beforeRetarget) after: \(state())")
         let retainedContents = try XCTUnwrap(outgoing.contents)
         let retained = retainedContents as! CGImage
         XCTAssertEqual(retained.width, 48)
