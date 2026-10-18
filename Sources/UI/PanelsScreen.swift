@@ -49,6 +49,7 @@ struct PanelsScreen: View {
         .onDisappear {
             model?.stopPreviews()
             previewImages.removeAll()
+            pendingFocusTarget = nil
         }
     }
 
@@ -264,9 +265,10 @@ struct PanelsScreen: View {
                     guard let target = pendingFocusTarget else { return }
                     scroll.scrollTo(target, anchor: .center)
                     await Task.yield()
-                    guard !Task.isCancelled,
-                          model?.panels.contains(where: { $0.id == target && !$0.boardMissing }) == true else { return }
-                    focusedPanel = target
+                    guard !Task.isCancelled else { return }
+                    if model?.panels.contains(where: { $0.id == target && !$0.boardMissing }) == true {
+                        focusedPanel = target
+                    }
                     pendingFocusTarget = nil
                 }
                 .task(id: panelIDs) {
