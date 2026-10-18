@@ -113,7 +113,7 @@ final class PanelsModel {
             // catch up behind it.
             startPreviews(for: loaded)
             app.rememberPanelBrowser(panels: loaded, previews: previews, client: client)
-            app.publishTopShelf(panels: loaded, previews: previews)
+            await app.publishTopShelf(panels: loaded, previews: previews)?.value
         } catch FiestaError.unauthorized {
             guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             // The stored credential could not recover the session — the only
@@ -184,10 +184,11 @@ final class PanelsModel {
         seedPreviews(for: panels)
         guard !targets.isEmpty else {
             app.rememberPanelBrowser(panels: panels, previews: [:], client: client)
-            app.publishTopShelf(panels: panels)
+            await app.publishTopShelf(panels: panels)?.value
             return
         }
 
+        var publication: Task<Void, Never>?
         await withTaskGroup(of: (String, PanelPreviewState).self) { group in
             var pending = targets.makeIterator()
             var started = 0
@@ -202,15 +203,16 @@ final class PanelsModel {
                 }
                 previews[result.0] = result.1
                 app.rememberPanelBrowser(panels: panels, previews: previews, client: client)
-                app.publishTopShelf(panels: panels, previews: previews)
+                publication = app.publishTopShelf(panels: panels, previews: previews)
                 if let next = pending.next() {
                     group.addTask { await Self.fetchPreview(for: next, connection: connection) }
                 }
-                // Several completed frames can be waiting in the group.
-                // Give focus/input a turn between static image renders.
+                // Let input and the coalescing shelf worker make progress
+                // while several completed frames are waiting in the group.
                 await Task.yield()
             }
         }
+        await publication?.value
     }
 
     /// Everything without a picture yet shows as loading; a picture we

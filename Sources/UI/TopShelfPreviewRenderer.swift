@@ -6,24 +6,24 @@ import SwiftUI
 enum TopShelfPreviewRenderer {
     static let size = CGSize(width: 1920, height: 1080)
 
-    static func image(panel: Panel, preview: PanelPreview) -> Data? {
+    static func image(panel: Panel, preview: PanelPreview) -> CGImage? {
         guard preview.rows > 0, preview.cols > 0 else { return unavailable }
         BoardFont.registerIfNeeded()
         return render(PanelPreviewBoard(panel: panel, preview: preview).padding(64))
     }
 
     /// A failed frame must never look like an invented board message.
-    static let unavailable: Data? = render(
+    static let unavailable: CGImage? = render(
         VStack(spacing: 30) {
             Image(systemName: "rectangle.slash").font(.system(size: 100))
             Text("Preview unavailable").font(.system(size: 64, weight: .medium))
         }
         .foregroundStyle(.white.opacity(0.7)))
 
-    private static func render(_ content: some View) -> Data? {
+    private static func render(_ content: some View) -> CGImage? {
         #if DEBUG
         let began = CACurrentMediaTime()
-        defer { PanelNavigationProbe.shared.event("topshelf.renderAndEncode", began: began) }
+        defer { PanelNavigationProbe.shared.event("topshelf.render", began: began) }
         #endif
         let canvas = content
         .frame(width: size.width, height: size.height)
@@ -33,6 +33,6 @@ enum TopShelfPreviewRenderer {
         let renderer = ImageRenderer(content: canvas)
         renderer.scale = 1
         renderer.isOpaque = true
-        return renderer.uiImage?.pngData()
+        return renderer.cgImage
     }
 }

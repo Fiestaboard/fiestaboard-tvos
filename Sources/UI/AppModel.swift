@@ -204,13 +204,16 @@ public final class AppModel {
         route = destination
     }
 
-    public func disconnect() {
+    @discardableResult
+    public func disconnect() -> Task<Void, Never>? {
         connection.forget()
-        clearTopShelf()
+        let cleanup = clearTopShelf()
         route = .connect
+        return cleanup
     }
 
-    func clearTopShelf() {
+    @discardableResult
+    func clearTopShelf() -> Task<Void, Never>? {
         lastViewedPanelRef = nil
         beginTopShelfUpdate()
         panelReloadTask?.cancel()
@@ -219,7 +222,7 @@ public final class AppModel {
         panelBrowserCache = nil
         topShelfImages.images.removeAll()
         topShelfClient = nil
-        TopShelfPreviewPublisher.clear(store: topShelfStore)
+        return TopShelfPreviewPublisher.clear(store: topShelfStore, cache: topShelfImages)
     }
 
     /// Invalidate outstanding list/frame replies before another refresh or
@@ -229,6 +232,7 @@ public final class AppModel {
         previewTask?.cancel()
         previewTask = nil
         topShelfGeneration = UUID()
+        topShelfImages.invalidate()
         return topShelfGeneration
     }
 
@@ -248,11 +252,15 @@ public final class AppModel {
     /// the entry point it calls the moment the list lands. Without it, a TV
     /// whose owner never sets a default panel would never publish anything
     /// and Home would have no carousel at all.
-    func publishTopShelf(panels: [Panel], previews: [String: PanelPreviewState] = [:]) {
-        guard let topShelfStore, connection.saved != nil, !connection.isSignedOut else { return }
-        if topShelfClient !== connection.client { topShelfImages.images.removeAll() }
+    @discardableResult
+    func publishTopShelf(panels: [Panel], previews: [String: PanelPreviewState] = [:]) -> Task<Void, Never>? {
+        guard let topShelfStore, connection.saved != nil, !connection.isSignedOut else { return nil }
+        if topShelfClient !== connection.client {
+            topShelfImages.invalidate()
+            topShelfImages.images.removeAll()
+        }
         topShelfClient = connection.client
-        TopShelfPreviewPublisher.publish(panels: panels, previews: previews,
+        return TopShelfPreviewPublisher.publish(panels: panels, previews: previews,
                                          connection: connection,
                                          store: topShelfStore, cache: topShelfImages)
     }

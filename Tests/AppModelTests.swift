@@ -219,7 +219,7 @@ final class AppModelTests: XCTestCase {
         await fulfillment(of: [published], timeout: 1)
     }
 
-    func testDisconnectClearsOnlyThisAppsTopShelfCache() throws {
+    func testDisconnectClearsOnlyThisAppsTopShelfCache() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("topshelf-disconnect-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -229,7 +229,7 @@ final class AppModelTests: XCTestCase {
             defaults: UserDefaults(suiteName: "tv.app.\(UUID().uuidString)")!,
             credentials: InMemoryCredentialStore()), topShelfStore: store)
 
-        model.disconnect()
+        await model.disconnect()?.value
         XCTAssertTrue(store.items().isEmpty)
     }
 
@@ -303,7 +303,7 @@ final class AppModelTests: XCTestCase {
         let model = AppModel(connection: connection, topShelfStore: store)
         StubURLProtocol.reset()
 
-        model.publishTopShelf(panels: [panel])
+        await model.publishTopShelf(panels: [panel])?.value
 
         XCTAssertEqual(store.items().map(\.panelID), [panel.id])
         XCTAssertTrue(StubURLProtocol.requests.isEmpty,
