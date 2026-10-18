@@ -49,7 +49,41 @@ jobs:
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           xcrun simctl bootstatus "$ID" -b
 
-      - name: Build and test
+      - name: Build for testing
+        id: test-build
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj \
+            -scheme FiestaBoardTV \
+            -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build \
+            build-for-testing
+
+      # Publish navigation evidence before the longer Settings UI suite.
+      # A failed Panels step still fails this required job; the remaining
+      # suite runs too so one failure does not hide unrelated regressions.
+      - name: Panels navigation tests
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj \
+            -scheme FiestaBoardTV \
+            -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build \
+            -resultBundlePath build/panels.xcresult \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -only-testing:FiestaBoardTVUITests/PanelsPresentationTests \
+            test-without-building
+
+      - name: Upload Panels results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: panels-xcresult
+          path: build/panels.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Remaining app and UI tests
+        if: ${{ !cancelled() && steps.test-build.outcome == 'success' }}
         run: |
           xcodebuild -project FiestaBoardTV.xcodeproj \
             -scheme FiestaBoardTV \
@@ -59,7 +93,8 @@ jobs:
             -parallel-testing-enabled NO \
             -collect-test-diagnostics never \
             -skip-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
-            test
+            -skip-testing:FiestaBoardTVUITests/PanelsPresentationTests \
+            test-without-building
 
       # XCTest failure details/screenshots remain in xcresult even when the
       # verbose simulator diagnostics collector is off (it can stall 600s).

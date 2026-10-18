@@ -217,10 +217,17 @@ struct PanelsScreen: View {
             let cardWidth = max(1, (proxy.size.width - spacing) / 2)
             ScrollViewReader { scroll in
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: spacing), GridItem(.flexible())],
-                              alignment: .leading, spacing: 48) {
-                        ForEach(model?.panels ?? []) { panel in
-                            card(for: panel, width: cardWidth).id(panel.id)
+                    // Materialize both focus targets together. With tall cards,
+                    // LazyVGrid can leave the final offscreen row undiscoverable
+                    // to the tvOS focus engine even though its scroll extent exists.
+                    LazyVStack(alignment: .leading, spacing: spacing) {
+                        ForEach(panelRows) { row in
+                            HStack(spacing: spacing) {
+                                card(for: row.first, width: cardWidth).id(row.first.id)
+                                if let second = row.second {
+                                    card(for: second, width: cardWidth).id(second.id)
+                                }
+                            }
                         }
                     }
                     .padding(Self.focusInset)
@@ -240,6 +247,19 @@ struct PanelsScreen: View {
                     focusedPanel = id
                 }
             }
+        }
+    }
+
+    private struct PanelRow: Identifiable {
+        let first: Panel
+        let second: Panel?
+        var id: String { first.id }
+    }
+
+    private var panelRows: [PanelRow] {
+        let panels = model?.panels ?? []
+        return stride(from: 0, to: panels.count, by: 2).map { index in
+            PanelRow(first: panels[index], second: index + 1 < panels.count ? panels[index + 1] : nil)
         }
     }
 
