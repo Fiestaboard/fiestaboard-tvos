@@ -164,7 +164,16 @@ final class PanelsPresentationTests: XCTestCase {
     private func waitForFocus(_ element: XCUIElement, _ message: String = "Expected remote focus",
                               file: StaticString = #filePath, line: UInt = #line) {
         let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasFocus == YES"), object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed, message, file: file, line: line)
+        let result = XCTWaiter.wait(for: [focused], timeout: 5)
+        if result != .completed {
+            let app = XCUIApplication()
+            capture(app, "Panel browser — failed focus transition")
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Panel browser — focus hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        XCTAssertEqual(result, .completed, message, file: file, line: line)
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {
