@@ -157,8 +157,8 @@ final class PanelsPresentationTests: XCTestCase {
         XCUIRemote.shared.press(.left)
         waitForFocus(card(0))
 
-        // Restore a distant right-column card, whose lazy row is identified
-        // by its left-column panel. Keep this after the full cache traversal.
+        // Restore a distant right-column card after leaving the browser.
+        // Keep this after the full cache traversal.
         XCUIRemote.shared.press(.right)
         waitForFocus(card(1))
         for index in stride(from: 3, through: 13, by: 2) {

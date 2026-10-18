@@ -5,6 +5,7 @@ struct PanelsScreen: View {
     @State private var model: PanelsModel?
     @State private var restoredInitialFocus = false
     @State private var previewImages = PanelPreviewImageCache()
+    @State private var pendingFocusTarget: String?
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
@@ -70,6 +71,28 @@ struct PanelsScreen: View {
         let available = panels.filter { !$0.boardMissing }
         return available.first { $0.id == preferredRef || String($0.shortCode) == preferredRef }?.id
             ?? available.first?.id
+    }
+
+    /// Fallback for a vertical move the native focus engine could not resolve
+    /// because the adjacent lazy row has not been materialized yet.
+    static func verticalFocusTarget(in panels: [Panel], from id: String,
+                                    direction: MoveCommandDirection) -> String? {
+        guard direction == .up || direction == .down,
+              let index = panels.firstIndex(where: { $0.id == id }) else { return nil }
+        let step = direction == .down ? 2 : -2
+        let column = index % 2
+        var row = index - column + step
+        while row >= 0 && row < panels.count {
+            // Prefer the same column, then the other available card in this
+            // row. A removed board must never become a focus target.
+            for candidate in [row + column, row + 1 - column] {
+                if candidate < panels.count, !panels[candidate].boardMissing {
+                    return panels[candidate].id
+                }
+            }
+            row += step
+        }
+        return nil
     }
 
     private var header: some View {
@@ -217,17 +240,10 @@ struct PanelsScreen: View {
             let cardWidth = max(1, (proxy.size.width - spacing) / 2)
             ScrollViewReader { scroll in
                 ScrollView {
-                    // Materialize both focus targets together. With tall cards,
-                    // LazyVGrid can leave the final offscreen row undiscoverable
-                    // to the tvOS focus engine even though its scroll extent exists.
-                    LazyVStack(alignment: .leading, spacing: spacing) {
-                        ForEach(panelRows) { row in
-                            HStack(spacing: spacing) {
-                                card(for: row.first, width: cardWidth).id(row.first.id)
-                                if let second = row.second {
-                                    card(for: second, width: cardWidth).id(second.id)
-                                }
-                            }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: spacing), GridItem(.flexible())],
+                              alignment: .leading, spacing: 48) {
+                        ForEach(model?.panels ?? []) { panel in
+                            card(for: panel, width: cardWidth).id(panel.id)
                         }
                     }
                     .padding(Self.focusInset)
@@ -237,32 +253,32 @@ struct PanelsScreen: View {
                 .padding(.horizontal, -Self.focusInset)
                 .focusScope(gridScope)
                 .focusSection()
+                .onMoveCommand { direction in
+                    // Successful native focus moves consume their command.
+                    // Only recover an unhandled vertical move inside the grid.
+                    guard let id = focusedPanel else { return }
+                    pendingFocusTarget = Self.verticalFocusTarget(
+                        in: model?.panels ?? [], from: id, direction: direction)
+                }
+                .task(id: pendingFocusTarget) {
+                    guard let target = pendingFocusTarget else { return }
+                    scroll.scrollTo(target, anchor: .center)
+                    await Task.yield()
+                    guard !Task.isCancelled,
+                          model?.panels.contains(where: { $0.id == target && !$0.boardMissing }) == true else { return }
+                    focusedPanel = target
+                    pendingFocusTarget = nil
+                }
                 .task(id: panelIDs) {
                     guard !restoredInitialFocus, !panelIDs.isEmpty else { return }
                     restoredInitialFocus = true
-                    guard focusedPanel == nil, let id = defaultFocusID,
-                          let row = panelRows.first(where: { $0.first.id == id || $0.second?.id == id }) else { return }
-                    // A distant second-column card may not exist yet. Scroll
-                    // to its lazy row before requesting focus on the card.
-                    scroll.scrollTo(row.id, anchor: .center)
+                    guard focusedPanel == nil, let id = defaultFocusID else { return }
+                    scroll.scrollTo(id, anchor: .center)
                     await Task.yield()
                     guard !Task.isCancelled else { return }
                     focusedPanel = id
                 }
             }
-        }
-    }
-
-    private struct PanelRow: Identifiable {
-        let first: Panel
-        let second: Panel?
-        var id: String { first.id }
-    }
-
-    private var panelRows: [PanelRow] {
-        let panels = model?.panels ?? []
-        return stride(from: 0, to: panels.count, by: 2).map { index in
-            PanelRow(first: panels[index], second: index + 1 < panels.count ? panels[index + 1] : nil)
         }
     }
 
