@@ -57,13 +57,13 @@ final class PanelsPresentationTests: XCTestCase {
         XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 30,
                        "Two panels should share a row inside the TV safe area")
         XCTAssertGreaterThan(second.frame.minX, first.frame.midX)
-        XCTAssertTrue(first.hasFocus)
+        waitForFocus(first)
         XCUIRemote.shared.press(.right)
-        XCTAssertTrue(second.hasFocus, "Right should reach the second card, not Settings")
+        waitForFocus(second, "Right should reach the second card, not Settings")
         XCUIRemote.shared.press(.down)
-        XCTAssertTrue(card("Patio").hasFocus)
+        waitForFocus(card("Patio"))
         XCUIRemote.shared.press(.down)
-        XCTAssertTrue(card("Office").hasFocus)
+        waitForFocus(card("Office"))
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             let frame = card("Office").frame
             return frame.minY > 250 && frame.maxY < app.frame.maxY - 40
@@ -82,7 +82,7 @@ final class PanelsPresentationTests: XCTestCase {
             if app.buttons["Settings"].hasFocus { break }
             XCUIRemote.shared.press(.up)
         }
-        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        waitForFocus(app.buttons["Settings"])
         let refreshed = panels.reversed().joined(separator: ",").replacingOccurrences(of: "Office", with: "Office updated")
         server.updatePanels("{\"panels\":[\(refreshed)],\"total\":6}")
         XCUIRemote.shared.press(.menu)
@@ -90,6 +90,15 @@ final class PanelsPresentationTests: XCTestCase {
         XCTAssertTrue(card("Office updated").waitForExistence(timeout: 10), "Foreground refresh must load the reordered panels")
         XCTAssertTrue(app.buttons["Settings"].hasFocus,
                       "A refreshed panel order must not steal intentional focus from Settings")
+    }
+
+    /// Remote presses can return while tvOS is still transferring focus and
+    /// scrolling a lazy row into view. Assert the eventual target, without
+    /// issuing extra presses that could hide a navigation regression.
+    private func waitForFocus(_ element: XCUIElement, _ message: String = "Expected remote focus",
+                              file: StaticString = #filePath, line: UInt = #line) {
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasFocus == YES"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed, message, file: file, line: line)
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {

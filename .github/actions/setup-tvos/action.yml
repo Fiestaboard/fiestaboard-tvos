@@ -1,0 +1,25 @@
+name: Prepare tvOS build
+description: Verify the hosted Xcode SDKs and generate the Xcode project
+runs:
+  using: composite
+  steps:
+    - name: Verify Xcode and tvOS SDKs
+      shell: bash
+      run: |
+        xcodebuild -version
+        for platform in appletvos appletvsimulator; do
+          SDK=$(xcrun --sdk "$platform" --show-sdk-version)
+          echo "$platform SDK: $SDK"
+          if [ "${SDK%%.*}" -lt 26 ]; then
+            echo "Need a tvOS 26 or newer SDK; this runner has $SDK." >&2
+            exit 1
+          fi
+        done
+    - name: Generate project
+      shell: bash
+      run: |
+        if ! command -v xcodegen >/dev/null 2>&1; then
+          brew install xcodegen
+        fi
+        xcodegen --version
+        xcodegen generate

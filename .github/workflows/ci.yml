@@ -4,68 +4,50 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      home_ui:
+        description: Also run the informational Home Top Shelf screenshot test
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
 jobs:
-  # The job branch protection should require. It runs everything except
-  # `HomeTopShelfUITests`, which walks the real tvOS Home screen and is
-  # order-dependent (docs/HANDOFF.md hazard 3); that one runs in `ui-tests`
-  # below, where a flake costs a re-run and not a blocked merge.
-  #
-  # Only that one test is demoted, deliberately. `ViewerNavigationUITests` is
-  # four deterministic remote-control paths — Menu out of the viewer, Select
-  # into the overlay, right-to-Settings, and the focus wash — and they cover
-  # exactly the code most likely to regress: the viewer's teardown, the
-  # overlay timer, and the focus sections. Skipping the whole bundle to
-  # quarantine one test was silently dropping those four.
+  # Keep this check name stable for branch protection. All app tests and
+  # normal remote-navigation UI tests run here; only Home is separate.
   build-and-test:
-    runs-on: macos-latest
+    runs-on: macos-26
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-tvos
 
-      # This used to be `sudo xcode-select -s /Applications/Xcode_16.app ||
-      # xcode-select -p`, which asserted nothing twice over: macos-latest is
-      # macos-26 and ships no Xcode 16, and the `||` swallowed the failure, so
-      # the job silently ran on whatever Xcode the image happened to have.
-      # What actually matters is the SDK an App Store archive is built
-      # against, so assert that instead of pinning an app bundle by name.
-      - name: Require a tvOS 26+ SDK
+      - name: Repository guards
         run: |
-          xcodebuild -version
-          SDK=$(xcrun --sdk appletvsimulator --show-sdk-version)
-          echo "tvOS simulator SDK: $SDK"
-          if [ "${SDK%%.*}" -lt 26 ]; then
-            echo "App Store submissions must be built with a tvOS 26 or newer SDK; this runner has $SDK." >&2
-            echo "Pick a newer runner image, or xcode-select an Xcode that ships one." >&2
-            exit 1
-          fi
+          ./scripts/check-layering.sh
+          ./scripts/check-brand-assets.swift
+          ./scripts/test-simulator-selection.sh
 
-      - name: Layering guard
-        run: ./scripts/check-layering.sh
-
-      - name: Brand asset guard
-        run: ./scripts/check-brand-assets.swift
-
-      - name: Install XcodeGen
-        run: |
-          brew install xcodegen
-          # The generator's version decides what lands in the two Info.plists,
-          # which are not committed. When a build disagrees with a local one,
-          # this line is the first thing to compare.
-          xcodegen --version
-
-      - name: Generate project
-        run: xcodegen generate
-
-      - name: Resolve a tvOS simulator
+      - name: Resolve and boot a tvOS simulator
         id: sim
+        timeout-minutes: 3
         run: |
           ID=$(xcrun simctl list devices available | ./scripts/select-tvos-simulator.sh)
           if [ -z "$ID" ]; then echo "No Apple TV simulator on this runner." >&2; exit 1; fi
           echo "id=$ID" >> "$GITHUB_OUTPUT"
+          xcrun simctl bootstatus "$ID" -b
 
       - name: Build and test
         run: |
@@ -73,22 +55,34 @@ jobs:
             -scheme FiestaBoardTV \
             -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -derivedDataPath build \
-            -resultBundlePath build/unit-tests.xcresult \
+            -resultBundlePath build/tests.xcresult \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
             -skip-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
             test
 
-      # A failing pixel assertion says only "the sample was black". The result
-      # bundle carries the failure's attachments, which is where the rendered
-      # image actually is.
-      - name: Upload result bundle
-        if: always()
-        uses: actions/upload-artifact@v4
+      # XCTest failure details/screenshots remain in xcresult even when the
+      # verbose simulator diagnostics collector is off (it can stall 600s).
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: unit-tests-xcresult
-          path: build/unit-tests.xcresult
-          if-no-files-found: warn
+          name: tests-xcresult
+          path: build/tests.xcresult
+          if-no-files-found: ignore
           retention-days: 7
 
+  # Independent of simulator tests: a UI failure must not hide a broken
+  # Release build or prevent checking the app + embedded extension archive.
+  archive:
+    name: Release archive
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-tvos
       - name: Archive (unsigned)
         run: |
           xcodebuild -project FiestaBoardTV.xcodeproj \
@@ -99,72 +93,44 @@ jobs:
             archive -archivePath build/FiestaBoardTV.xcarchive \
             CODE_SIGNING_ALLOWED=NO
 
-  # Informational. Do NOT add this job to branch protection's required checks.
-  # `HomeTopShelfUITests` walks the Home screen and depends on which icon Home
-  # last focused, so it fails in ways that are about the simulator rather than
-  # about the diff. It is here to be looked at, and its screenshot attachment
-  # is the pre-submission record of what Home actually shows.
-  #
-  # Budgeted for a stall that is not a test failure. After the UI-test bundle
-  # finishes, Xcode collects simulator diagnostics, and on CI that step hangs
-  # its full 600-second limit before giving up:
-  #
-  #   IDETestOperationsObserverDebug: Failure collecting diagnostics from
-  #   simulator: Timed out after 600.0 seconds while waiting for a response
-  #   from the invoked process
-  #
-  # The run still reports Passed with 0 failures — the last one took 662s
-  # wall-clock for about 60s of actual tests. So do not debug this as a test
-  # hang, and do not set a timeout tight enough to kill a passing run. If it
-  # ever has to be suppressed rather than absorbed, the documented lever is
-  # xcodebuild's `-collect-test-diagnostics never`, at the cost of the
-  # diagnostics on a real failure.
+  # Home's icon placement/focus makes this informational. Run after merges
+  # and optionally by hand, avoiding a second simulator job on every PR.
   ui-tests:
     name: Home Top Shelf screenshot (informational, not required)
-    runs-on: macos-latest
-    timeout-minutes: 45
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.home_ui)
+    runs-on: macos-26
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Require a tvOS 26+ SDK
-        run: |
-          SDK=$(xcrun --sdk appletvsimulator --show-sdk-version)
-          echo "tvOS simulator SDK: $SDK"
-          if [ "${SDK%%.*}" -lt 26 ]; then
-            echo "Need a tvOS 26 or newer SDK; this runner has $SDK." >&2
-            exit 1
-          fi
-
-      - name: Install XcodeGen
-        run: |
-          brew install xcodegen
-          xcodegen --version
-
-      - name: Generate project
-        run: xcodegen generate
-
-      - name: Resolve a tvOS simulator
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-tvos
+      - name: Resolve and boot a tvOS simulator
         id: sim
+        timeout-minutes: 3
         run: |
           ID=$(xcrun simctl list devices available | ./scripts/select-tvos-simulator.sh)
           if [ -z "$ID" ]; then echo "No Apple TV simulator on this runner." >&2; exit 1; fi
           echo "id=$ID" >> "$GITHUB_OUTPUT"
+          xcrun simctl bootstatus "$ID" -b
 
-      - name: UI tests
+      - name: Home UI test
         run: |
           xcodebuild -project FiestaBoardTV.xcodeproj \
             -scheme FiestaBoardTV \
             -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -derivedDataPath build \
-            -resultBundlePath build/ui-tests.xcresult \
+            -resultBundlePath build/home-ui.xcresult \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
             -only-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
             test
 
-      - name: Upload result bundle
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Upload Home screenshots and results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui-tests-xcresult
-          path: build/ui-tests.xcresult
-          if-no-files-found: warn
+          name: home-ui-xcresult
+          path: build/home-ui.xcresult
+          if-no-files-found: ignore
           retention-days: 7

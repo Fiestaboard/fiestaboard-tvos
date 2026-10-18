@@ -2,12 +2,41 @@
 
 A native tvOS viewer for FiestaBoard panels. It finds your board on the local network, signs in when needed, and shows a panel as a live split-flap or LED matrix display.
 
+[![CI](https://github.com/Fiestaboard/fiestaboard-tvos/actions/workflows/ci.yml/badge.svg)](https://github.com/Fiestaboard/fiestaboard-tvos/actions/workflows/ci.yml)
+
 ## Requirements
 
 - Xcode with a tvOS 26 or newer SDK and the tvOS simulator runtime
 - XcodeGen: brew install xcodegen
 
 Run the app with ./build-and-run.sh. Run tests with ./build-and-run.sh --test.
+
+## Continuous integration
+
+[GitHub Actions](https://github.com/Fiestaboard/fiestaboard-tvos/actions/workflows/ci.yml)
+runs on every pull request and push to `main`, using standard Apple Silicon
+`macos-26` runners. These runners are free for this public repository.
+
+- `build-and-test` runs the repository guards, app/render tests, and remote
+  navigation UI tests on a tvOS simulator.
+- `Release archive` independently builds an unsigned device archive, including
+  the Top Shelf extension. It runs even when simulator tests fail.
+- The informational Home Top Shelf screenshot test runs on pushes to `main`.
+  Use **Actions → CI → Run workflow** and enable `home_ui` to run it on demand.
+
+For branch protection, require `build-and-test` and `Release archive`; leave the
+Home screenshot check optional. Test result bundles, including screenshots, are
+available as run artifacts for seven days. Open the `.xcresult` bundle in Xcode
+to inspect failures. Verbose simulator diagnostic collection is disabled because
+it can stall for ten minutes; XCTest assertions and attachments are still saved.
+
+The workflow cancels superseded runs, limits job duration, and uses the runner's
+installed Xcode and tvOS runtimes. It checks both SDKs are version 26 or newer.
+There are no external Swift packages to cache, and the small app builds from a
+clean checkout instead of transferring DerivedData between runners. Signing and
+TestFlight uploads are separate from CI; see [publishing](docs/PUBLISHING.md).
+
+## Local development
 
 Export simulator demos with `bash scripts/export-demo-video.sh source.mov demo.mp4`.
 This preserves 60 fps output and retains the original recording. A 30 fps export
