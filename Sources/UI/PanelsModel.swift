@@ -169,6 +169,17 @@ final class PanelsModel {
         let generation = app.topShelfGeneration
         let run = previewGeneration
         guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
+        defer {
+            // Rejecting a late frame is not enough: discard placeholders and
+            // retained cards from the old connection as well. A newer refresh
+            // may already own this model, so leave its state alone.
+            if previewClient === client,
+               connection.client !== client || connection.isSignedOut {
+                previews = [:]
+                self.panels = []
+                previewClient = nil
+            }
+        }
         reconcile(panels, client: client)
         seedPreviews(for: panels)
         guard !targets.isEmpty else {

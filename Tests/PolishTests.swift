@@ -151,6 +151,58 @@ final class PolishTests: XCTestCase {
         XCTAssertFalse(model.isLoading)
         model.stopPreviews()
     }
+
+    func testConnectionChangeClearsTheOldModelsPendingPreview() async throws {
+        let app = try await app()
+        let model = PanelsModel(app: app)
+        let panel = try MatrixDisplayTests.panel()
+        let started = expectation(description: "old frame held")
+        let reply = PolishReplyGate()
+        var response = StubURLProtocol.Stub.json(Fixtures.frameJSON)
+        response.beforeReply = { finish in reply.store(finish); started.fulfill() }
+        StubURLProtocol.enqueue(response, for: "/frame")
+        let refresh = Task { await model.refreshPreviews(for: [panel]) }
+        await fulfillment(of: [started], timeout: 2)
+        XCTAssertEqual(model.previews[panel.id], .loading)
+        app.connection.signOut()
+        app.clearTopShelf()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await app.connection.connect(to: URL(string: "http://other.local:4420")!, displayName: "Other")
+        reply.finish()
+        await refresh.value
+        XCTAssertTrue(model.previews.isEmpty)
+        XCTAssertTrue(model.panels.isEmpty)
+        XCTAssertTrue(PanelsModel(app: app).previews.isEmpty)
+    }
+
+    func testOldPreviewCleanupPreservesANewerConnectionsCards() async throws {
+        let app = try await app()
+        let model = PanelsModel(app: app)
+        let panel = try MatrixDisplayTests.panel()
+        let started = expectation(description: "old frame held")
+        let reply = PolishReplyGate()
+        var response = StubURLProtocol.Stub.json(Fixtures.frameJSON)
+        response.beforeReply = { finish in reply.store(finish); started.fulfill() }
+        StubURLProtocol.enqueue(response, for: "/frame")
+        let oldRefresh = Task { await model.refreshPreviews(for: [panel]) }
+        await fulfillment(of: [started], timeout: 2)
+        app.connection.signOut()
+        app.clearTopShelf()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await app.connection.connect(to: URL(string: "http://other.local:4420")!, displayName: "Other")
+        StubURLProtocol.enqueue(.json(Fixtures.emptyFrameJSON), for: "/frame")
+        await model.refreshPreviews(for: [panel])
+        let currentPreview = model.previews[panel.id]
+        guard case .ready = currentPreview else {
+            reply.finish()
+            await oldRefresh.value
+            return XCTFail("the replacement connection must have a fetched preview")
+        }
+        reply.finish()
+        await oldRefresh.value
+        XCTAssertEqual(model.previews[panel.id], currentPreview)
+        XCTAssertEqual(model.panels, [panel])
+    }
 }
 
 final class TopShelfPolishTests: XCTestCase {
