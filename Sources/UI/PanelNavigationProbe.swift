@@ -12,10 +12,15 @@ final class PanelNavigationProbe: NSObject {
     private var previous: Double?
     private var samples: [[String: Any]] = []
     private var frames = 0
+    private let recordingID = UUID().uuidString
+    static let blankPreviews = UserDefaults.standard.bool(forKey: "fiestaboard.panelProfileBlank")
 
     func start() {
         guard enabled, link == nil else { return }
         event("browser.appear")
+        event(Self.blankPreviews ? "control.blankPreviews" : "control.realPreviews")
+        NotificationCenter.default.addObserver(self, selector: #selector(focusUpdated(_:)),
+            name: UIFocusSystem.didUpdateNotification, object: nil)
         previous = nil
         let displayLink = CADisplayLink(target: self, selector: #selector(tick(_:)))
         displayLink.add(to: .main, forMode: .common)
@@ -27,6 +32,7 @@ final class PanelNavigationProbe: NSObject {
         event("browser.disappear")
         link?.invalidate()
         link = nil
+        NotificationCenter.default.removeObserver(self, name: UIFocusSystem.didUpdateNotification, object: nil)
         previous = nil
         flush()
     }
@@ -49,12 +55,18 @@ final class PanelNavigationProbe: NSObject {
         if frames % 120 == 0 { flush() }
     }
 
+    @objc private func focusUpdated(_ notification: Notification) {
+        event("focus.native")
+    }
+
     private func flush() {
         let captured = samples
-        let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("panel-navigation.json")
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PanelNavigation", isDirectory: true)
+        let url = directory.appendingPathComponent("\(recordingID).json")
         writer.async {
             if let data = try? JSONSerialization.data(withJSONObject: captured) {
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try? data.write(to: url, options: .atomic)
             }
         }
