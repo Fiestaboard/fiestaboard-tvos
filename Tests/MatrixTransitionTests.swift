@@ -23,10 +23,14 @@ final class MatrixTransitionTests: XCTestCase {
     private func host(size: CGSize = CGSize(width: 100, height: 50)) -> (UIWindow, MatrixTransitionSurface) {
         let surface = MatrixTransitionSurface(frame: CGRect(origin: .zero, size: size))
         let controller = UIViewController()
-        controller.view = surface
-        let window = UIWindow(frame: surface.frame)
+        // tvOS does not reliably keep compositor animations on tiny windows.
+        // Keep the window full-screen and the fixture at its requested size.
+        let window = UIWindow(frame: CGRect(origin: .zero, size: RenderHarness.tvSize))
+        controller.view = UIView(frame: window.bounds)
+        controller.view.addSubview(surface)
         window.rootViewController = controller
         window.isHidden = false
+        controller.view.layoutIfNeeded()
         surface.layoutIfNeeded()
         return (window, surface)
     }
@@ -241,8 +245,7 @@ final class MatrixTransitionTests: XCTestCase {
         func state() -> String {
             "bounds=\(surface.bounds) scale=\(surface.traitCollection.displayScale) "
                 + imageLayers(in: surface.layer).map {
-                    "[\(type(of: $0)) bounds=\($0.bounds) position=\($0.position) "
-                        + "animation=\(String(describing: $0.animation(forKey: "message")))]"
+                    "[position=\($0.position) animationKeys=\($0.animationKeys() ?? [])]"
                 }.joined(separator: " ")
         }
         surface.update(request(0xff0000, width: 48, height: 8, style: .marquee), animated: true)

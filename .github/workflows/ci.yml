@@ -68,6 +68,7 @@ jobs:
             -parallel-testing-enabled NO \
             -collect-test-diagnostics never \
             -only-testing:FiestaBoardTVTests/MatrixTransitionTests \
+            -test-iterations 3 \
             test-without-building
 
       - name: Upload matrix results
@@ -116,7 +117,6 @@ jobs:
             -collect-test-diagnostics never \
             -skip-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
             -skip-testing:FiestaBoardTVUITests/PanelsPresentationTests \
-            -skip-testing:FiestaBoardTVTests/MatrixTransitionTests \
             test-without-building
 
       # XCTest failure details/screenshots remain in xcresult even when the
