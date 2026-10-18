@@ -240,8 +240,11 @@ struct PanelsScreen: View {
                 .task(id: panelIDs) {
                     guard !restoredInitialFocus, !panelIDs.isEmpty else { return }
                     restoredInitialFocus = true
-                    guard focusedPanel == nil, let id = defaultFocusID else { return }
-                    scroll.scrollTo(id, anchor: .center)
+                    guard focusedPanel == nil, let id = defaultFocusID,
+                          let row = panelRows.first(where: { $0.first.id == id || $0.second?.id == id }) else { return }
+                    // A distant second-column card may not exist yet. Scroll
+                    // to its lazy row before requesting focus on the card.
+                    scroll.scrollTo(row.id, anchor: .center)
                     await Task.yield()
                     guard !Task.isCancelled else { return }
                     focusedPanel = id

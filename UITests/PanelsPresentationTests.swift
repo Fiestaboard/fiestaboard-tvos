@@ -156,6 +156,21 @@ final class PanelsPresentationTests: XCTestCase {
         }
         XCUIRemote.shared.press(.left)
         waitForFocus(card(0))
+
+        // Restore a distant right-column card, whose lazy row is identified
+        // by its left-column panel. Keep this after the full cache traversal.
+        XCUIRemote.shared.press(.right)
+        waitForFocus(card(1))
+        for index in stride(from: 3, through: 13, by: 2) {
+            XCUIRemote.shared.press(.down)
+            waitForFocus(card(index))
+        }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Stress 13"].waitForExistence(timeout: 5))
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
+        waitForFocus(card(13), "Returning should restore the distant right-column card")
+        capture(app, "Panel browser — restored distant right-column card")
     }
 
     /// Remote presses can return while tvOS is still transferring focus and
