@@ -1,4 +1,5 @@
 import Foundation
+import QuartzCore
 import TVServices
 import os
 
@@ -36,6 +37,10 @@ enum TopShelfPreviewPublisher {
     static func publish(panels: [Panel], previews: [String: PanelPreviewState] = [:],
                         connection: ConnectionStore, store: TopShelfSnapshotStore,
                         cache: Cache? = nil) {
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        defer { PanelNavigationProbe.shared.event("topshelf.publish", began: began) }
+        #endif
         // Nothing is written for a board we are no longer entitled to show.
         guard connection.saved != nil else {
             log.debug("Not publishing: no board is saved.")

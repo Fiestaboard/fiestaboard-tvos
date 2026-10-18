@@ -33,9 +33,17 @@ final class PanelPreviewImageCache {
     }
 
     func image(for request: Request, render: () -> CGImage?) -> CGImage? {
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        var hit = false
+        defer { PanelNavigationProbe.shared.event(hit ? "thumbnail.hit" : "thumbnail.render", began: began) }
+        #endif
         clock &+= 1
         let id = request.panel.id
         if var entry = entries[id], entry.request == request {
+            #if DEBUG
+            hit = true
+            #endif
             entry.lastUse = clock
             entries[id] = entry
             return entry.image

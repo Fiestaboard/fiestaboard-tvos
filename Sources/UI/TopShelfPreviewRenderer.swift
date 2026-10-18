@@ -21,6 +21,10 @@ enum TopShelfPreviewRenderer {
         .foregroundStyle(.white.opacity(0.7)))
 
     private static func render(_ content: some View) -> Data? {
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        defer { PanelNavigationProbe.shared.event("topshelf.renderAndEncode", began: began) }
+        #endif
         let canvas = content
         .frame(width: size.width, height: size.height)
         .background(Fiesta.Colors.surface)

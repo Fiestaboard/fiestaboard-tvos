@@ -36,6 +36,16 @@ struct PanelsScreen: View {
             content
         }
         .padding(Fiesta.Metrics.safeInset)
+        .onAppear {
+            #if DEBUG
+            PanelNavigationProbe.shared.start()
+            #endif
+        }
+        .onChange(of: focusedPanel) { _, id in
+            #if DEBUG
+            PanelNavigationProbe.shared.event("focus.changed", index: panelIDs.firstIndex(of: id ?? "") ?? -1)
+            #endif
+        }
         .task {
             // Only the screen's own model is loaded here. Reloading an
             // injected one overwrote the state a render test had set up
@@ -47,6 +57,9 @@ struct PanelsScreen: View {
             await fresh.load()
         }
         .onDisappear {
+            #if DEBUG
+            PanelNavigationProbe.shared.stop()
+            #endif
             model?.stopPreviews()
             previewImages.removeAll()
             pendingFocusTarget = nil
@@ -260,6 +273,11 @@ struct PanelsScreen: View {
                     guard let id = focusedPanel else { return }
                     pendingFocusTarget = Self.verticalFocusTarget(
                         in: model?.panels ?? [], from: id, direction: direction)
+                    #if DEBUG
+                    if let target = pendingFocusTarget {
+                        PanelNavigationProbe.shared.event("focus.fallback", index: panelIDs.firstIndex(of: target))
+                    }
+                    #endif
                 }
                 .task(id: pendingFocusTarget) {
                     guard let target = pendingFocusTarget else { return }

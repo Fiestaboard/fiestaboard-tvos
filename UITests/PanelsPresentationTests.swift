@@ -43,7 +43,7 @@ final class PanelsPresentationTests: XCTestCase {
         let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Home FiestaBoard\"}"
         let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
-        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
         app.launch()
         func card(_ name: String) -> XCUIElement {
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
@@ -125,7 +125,7 @@ final class PanelsPresentationTests: XCTestCase {
         let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Stress fixture\"}"
         let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
-        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
         app.launch()
         func card(_ index: Int) -> XCUIElement {
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Stress \(index),")).firstMatch
