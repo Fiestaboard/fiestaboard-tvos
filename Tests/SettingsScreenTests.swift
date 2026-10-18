@@ -597,9 +597,11 @@ final class SettingsScreenTests: XCTestCase {
     /// leave the section vague. The recipient claim is the reassuring part a
     /// 5.1.1(i) reviewer reads, and a broadening — another recipient, or a
     /// "we may share" hedge — has to fail here.
-    func testThePrivacyStatementNamesTheBoardAsTheOnlyRecipient() {
+    func testThePrivacyStatementDisclosesFiestaBotProviderTraffic() {
         let body = SettingsScreen.privacyBody
-        XCTAssertTrue(body.contains("the board you chose and to no one else"), body)
+        XCTAssertTrue(body.contains("configured AI provider"), body)
+        XCTAssertTrue(body.contains("Siri dictation"), body)
+        XCTAssertFalse(body.contains("the board you chose and to no one else"), body)
         XCTAssertTrue(body.contains("the address you typed"),
                       "the typed-address path is one of the two ways to reach a board: \(body)")
         XCTAssertFalse(body.lowercased().contains("may share"), body)
@@ -615,11 +617,8 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertTrue(body.contains("sent to that board"), body)
     }
 
-    /// `CFBundleDisplayName` is exactly "FiestaBoard", so "in the FiestaBoard
-    /// app" sends the reader to the icon they are already inside. The panel's
-    /// schedule is edited on the board's own web page. Same rule, and same
-    /// wording, as `AppModelTests`' setup-required message.
-    func testTheDimSummaryNamesTheBoardsWebPageRatherThanThisApp() async throws {
+    /// The schedule is now editable on Apple TV, so name its controls.
+    func testTheDimSummaryNamesTheSharedPanelEditor() async throws {
         let app = await makeApp()
         let model = SettingsModel(app: app, signage: freshSignage())
         model.panels = [try dimmingPanel(named: "Kitchen", start: "22:00", end: "07:00")]
@@ -628,7 +627,7 @@ final class SettingsScreenTests: XCTestCase {
         let summary = model.autoDimSummary
         XCTAssertFalse(summary.contains("in the FiestaBoard app"),
                        "this IS the FiestaBoard app: \(summary)")
-        XCTAssertTrue(summary.contains("board's web page"), summary)
+        XCTAssertTrue(summary.contains("All display settings"), summary)
     }
 
     func testTheStrandedPagesWarningNamesTheBoardsWebPageRatherThanThisApp() async throws {

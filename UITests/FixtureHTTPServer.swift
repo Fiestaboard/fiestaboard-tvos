@@ -13,6 +13,7 @@ final class FixtureHTTPServer {
     private let additionalPanels: [String: String]
     private let additionalFrames: [String: String]
     private let lock = NSLock()
+    private var chatResponses: [String]
     private var sawFrame = false
     private var sawPanels = false
 
@@ -23,6 +24,7 @@ final class FixtureHTTPServer {
          panelsBody: String = Fixtures.panelsList,
          additionalPanels: [String: String] = [:],
          additionalFrames: [String: String] = [:],
+         chatResponses: [String] = [],
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -32,6 +34,7 @@ final class FixtureHTTPServer {
         self.panelsBody = panelsBody
         self.additionalPanels = additionalPanels
         self.additionalFrames = additionalFrames
+        self.chatResponses = chatResponses
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -67,7 +70,16 @@ final class FixtureHTTPServer {
             }
             let path = request.split(separator: " ").dropFirst().first.map(String.init) ?? ""
             let body: String
+            var contentType = "application/json"
             switch path {
+            case "/api/settings/ai":
+                body = #"{"enabled":true,"tv_chat_supported":true,"providers":[{"id":"fixture"}]}"#
+            case "/api/pages": body = #"{"pages":[]}"#
+            case "/api/pages/ai/chat":
+                contentType = "text/event-stream"
+                self.lock.lock()
+                body = chatResponses.isEmpty ? "event: done\ndata: {\"reason\":\"complete\"}\n\n" : chatResponses.removeFirst()
+                self.lock.unlock()
             case "/api/panel/1", "/api/panel/abc123def456": body = Fixtures.panelJSON
             case "/api/panel/1/frame", "/api/panel/abc123def456/frame":
                 body = frameProvider?() ?? frameBody
@@ -94,7 +106,7 @@ final class FixtureHTTPServer {
                 }
             }
             let payload = Data(body.utf8)
-            let header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
+            let header = "HTTP/1.1 200 OK\r\nContent-Type: \(contentType)\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
             connection.send(content: Data(header.utf8) + payload,
                             completion: .contentProcessed { _ in connection.cancel() })
         }

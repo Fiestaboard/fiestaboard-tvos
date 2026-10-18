@@ -44,31 +44,23 @@ must match the app's or the upload is rejected, which is why both targets name
 the same variables. A second upload at the same build number comes back
 ITMS-90062.
 
-The app collects no data and every App Privacy answer is “No.” Answer them
-against what is actually true, which is narrower than it sounds: nothing the
-user enters reaches FiestaBoard's servers, the developer, or any third party
-— no analytics, no tracking, no account with anybody — and what they type
-goes to the board they chose and to no one else. Scope that to **who
-receives the data**, never to a network: `ManualAddress.parse` accepts a
-typed `https://` address to a board that need not be on this LAN at all, so
-“on their own local network” claims less than the app does, and is the exact
-scope `SettingsScreen.privacyBody` was deliberately stripped of. The
-password **is** sent to that board on every sign-in — in the clear whenever
-the address is plain `http`, which is every discovered board, because a
-FiestaBoard serves no TLS — and is kept in the Keychain on the device; the
-board address and the display preferences sit in the app's own
-`UserDefaults`. Do not write “the password stays on the device” here again:
-the app says the opposite two screens away, in `SignInScreen`'s credentials
-footer, and a reviewer reading both screens sees a misrepresentation.
+The app has no analytics or tracking. Requests and credentials go to the board
+chosen by the user, which can be local or at a typed HTTPS address. Passwords
+are stored in Keychain and sent to that board at sign-in; discovered HTTP
+connections send them without TLS. The board address and display preferences
+use UserDefaults. Do not claim passwords never leave the device.
 
-That one claim is load-bearing in four artifacts at once and is only correct
-in all four together — `Resources/PrivacyInfo.xcprivacy`, the App Privacy
-answers described in this paragraph, `NSLocalNetworkUsageDescription` in
-`project.yml`, and `SettingsScreen.privacyBody` — with the published privacy
-policy page having to match them. Change them in one commit. The reason this
-is written down is that the previous rewrite corrected the in-app statement
-alone and left this paragraph behind, which made the submitter's own
-instructions the loosest claim of the set.
+FiestaBot changes the data flow: the board forwards conversation and relevant
+board content to its configured AI provider. Native chat history is held in app
+memory and cleared by New chat, sign-out, or restart; the board/provider can
+retain their own records. Siri dictation uses Apple's system keyboard settings.
+The old blanket “no third parties” claim and automatic all-“No” App Privacy
+answers no longer describe the feature. Before publishing, align the App Store
+privacy answers and published policy with the actual provider and server data
+handling. Keep this document, SettingsScreen.privacyBody, the network usage
+text in project.yml, and the privacy manifest consistent. The manifest's
+UserDefaults reason and no-tracking declaration still describe the native app;
+no microphone permission or embedded AI SDK was added.
 
 `Resources/PrivacyInfo.xcprivacy` is the privacy manifest and it is required:
 the app reads and writes `UserDefaults` in four places, which is a

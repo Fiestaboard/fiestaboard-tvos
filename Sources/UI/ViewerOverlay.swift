@@ -15,17 +15,19 @@ struct ViewerOverlay: View {
     ///
     /// The board cannot see this: while the bar is up the wake target has
     /// given up its focusability, so a directional press consumed by the
-    /// focus engine moving between these two buttons never reaches the
+    /// focus engine moving between these buttons never reaches the
     /// screen's `onMoveCommand`. Without this the bar's four seconds ran out
     /// under the user's thumb.
     let onInteraction: () -> Void
     let onPanels: () -> Void
     let onSettings: () -> Void
+    let onFiestaBot: () -> Void
 
     /// Chrome that appears with nothing focused strands the user: the board
     /// itself has given up its focus target while this is on screen, so the
     /// first action has to take focus as the bar arrives.
-    @FocusState private var panelsFocused: Bool
+    private enum Action: Hashable { case panels, settings, bot }
+    @FocusState private var focusedAction: Action?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,12 +36,12 @@ struct ViewerOverlay: View {
         }
         .transition(.opacity)
         .onAppear {
-            panelsFocused = true
+            focusedAction = .panels
             // The bar is the whole of what changed on screen, and nothing
             // about a focus move says so out loud.
             Announce.screenChanged()
         }
-        .onChange(of: panelsFocused) { _, _ in onInteraction() }
+        .onChange(of: focusedAction) { _, _ in onInteraction() }
     }
 
     private var bar: some View {
@@ -53,8 +55,11 @@ struct ViewerOverlay: View {
             Spacer(minLength: 24)
 
             Button("Panels", action: onPanels)
-                .focused($panelsFocused)
+                .focused($focusedAction, equals: .panels)
             Button("Settings", action: onSettings)
+                .focused($focusedAction, equals: .settings)
+            Button("FiestaBot", action: onFiestaBot)
+                .focused($focusedAction, equals: .bot)
         }
         .buttonStyle(.bordered)
         // Hug the top: a taller bar hides more of the board than it needs to.

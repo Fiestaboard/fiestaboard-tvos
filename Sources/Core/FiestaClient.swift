@@ -8,7 +8,7 @@ import Foundation
 public final class FiestaClient: @unchecked Sendable {
 
     public let baseURL: URL
-    private let session: URLSession
+    let session: URLSession
     private let decoder = JSONDecoder()
 
     public init(baseURL: URL, session: URLSession? = nil) {
@@ -83,6 +83,16 @@ public final class FiestaClient: @unchecked Sendable {
         if let animationsEnabled { body["animations_enabled"] = animationsEnabled }
         if let renderStyle { body["render_style"] = renderStyle.rawValue }
 
+        return try await updatePanel(id: id, body: body)
+    }
+
+    func updatePanel(id: String, patch: PanelSettingsPatch) async throws -> PanelUpdateResult {
+        let result = try await updatePanel(id: id, body: patch.body)
+        try patch.verifyApplied(to: result.panel)
+        return result
+    }
+
+    private func updatePanel(id: String, body: [String: Any]) async throws -> PanelUpdateResult {
         let data = try await send(method: "PATCH", path: "/panels/\(id)", body: body)
         struct Envelope: Decodable {
             let panel: Panel
@@ -113,7 +123,7 @@ public final class FiestaClient: @unchecked Sendable {
 
     // MARK: Plumbing
 
-    private func url(for path: String) -> URL {
+    func url(for path: String) -> URL {
         // The Docker/nginx public port proxies /api/* to FastAPI after
         // stripping that prefix. Direct /auth/* URLs reach the web UI.
         URL(string: baseURL.absoluteString + "/api" + path) ?? baseURL
