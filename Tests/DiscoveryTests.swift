@@ -184,12 +184,8 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertFalse(session.configuration.httpShouldSetCookies)
     }
 
-    /// Both tests above assert the recipe. Neither asserts the probe eats it:
-    /// deleting `session: Self.sharedProbeSession` from the default probe in
-    /// `init` restores the cookie leak in full and leaves both of them green.
-    /// So this one asserts on the wire instead — a cookie in the shared jar
-    /// for the probed host, the *default* probe (no injection, the production
-    /// closure), and a loopback server that records what it is actually sent.
+    /// Assert on the wire that neither a new board client nor discovery sends
+    /// cookies from the legacy shared jar to a candidate host.
     ///
     /// It has to be a real socket. `StubURLProtocol` sits above the layer that
     /// attaches cookies — CFNetwork adds the header on its way to the HTTP
@@ -215,17 +211,25 @@ final class DiscoveryTests: XCTestCase {
         jar.setCookie(cookie)
         defer { jar.deleteCookie(cookie) }
 
-        _ = try? await FiestaClient(baseURL: server.url).authStatus()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = jar
+        let controlSession = URLSession(configuration: configuration)
+        defer { controlSession.invalidateAndCancel() }
+        _ = try? await FiestaClient(baseURL: server.url, session: controlSession).authStatus()
         let control = try XCTUnwrap(server.requests.first,
                                     "the control request never reached the fixture")
         XCTAssertTrue(control.contains("Cookie: session=live-board-session"),
                       "the jar no longer reaches this host, so this test can no longer "
                       + "detect the leak it exists for: \(control)")
 
+        _ = try await FiestaClient(baseURL: server.url).authStatus()
+        XCTAssertFalse((server.requests.last ?? "").lowercased().contains("\r\ncookie:"),
+                       "a new connection must not inherit the legacy shared session")
+
         let discovery = BonjourDiscovery()
         await discovery.confirm(url: server.url, name: "FiestaBoard")
 
-        XCTAssertEqual(server.requests.count, 2, "the probe never reached the fixture")
+        XCTAssertEqual(server.requests.count, 3, "the probe never reached the fixture")
         let probe = server.requests.last ?? ""
         XCTAssertTrue(probe.hasPrefix("GET /api/auth/status "),
                       "the probe should ask the public endpoint: \(probe)")

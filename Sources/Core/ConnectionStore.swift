@@ -78,6 +78,7 @@ public final class ConnectionStore: @unchecked Sendable {
 
     /// When the silent re-login may be trusted again, if it has just failed.
     private var silentLoginBlockedUntil: Date?
+    private var generation = UUID()
 
     private var storedSaved: SavedConnection?
     private var storedClient: FiestaClient?
@@ -107,8 +108,13 @@ public final class ConnectionStore: @unchecked Sendable {
     // MARK: Connecting
 
     public func connect(to host: URL, displayName: String) async throws -> ConnectResult {
+        let generation = lock.withLock { () -> UUID in
+            self.generation = UUID()
+            return self.generation
+        }
         let client = clientFactory(host)
         let status = try await client.authStatus()
+        try checkCurrent(generation)
 
         // Before any mutation, and before anything reaches disk. A board with
         // auth on and no account yet cannot be used from a TV at all, and we
@@ -119,7 +125,8 @@ public final class ConnectionStore: @unchecked Sendable {
         // one order that matters most.
         if status.setupRequired { return .needsSetup }
 
-        let connection = lock.withLock { () -> SavedConnection in
+        try lock.withLock {
+            try checkCurrentLocked(generation)
             let carriedRef = storedSaved?.host == host ? storedSaved?.defaultPanelRef : nil
             let updated = SavedConnection(host: host,
                                           displayName: displayName,
@@ -129,12 +136,12 @@ public final class ConnectionStore: @unchecked Sendable {
             // one board's password against another board's client.
             storedClient = client
             storedSaved = updated
-            return updated
+            silentLoginBlockedUntil = nil
+            writeToDisk(updated)
+            defaults.set(status.enabled && !status.authenticated, forKey: Keys.signedOut)
         }
-        writeToDisk(connection)
 
         if !status.enabled || status.authenticated {
-            defaults.set(false, forKey: Keys.signedOut)
             return .ready
         }
 
@@ -148,10 +155,14 @@ public final class ConnectionStore: @unchecked Sendable {
                 // used to return `.ready` with `signedOut` still true, so the
                 // next cold boot went to Sign In and asked for a password it
                 // had just used successfully.
-                defaults.set(false, forKey: Keys.signedOut)
-                lock.withLock { silentLoginBlockedUntil = nil }
+                try lock.withLock {
+                    try checkCurrentLocked(generation)
+                    defaults.set(false, forKey: Keys.signedOut)
+                    silentLoginBlockedUntil = nil
+                }
                 return .ready
             } catch {
+                try checkCurrent(generation)
                 return .needsSignIn
             }
         }
@@ -159,18 +170,19 @@ public final class ConnectionStore: @unchecked Sendable {
     }
 
     public func signIn(username: String, password: String) async throws {
-        let (maybeClient, maybeSaved) = lock.withLock { return (storedClient, storedSaved) }
+        let (maybeClient, maybeSaved, generation) = lock.withLock { (storedClient, storedSaved, self.generation) }
         guard let client = maybeClient, let saved = maybeSaved else {
             throw FiestaError.transport("not connected")
         }
         try await client.login(username: username, password: password)
-        defaults.set(false, forKey: Keys.signedOut)
-        // A credential the board just accepted makes the silent path
-        // trustworthy again.
-        lock.withLock { silentLoginBlockedUntil = nil }
-        // Only persist a credential the server just accepted.
-        try? credentials.save(StoredCredential(username: username, password: password),
-                              for: saved.host.absoluteString)
+        try lock.withLock {
+            try checkCurrentLocked(generation)
+            defaults.set(false, forKey: Keys.signedOut)
+            silentLoginBlockedUntil = nil
+            // A reply from before Sign Out or Forget must not restore secrets.
+            try? credentials.save(StoredCredential(username: username, password: password),
+                                  for: saved.host.absoluteString)
+        }
     }
 
     // MARK: Authorized operations
@@ -190,12 +202,26 @@ public final class ConnectionStore: @unchecked Sendable {
         // One trip through the lock, up front. Everything below suspends, and
         // the client and host we are acting on must be the pair that was
         // current when the call started.
-        let (maybeClient, maybeHost) = lock.withLock { return (storedClient, storedSaved?.host) }
+        let (maybeClient, maybeHost, generation) = try lock.withLock {
+            guard !isSignedOut else { throw FiestaError.unauthorized }
+            return (storedClient, storedSaved?.host, self.generation)
+        }
         guard let client = maybeClient, let host = maybeHost else {
             throw FiestaError.transport("not connected")
         }
+        func perform() async throws -> T {
+            try checkCurrent(generation)
+            do {
+                let result = try await operation(client)
+                try checkCurrent(generation)
+                return result
+            } catch {
+                try checkCurrent(generation)
+                throw error
+            }
+        }
         do {
-            return try await operation(client)
+            return try await perform()
         } catch FiestaError.unauthorized {
             guard let stored = credentials.load(for: host.absoluteString),
                   !silentLoginIsBlocked else {
@@ -204,13 +230,23 @@ public final class ConnectionStore: @unchecked Sendable {
             do {
                 try await client.login(username: stored.username, password: stored.password)
             } catch {
-                lock.withLock {
-                    silentLoginBlockedUntil = clock().addingTimeInterval(Self.rejectedCredentialCooldown)
+                try checkCurrent(generation)
+                // An outage or cancellation says nothing about the password.
+                // Blocking it would turn the next poll into a false sign-in prompt.
+                if let failure = error as? FiestaError,
+                   failure == .unauthorized || failure == .http(429) {
+                    try lock.withLock {
+                        try checkCurrentLocked(generation)
+                        silentLoginBlockedUntil = clock().addingTimeInterval(Self.rejectedCredentialCooldown)
+                    }
                 }
                 throw error
             }
-            lock.withLock { silentLoginBlockedUntil = nil }
-            return try await operation(client)
+            try lock.withLock {
+                try checkCurrentLocked(generation)
+                silentLoginBlockedUntil = nil
+            }
+            return try await perform()
         }
     }
 
@@ -226,42 +262,42 @@ public final class ConnectionStore: @unchecked Sendable {
     // MARK: Preferences
 
     public func setDefaultPanel(ref: String?) {
-        let updated = lock.withLock { () -> SavedConnection? in
-            guard var connection = storedSaved else { return nil }
+        lock.withLock {
+            guard var connection = storedSaved else { return }
             connection.defaultPanelRef = ref
             storedSaved = connection
-            return connection
+            writeToDisk(connection)
         }
-        guard let updated else { return }
-        writeToDisk(updated)
     }
 
     public func signOut() {
-        guard let saved else { return }
-        // Per-host, unlike `forget()`: signing out of this board is not a
-        // reason to drop a credential for a different one.
-        try? credentials.delete(for: saved.host.absoluteString)
-        clearCookies(for: saved.host)
-        defaults.set(true, forKey: Keys.signedOut)
+        lock.withLock {
+            generation = UUID()
+            guard let saved = storedSaved else { return }
+            // Per-host, unlike forget(): other boards retain their credentials.
+            try? credentials.delete(for: saved.host.absoluteString)
+            clearCookies(for: saved.host)
+            // Discard the private cookie jar, including any response that
+            // arrives after this point. Keep a fresh client for manual sign-in.
+            storedClient = clientFactory(saved.host)
+            defaults.set(true, forKey: Keys.signedOut)
+        }
     }
 
     public func forget() {
-        let previous = lock.withLock { () -> SavedConnection? in
+        lock.withLock {
+            generation = UUID()
             let previous = storedSaved
             storedSaved = nil
             storedClient = nil
             silentLoginBlockedUntil = nil
-            return previous
+            if let previous { clearCookies(for: previous.host) }
+            // A board may be remembered under both its Bonjour name and IP.
+            // Forget must remove credentials under either spelling.
+            try? credentials.deleteAll()
+            defaults.removeObject(forKey: Keys.connection)
+            defaults.removeObject(forKey: Keys.signedOut)
         }
-        if let previous { clearCookies(for: previous.host) }
-        // Every credential, not just this host's. The same board is routinely
-        // remembered under two spellings — Bonjour gives
-        // `http://kitchen.local:4420`, typing the address gives
-        // `http://192.168.1.50:4420` — so deleting by host left the other
-        // spelling's password sitting in the keychain after "Forget".
-        try? credentials.deleteAll()
-        defaults.removeObject(forKey: Keys.connection)
-        defaults.removeObject(forKey: Keys.signedOut)
     }
 
     private func clearCookies(for host: URL) {
@@ -274,5 +310,13 @@ public final class ConnectionStore: @unchecked Sendable {
         if let data = try? JSONEncoder().encode(connection) {
             defaults.set(data, forKey: Keys.connection)
         }
+    }
+
+    private func checkCurrent(_ generation: UUID) throws {
+        try lock.withLock { try checkCurrentLocked(generation) }
+    }
+
+    private func checkCurrentLocked(_ generation: UUID) throws {
+        guard generation == self.generation, !Task.isCancelled else { throw CancellationError() }
     }
 }

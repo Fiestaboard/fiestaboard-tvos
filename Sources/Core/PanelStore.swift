@@ -15,7 +15,7 @@ public enum ConnectionState: Equatable, Sendable {
 }
 
 /// Everything the viewer needs to draw, in one value.
-public struct PanelSnapshot: Sendable {
+public struct PanelSnapshot: Equatable, Sendable {
     public let panel: Panel?
     public let cells: [[BoardCell]]
     public let rows: Int
@@ -135,6 +135,7 @@ public final class PanelStore: @unchecked Sendable {
     /// that cannot `await`.
     private let lock = NSLock()
     private var task: Task<Void, Never>?
+    private var generation = UUID()
 
     public init(runner: AuthorizedRunner,
                 ref: String,
@@ -166,25 +167,30 @@ public final class PanelStore: @unchecked Sendable {
     }
 
     public func snapshots() -> AsyncStream<PanelSnapshot> {
-        // A second call must not leave the first loop polling the board with
-        // nobody left to read it.
-        stop()
-        return AsyncStream { continuation in
-            continuation.onTermination = { [weak self] _ in self?.stop() }
-            // Weak, so the task does not keep the store alive: with a strong
-            // capture `deinit` could never run and was dead code.
-            let task = Task { [weak self] in
-                await self?.run(into: continuation)
-                // The loop ending ends the stream — whether it ended because
-                // `stop()` cancelled it or because the store went away.
-                continuation.finish()
+        let generation = UUID()
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
+            continuation.onTermination = { [weak self] _ in self?.stop(generation: generation) }
+            // Copy the polling inputs. Even a weak self capture would retain
+            // the store for the entire awaited run and prevent deinit.
+            let previous = lock.withLock { () -> Task<Void, Never>? in
+                let previous = task
+                self.generation = generation
+                task = Task { [runner, ref, frameInterval, configInterval, clock, signage] in
+                    await Self.run(into: continuation, runner: runner, ref: ref,
+                                   frameInterval: frameInterval, configInterval: configInterval,
+                                   clock: clock, signage: signage)
+                    continuation.finish()
+                }
+                return previous
             }
-            lock.withLock { self.task = task }
+            previous?.cancel()
         }
     }
 
-    private func run(into continuation: AsyncStream<PanelSnapshot>.Continuation) async {
-        let ref = self.ref
+    private static func run(into continuation: AsyncStream<PanelSnapshot>.Continuation,
+                            runner: AuthorizedRunner, ref: String,
+                            frameInterval: TimeInterval, configInterval: TimeInterval,
+                            clock: () -> Date, signage: SignageSettings) async {
         var sinceConfig = configInterval  // fetch config on the first tick
         var connection = ConnectionState.connecting
         var deleted = false
@@ -216,7 +222,8 @@ public final class PanelStore: @unchecked Sendable {
                 }
             }
 
-            if !deleted {
+            guard !Task.isCancelled else { break }
+            if !deleted && connection != .unauthorized {
                 do {
                     let frame = try await runner.authorized { try await $0.frame(ref: ref) }
                     let glyph = panel?.effectiveCode62 ?? .degree
@@ -251,6 +258,7 @@ public final class PanelStore: @unchecked Sendable {
             // This tick is also the drift's heartbeat: at a couple of
             // points a minute, a step every frame interval is far below
             // anything the eye resolves, so it needs no animation of its own.
+            guard !Task.isCancelled else { break }
             let now = clock()
             let dimmed = panel.map {
                 AutoDimWindow.isDimmed($0.autoDim, at: now, override: signage.autoDimOverride)
@@ -260,16 +268,23 @@ public final class PanelStore: @unchecked Sendable {
                                              drift: signage.drift(at: now),
                                              message: message, richCells: richCells))
 
+            if connection == .unauthorized { break }
+
             try? await Task.sleep(nanoseconds: UInt64(frameInterval * 1_000_000_000))
             sinceConfig += frameInterval
         }
     }
 
-    public func stop() {
+    public func stop() { stop(generation: nil) }
+
+    private func stop(generation: UUID?) {
         // Taken out of the lock and cancelled outside it: cancelling can end
         // the loop, which finishes the stream, which calls `onTermination`,
         // which calls straight back into here.
         let running = lock.withLock { () -> Task<Void, Never>? in
+            // An older stream can finish after its replacement has started.
+            // Its termination owns only its own polling task.
+            if let generation, generation != self.generation { return nil }
             let running = task
             task = nil
             return running

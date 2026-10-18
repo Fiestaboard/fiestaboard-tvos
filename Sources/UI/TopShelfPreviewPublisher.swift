@@ -73,7 +73,7 @@ enum TopShelfPreviewPublisher {
         }
 
         do {
-            try store.replace(snapshots)
+            guard try store.replace(snapshots) else { return }
         } catch {
             log.error("Publishing \(snapshots.count) Top Shelf item(s) failed: \(error.localizedDescription, privacy: .public)")
             return

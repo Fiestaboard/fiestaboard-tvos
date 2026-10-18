@@ -90,30 +90,20 @@ public enum ManualAddress {
         while text.hasSuffix("/") { text.removeLast() }
         guard !text.isEmpty else { return nil }
 
-        if hasScheme {
-            guard var components = URLComponents(string: text),
-                  !(components.host ?? "").isEmpty else { return nil }
-            // A browser address bar gives "http://192.168.0.50", which URL
-            // reads as port 80 — the board answers on 4420, so the connect
-            // failed with "couldn't reach", blaming the network for a port
-            // the user was never asked for. Only the bare http host gets the
-            // default: an https URL, an explicit port, or a reverse-proxy
-            // subpath all mean the address says what it means.
-            if components.scheme?.lowercased() == "http",
-               components.port == nil,
-               components.path.isEmpty {
-                components.port = DiscoveryFilter.defaultPort
-            }
-            return components.url
+        guard hasScheme || !text.contains("://"),
+              var components = URLComponents(string: hasScheme ? text : "http://\(text)"),
+              let host = components.host, !host.isEmpty,
+              host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+              components.user == nil, components.password == nil,
+              components.query == nil, components.fragment == nil,
+              components.port.map({ (1...65535).contains($0) }) ?? true else { return nil }
+        // HTTPS, an explicit port, or a reverse-proxy subpath keeps its port.
+        // A bare HTTP host (including bracketed IPv6) uses the board's port.
+        if components.scheme?.lowercased() == "http",
+           components.port == nil,
+           components.path.isEmpty {
+            components.port = DiscoveryFilter.defaultPort
         }
-
-        // No scheme. Add the default port unless one was typed, so the
-        // common case is four numbers and nothing else.
-        let hasPort = text.split(separator: "/").first.map { $0.contains(":") } ?? false
-        let hasPath = text.contains("/")
-        if hasPort || hasPath {
-            return URL(string: "http://\(text)")
-        }
-        return URL(string: "http://\(text):\(DiscoveryFilter.defaultPort)")
+        return components.url
     }
 }

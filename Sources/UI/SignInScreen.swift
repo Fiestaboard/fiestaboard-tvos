@@ -10,10 +10,14 @@ final class SignInModel {
     private(set) var isSubmitting = false
 
     private let app: AppModel
+    private var submissionGeneration = UUID()
 
     init(app: AppModel) { self.app = app }
 
-    func useAnotherBoard() { app.disconnect() }
+    func useAnotherBoard() {
+        submissionGeneration = UUID()
+        app.disconnect()
+    }
 
     /// What Menu does here.
     ///
@@ -23,7 +27,10 @@ final class SignInModel {
     /// is the screen behind it in both cases. It deliberately does *not*
     /// forget the board the way "Use another board" does: a Menu press is a
     /// reflex, and losing the saved connection to one would be a surprise.
-    func back() { app.route = .connect }
+    func back() {
+        submissionGeneration = UUID()
+        app.route = .connect
+    }
 
     // MARK: Editing
 
@@ -77,18 +84,20 @@ final class SignInModel {
         // Otherwise a sign-in against a board that has gone quiet is up to
         // twenty seconds of a screen that never acknowledged the press.
         Announce.say("Signing in…")
+        let generation = submissionGeneration
         defer { isSubmitting = false }
         do {
             try await app.connection.signIn(username: name, password: password)
+            guard generation == submissionGeneration, !Task.isCancelled else { return }
             app.route = .panels
-        } catch FiestaError.unauthorized {
-            fail("That username or password didn't work.")
-        } catch let error as FiestaError {
-            // A lockout in particular must not read as a wrong password —
-            // the board is refusing to even consider one for a minute.
-            fail(error.userMessage)
         } catch {
-            fail(FiestaError.transport("\(error)").userMessage)
+            guard generation == submissionGeneration, !Task.isCancelled,
+                  !(error is CancellationError) else { return }
+            if let error = error as? FiestaError {
+                fail(error == .unauthorized ? "That username or password didn't work." : error.userMessage)
+            } else {
+                fail(FiestaError.transport("\(error)").userMessage)
+            }
         }
     }
 

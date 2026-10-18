@@ -39,6 +39,14 @@ enum PanelPreviewState: Equatable, Sendable {
     case unavailable
 }
 
+/// In-memory only, and scoped to the exact connection that fetched it.
+/// Returning from a viewer can show the last cards while refreshing them.
+struct PanelBrowserCache {
+    let client: FiestaClient
+    let panels: [Panel]
+    let previews: [String: PanelPreviewState]
+}
+
 @MainActor
 @Observable
 final class PanelsModel {
@@ -57,8 +65,17 @@ final class PanelsModel {
     @ObservationIgnored private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var previewGeneration = UUID()
     @ObservationIgnored private var previewClient: FiestaClient?
+    @ObservationIgnored private var loadGeneration = UUID()
 
-    init(app: AppModel) { self.app = app }
+    init(app: AppModel) {
+        self.app = app
+        if let cached = app.panelBrowserCache, cached.client === app.connection.client,
+           !app.connection.isSignedOut {
+            panels = cached.panels
+            previews = cached.previews
+            previewClient = cached.client
+        }
+    }
 
     /// The picture to draw for `panel`, if any.
     func previewState(for panel: Panel) -> PanelPreviewState {
@@ -75,21 +92,18 @@ final class PanelsModel {
     func load() async {
         guard !Task.isCancelled else { return }
         let generation = app.beginTopShelfUpdate()
+        let load = UUID()
+        loadGeneration = load
         let client = app.connection.client
         stopPreviews()
         app.activePanelsModel = self
         isLoading = true
-        defer { isLoading = false }
+        defer { if loadGeneration == load { isLoading = false } }
         do {
             let loaded = try await app.connection.authorized { try await $0.panels() }
             guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
-            let retainedIDs = Set(loaded.filter { next in
-                panels.contains { $0.id == next.id && $0.boardId == next.boardId }
-            }.map(\.id))
-            previews = previewClient === client ? previews.filter { retainedIDs.contains($0.key) } : [:]
-            previewClient = client
+            reconcile(loaded, client: client)
             errorMessage = nil
-            panels = loaded
             // This is the app's only fetch of the panel list, so it is also
             // the app's only chance to keep Home's carousel honest. It used
             // to be published from the viewer-launch path alone, which meant
@@ -98,6 +112,7 @@ final class PanelsModel {
             // The list is on screen the moment it arrives; the pictures
             // catch up behind it.
             startPreviews(for: loaded)
+            app.rememberPanelBrowser(panels: loaded, previews: previews, client: client)
             app.publishTopShelf(panels: loaded, previews: previews)
         } catch FiestaError.unauthorized {
             guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
@@ -154,8 +169,10 @@ final class PanelsModel {
         let generation = app.topShelfGeneration
         let run = previewGeneration
         guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
-        if previewClient !== client { previews = [:]; previewClient = client }
+        reconcile(panels, client: client)
+        seedPreviews(for: panels)
         guard !targets.isEmpty else {
+            app.rememberPanelBrowser(panels: panels, previews: [:], client: client)
             app.publishTopShelf(panels: panels)
             return
         }
@@ -173,6 +190,7 @@ final class PanelsModel {
                     continue
                 }
                 previews[result.0] = result.1
+                app.rememberPanelBrowser(panels: panels, previews: previews, client: client)
                 app.publishTopShelf(panels: panels, previews: previews)
                 if let next = pending.next() {
                     group.addTask { await Self.fetchPreview(for: next, connection: connection) }
@@ -196,7 +214,20 @@ final class PanelsModel {
                 seeded[panel.id] = .loading
             }
         }
-        previews = seeded
+        if previews != seeded { previews = seeded }
+    }
+
+    /// A panel can be reassigned to a different board while this TV is away.
+    /// Reuse only frames belonging to the same panel/board pair, including
+    /// when the refresh was launched from the viewer instead of the grid.
+    private func reconcile(_ loaded: [Panel], client: FiestaClient?) {
+        let previousBoards = Dictionary(panels.map { ($0.id, $0.boardId) },
+                                        uniquingKeysWith: { _, last in last })
+        let retainedIDs = Set(loaded.filter { previousBoards[$0.id] == $0.boardId }.map(\.id))
+        let retained = previewClient === client ? previews.filter { retainedIDs.contains($0.key) } : [:]
+        if previews != retained { previews = retained }
+        previewClient = client
+        if panels != loaded { panels = loaded }
     }
 
     /// Off the main actor: this is a network round trip per panel.

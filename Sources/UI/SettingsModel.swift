@@ -97,7 +97,7 @@ final class SettingsModel {
     }
 
     private var customDiagonalIsValid: Bool {
-        customDiagonalText.isEmpty || (Double(customDiagonalText).map { $0 > 0 } ?? false)
+        customDiagonalText.isEmpty || (Double(customDiagonalText).map { (3...200).contains($0) } ?? false)
     }
 
     /// The grid `resizeDiagonal` would produce, computed locally so the
@@ -231,7 +231,7 @@ final class SettingsModel {
     }
 
     func setAnimationEnabled(_ enabled: Bool, for panel: Panel) async {
-        guard current(panel).renderStyle == .splitFlap, pendingPanelWrites.insert(panel.id).inserted else { return }
+        guard pendingPanelWrites.insert(panel.id).inserted else { return }
         defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
         pendingAnimation[panel.id] = enabled
@@ -339,7 +339,7 @@ final class SettingsModel {
 
     func setCustomDiagonal(_ raw: String) {
         customDiagonalText = raw
-        if let value = Double(raw), value > 0 { resizeDiagonal = value }
+        if let value = Double(raw), (3...200).contains(value) { resizeDiagonal = value }
     }
 
     func calibration(for panel: Panel) -> Double {
@@ -380,7 +380,7 @@ final class SettingsModel {
         errorMessage = nil
         warningMessage = nil
         guard customDiagonalIsValid else {
-            report(error: "Enter a positive screen size in inches.")
+            report(error: "Enter a screen size from 3 to 200 inches.")
             return
         }
         do {

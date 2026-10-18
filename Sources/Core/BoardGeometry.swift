@@ -79,10 +79,16 @@ public enum BoardGeometry {
     public static func screenDimensionsIn(diagonal: Double,
                                           aspectW: Double = 16,
                                           aspectH: Double = 9) throws -> (width: Double, height: Double) {
-        guard diagonal > 0 else { throw Error.nonPositive("diagonal \(diagonal)") }
-        guard aspectW > 0, aspectH > 0 else { throw Error.nonPositive("aspect \(aspectW):\(aspectH)") }
-        let hyp = hypot(aspectW, aspectH)
-        return (diagonal * aspectW / hyp, diagonal * aspectH / hyp)
+        guard diagonal.isFinite, diagonal > 0 else { throw Error.nonPositive("diagonal \(diagonal)") }
+        guard aspectW.isFinite, aspectH.isFinite, aspectW > 0, aspectH > 0 else {
+            throw Error.nonPositive("aspect \(aspectW):\(aspectH)")
+        }
+        // Normalize before multiplying so finite, large inputs stay finite.
+        let largest = max(aspectW, aspectH)
+        let w = aspectW / largest
+        let h = aspectH / largest
+        let hyp = hypot(w, h)
+        return (diagonal * (w / hyp), diagonal * (h / hyp))
     }
 
     /// The largest true-scale grid of Note blocks that fits the screen.
@@ -94,9 +100,8 @@ public enum BoardGeometry {
                                           aspectW: Double = 16,
                                           aspectH: Double = 9) throws -> (notesWide: Int, notesTall: Int) {
         let (widthIn, heightIn) = try screenDimensionsIn(diagonal: diagonal, aspectW: aspectW, aspectH: aspectH)
-        func clamp(_ blocks: Int) -> Int { max(1, min(maxNotesPerAxis, blocks)) }
-        return (clamp(Int(floor(widthIn / blockWidthIn))),
-                clamp(Int(floor(heightIn / blockHeightIn))))
+        func clamp(_ blocks: Double) -> Int { Int(max(1, min(Double(maxNotesPerAxis), floor(blocks)))) }
+        return (clamp(widthIn / blockWidthIn), clamp(heightIn / blockHeightIn))
     }
 
     /// Scale for a borderless auto-fit grid: flaps at true physical size,

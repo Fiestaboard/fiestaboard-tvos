@@ -73,10 +73,16 @@ public struct TopShelfSnapshotStore {
     /// is halfway through — while changed artwork gets a URL Home has never
     /// seen and must fetch. It also means one poster shared by every panel
     /// is written once rather than once per panel.
-    public func replace(_ previews: [Preview]) throws {
+    /// Returns whether Home needs to reload: changed metadata or restored files.
+    @discardableResult
+    public func replace(_ previews: [Preview]) throws -> Bool {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let previous = items()
+        let previousManifest = (try? Data(contentsOf: manifestURL)).flatMap {
+            try? JSONDecoder().decode([Item].self, from: $0)
+        }
+        let previous = previousManifest ?? []
         var current: [Item] = []
+        var changed = false
         for preview in previews {
             let digest = SHA256.hash(data: preview.imageData)
                 .map { String(format: "%02x", $0) }.joined()
@@ -84,14 +90,19 @@ public struct TopShelfSnapshotStore {
             let url = directory.appendingPathComponent(filename)
             if !FileManager.default.fileExists(atPath: url.path) {
                 try preview.imageData.write(to: url, options: .atomic)
+                changed = true
             }
             current.append(Item(panelID: preview.panelID, name: preview.name, imageFile: filename))
         }
-        try JSONEncoder().encode(current).write(to: manifestURL, options: .atomic)
+        if current != previousManifest {
+            try JSONEncoder().encode(current).write(to: manifestURL, options: .atomic)
+            changed = true
+        }
         let currentFiles = Set(current.map(\.imageFile))
         for item in previous where !currentFiles.contains(item.imageFile) {
             try? FileManager.default.removeItem(at: imageURL(for: item))
         }
+        return changed
     }
 
     public func clear() throws { try replace([]) }

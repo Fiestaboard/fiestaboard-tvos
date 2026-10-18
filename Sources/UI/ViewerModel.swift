@@ -30,6 +30,18 @@ final class ViewerModel {
     @ObservationIgnored private var store: PanelStore?
     @ObservationIgnored private var pump: Task<Void, Never>?
     @ObservationIgnored private var overlayTimer: Task<Void, Never>?
+    @ObservationIgnored private var preparedLayout: (key: LayoutKey, layout: BoardLayout)?
+
+    private struct LayoutKey: Equatable {
+        let rows: Int
+        let cols: Int
+        let cells: [[BoardCell]]
+        let screen: CGSize
+        let sizing: BoardSizing
+        let diagonal: Double
+        let calibration: Double
+        let pitch: Double
+    }
 
     /// How long the overlay stays up after a button press.
     static let overlayTimeout: TimeInterval = 4
@@ -78,8 +90,10 @@ final class ViewerModel {
     /// Internal rather than private so a test can drive it: both branches are
     /// about what the *next* launch does, which no render can show.
     func apply(_ snapshot: PanelSnapshot) {
-        self.snapshot = snapshot
-        if snapshot.panel?.renderStyle == .ledMatrix { resizeOfferVisible = false }
+        // The server routinely repeats the same frame. Observation otherwise
+        // invalidates the entire viewer, including its canvases, every poll.
+        if self.snapshot != snapshot { self.snapshot = snapshot }
+        if snapshot.panel?.renderStyle == .ledMatrix, resizeOfferVisible { resizeOfferVisible = false }
 
         // A panel deleted on the server must stop being the panel this TV
         // opens into. Nothing else cleared the default, so the card explaining
@@ -162,12 +176,19 @@ final class ViewerModel {
         guard let panel = snapshot.panel, snapshot.rows > 0, snapshot.cols > 0 else {
             throw BoardGeometry.Error.nonPositive("no panel yet")
         }
-        return try BoardLayout.fitting(
+        let key = LayoutKey(rows: snapshot.rows, cols: snapshot.cols, cells: snapshot.cells,
+                            screen: screen, sizing: sizing, diagonal: panel.screenDiagonalInches,
+                            calibration: panel.calibrationScale,
+                            pitch: BoardGeometry.colPitchIn(deviceType: panel.deviceType))
+        if let preparedLayout, preparedLayout.key == key { return preparedLayout.layout }
+        let layout = try BoardLayout.fitting(
             rows: snapshot.rows, cols: snapshot.cols, cells: snapshot.cells,
             in: screen, mode: sizing,
             diagonalInches: panel.screenDiagonalInches,
             calibration: panel.calibrationScale,
-            colPitchIn: BoardGeometry.colPitchIn(deviceType: panel.deviceType))
+            colPitchIn: key.pitch)
+        preparedLayout = (key, layout)
+        return layout
     }
 
     /// Whether the panel's grid shape suits this screen closely enough that

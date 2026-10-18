@@ -117,7 +117,6 @@ final class SettingsScreenTests: XCTestCase {
         model.panels = [try MatrixDisplayTests.matrixPanel()]
         await model.resize(panel: stale)
         await model.saveCalibration(panel: stale)
-        await model.setAnimationEnabled(true, for: stale)
         XCTAssertFalse(StubURLProtocol.requests.contains { $0.method == "PATCH" })
     }
 

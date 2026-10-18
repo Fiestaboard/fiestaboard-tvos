@@ -89,14 +89,10 @@ public final class BonjourDiscovery: BoardDiscovering, @unchecked Sendable {
 
     /// The probe must be anonymous, and that is not a preference.
     ///
-    /// `FiestaClient`'s own default configuration uses `HTTPCookieStorage.shared`
-    /// — the jar holding the live board session. Cookies are scoped by domain
-    /// and path but never by port, so a probe built on that configuration hands
-    /// the board's session cookie to anything that answers on the same
-    /// hostname: a second service co-resident on the board's own host, or any
-    /// mDNS responder that claims `fiestapi.local`, which is probed on every
-    /// visit to the Connect screen with no user action at all. `/auth/status`
-    /// is public, so an anonymous session costs the probe nothing.
+    /// The shared probe session must neither send nor accept cookies from
+    /// discovered hosts. Cookies are scoped by domain and path, never port;
+    /// another service on the host must not receive a board session.
+    /// `/auth/status` is public, so anonymous discovery costs nothing.
     static func probeConfiguration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil

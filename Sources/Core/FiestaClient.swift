@@ -21,8 +21,10 @@ public final class FiestaClient: @unchecked Sendable {
         if let session {
             self.session = session
         } else {
-            let config = URLSessionConfiguration.default
-            config.httpCookieStorage = HTTPCookieStorage.shared
+            // Cookies belong to this connection. A late login response from
+            // a forgotten client must never authenticate its replacement.
+            // Keychain credentials provide recovery after an app restart.
+            let config = URLSessionConfiguration.ephemeral
             config.httpShouldSetCookies = true
             config.requestCachePolicy = .reloadIgnoringLocalCacheData
             // 10s, not URLSession's default 60. The board is a Raspberry Pi

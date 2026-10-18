@@ -42,6 +42,7 @@ public final class AppModel {
     private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var panelReloadTask: Task<Void, Never>?
     @ObservationIgnored weak var activePanelsModel: PanelsModel?
+    @ObservationIgnored var panelBrowserCache: PanelBrowserCache?
     @ObservationIgnored private(set) var topShelfGeneration = UUID()
     @ObservationIgnored private let topShelfImages = TopShelfPreviewPublisher.Cache()
     @ObservationIgnored private var topShelfClient: FiestaClient?
@@ -193,6 +194,7 @@ public final class AppModel {
         panelReloadTask?.cancel()
         panelReloadTask = nil
         activePanelsModel = nil
+        panelBrowserCache = nil
         topShelfImages.images.removeAll()
         topShelfClient = nil
         TopShelfPreviewPublisher.clear(store: topShelfStore)
@@ -211,6 +213,11 @@ public final class AppModel {
     func isCurrentTopShelfUpdate(_ generation: UUID, client: FiestaClient?) -> Bool {
         !Task.isCancelled && generation == topShelfGeneration && client != nil
             && connection.client === client && connection.saved != nil && !connection.isSignedOut
+    }
+
+    func rememberPanelBrowser(panels: [Panel], previews: [String: PanelPreviewState], client: FiestaClient?) {
+        guard let client, connection.client === client, !connection.isSignedOut else { return }
+        panelBrowserCache = PanelBrowserCache(client: client, panels: panels, previews: previews)
     }
 
     /// Publish the carousel from a panel list the caller already holds.
