@@ -113,6 +113,58 @@ final class FiestaBotModelTests: XCTestCase {
         XCTAssertFalse(bot.wireMessages().contains { $0.toolCallId == "q1" })
     }
 
+    func testDisplayResultsOpenOnlyPanelsKnownToThisConnection() throws {
+        let bot = model()
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        bot.panels = [panel]
+        let tool = BotTool(id: "list", name: "list_panels", args: .object([:]), title: "Panels", phase: "ok",
+                           result: .object(["panels": .array([.object(["id": .string(panel.id)]), .object(["id": .string("unknown")])])]))
+        XCTAssertEqual(bot.panelsForTool(tool).map(\.id), [panel.id])
+    }
+
+    private func modelForPageSend() throws -> FiestaBotModel {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let saved = SavedConnection(host: URL(string: "http://board.local")!, displayName: "Board")
+        defaults.set(try JSONEncoder().encode(saved), forKey: "fiestaboard.connection")
+        let connection = ConnectionStore(defaults: defaults, credentials: InMemoryCredentialStore(),
+            clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        let bot = FiestaBotModel(app: AppModel(connection: connection))
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        bot.panels = [panel]
+        bot.selectedPanelID = panel.id
+        bot.pages = [try JSONDecoder().decode(ChatPage.self, from: Data(#"{"id":"pageB","name":"Weather","device_type":"panel","grid_rows":12,"grid_cols":30}"#.utf8))]
+        bot.currentPage = .object(["id": .string("pageA"), "name": .string("Welcome")])
+        return bot
+    }
+
+    func testShowingAnotherPageUpdatesTheNextChatContext() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        StubURLProtocol.enqueue(.json(#"{"page_id":"pageB","message":"WEATHER","sent_to_board":true,"paused":false}"#), for: "/pages/pageB/send")
+        await bot.showPage("pageB")
+        XCTAssertEqual(bot.currentPage?["id"]?.stringValue, "pageB")
+        XCTAssertEqual(bot.currentPage?["name"]?.stringValue, "Weather")
+        XCTAssertNil(bot.currentPage?["template"])
+        XCTAssertNil(bot.errorMessage)
+    }
+
+    func testFailedOrPausedPageSendKeepsThePreviousChatContext() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        let previous = bot.currentPage
+        for response in [
+            StubURLProtocol.Stub.json(#"{"page_id":"pageB","message":"WEATHER","sent_to_board":false,"paused":true}"#),
+            StubURLProtocol.Stub.json(#"{"detail":"Failed to send to board"}"#, status: 500)
+        ] {
+            StubURLProtocol.enqueue(response, for: "/pages/pageB/send")
+            await bot.showPage("pageB")
+            XCTAssertEqual(bot.currentPage, previous)
+            XCTAssertNotNil(bot.errorMessage)
+        }
+    }
+
     func testOpeningBotAndReturningPreservesViewerOrigin() {
         let app = AppModel(connection: ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
                                                        credentials: InMemoryCredentialStore()))

@@ -82,9 +82,29 @@ struct MatrixCanvas: View {
             }
         }
 
+        // A tall matrix can leave hundreds of thousands of unlit LEDs
+        // outside its source rectangle. Repeat one LED texture there instead
+        // of submitting one path per dot. Source pixels retain the original
+        // vector painter, including their subpixel edges and exact colors.
+        let sourceBounds = CGRect(origin: origin,
+                                  size: CGSize(width: CGFloat(raster.width) * pitch,
+                                               height: CGFloat(raster.height) * pitch))
+        let useTiledSurround = presentation.sizing == .fillTV && !lightsLens
+            && layout.rows.count * layout.columns.count - raster.width * raster.height > 65_536
+        let tile = useTiledSurround ? offFieldTile(display: display, pitch: pitch, origin: origin,
+                                                       scale: context.environment.displayScale) : nil
+        let tiledSurround = tile != nil
+        if let tile {
+            var surround = context
+            surround.clip(to: Path(sourceBounds), options: .inverse)
+            surround.fill(Path(bounds), with: .tiledImage(Image(decorative: tile.image, scale: tile.scale).interpolation(.none),
+                                                          origin: tile.origin))
+        }
+        let paintRows = tiledSurround ? 0..<raster.height : layout.rows
+        let paintColumns = tiledSurround ? 0..<raster.width : layout.columns
         let lens = Self.lens
-        for row in layout.rows {
-            for col in layout.columns {
+        for row in paintRows {
+            for col in paintColumns {
                 let rgb = row >= 0 && row < raster.height && col >= 0 && col < raster.width
                     ? raster.pixels[row * raster.width + col] : 0
                 let rect = rect(row, col)
@@ -98,6 +118,48 @@ struct MatrixCanvas: View {
                 }
             }
         }
+    }
+
+    /// Repeat a block whose edges land on physical pixels. A one-LED tile
+    /// minified to fractional pitch averages away the visible dot pattern.
+    /// Baking the drift's fractional phase into this block avoids that blur.
+    private static func offFieldTile(display: MatrixDisplay, pitch: CGFloat, origin: CGPoint,
+                                     scale: CGFloat) -> (image: CGImage, origin: CGPoint, scale: CGFloat)? {
+        let scale = max(1, scale)
+        let physicalPitch = pitch * scale
+        guard let count = (1...128).first(where: {
+            abs(physicalPitch * CGFloat($0) - (physicalPitch * CGFloat($0)).rounded()) < 0.000001
+        }) else { return nil }
+        let side = Int((physicalPitch * CGFloat(count)).rounded())
+        guard side > 0, side <= 512,
+              let bitmap = CGContext(data: nil, width: side, height: side,
+                bitsPerComponent: 8, bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        func setColor(_ rgb: UInt32) {
+            bitmap.setFillColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                                green: CGFloat((rgb >> 8) & 255) / 255,
+                                blue: CGFloat(rgb & 255) / 255, alpha: 1)
+        }
+        setColor(MatrixRaster.hex(display.appearance?.substrateColor) ?? 0)
+        bitmap.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        bitmap.translateBy(x: 0, y: CGFloat(side))
+        bitmap.scaleBy(x: 1, y: -1)
+        let phaseX = origin.x * scale - floor(origin.x * scale)
+        let phaseY = origin.y * scale - floor(origin.y * scale)
+        let dot = physicalPitch * display.dotRatio
+        let inset = (physicalPitch - dot) / 2
+        setColor(MatrixRaster.hex(display.appearance?.offColor) ?? 0x1a1a1a)
+        for row in -1...count {
+            for col in -1...count {
+                let rect = CGRect(x: CGFloat(col) * physicalPitch + phaseX + inset,
+                                  y: CGFloat(row) * physicalPitch + phaseY + inset, width: dot, height: dot)
+                if display.appearance?.pixelShape == "round" { bitmap.fillEllipse(in: rect) }
+                else { bitmap.fill(rect) }
+            }
+        }
+        guard let image = bitmap.makeImage() else { return nil }
+        return (image, CGPoint(x: floor(origin.x * scale) / scale,
+                               y: floor(origin.y * scale) / scale), scale)
     }
 
     private static func color(_ rgb: UInt32) -> Color {

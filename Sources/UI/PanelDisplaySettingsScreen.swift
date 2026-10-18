@@ -16,13 +16,6 @@ struct PanelDisplaySettingsScreen: View {
         List {
             Section {
                 Text("Changes apply to every viewer of this panel. Save after editing.")
-                if let error = model.errorMessage {
-                    Text(error).foregroundStyle(Fiesta.Colors.destructive)
-                }
-                if let warning = model.warningMessage {
-                    Text(warning).foregroundStyle(Fiesta.Colors.brand)
-                }
-                if savedDraft == draft { Text("Display settings saved.").accessibilityIdentifier("panelSettings.saved") }
             }
             Section("Panel") {
                 TextField("Name", text: $draft.name)
@@ -85,7 +78,7 @@ struct PanelDisplaySettingsScreen: View {
             } header: { Text("Shared dim schedule") }
             footer: { Text("Use the 24-hour clock, such as 22:00 to 07:00. Overnight windows are supported; matching times leave the panel bright. Each viewer uses its own local clock. This Apple TV can override the schedule in Night dimming.") }
             Section {
-                Button(saving ? "Saving…" : "Save changes") {
+                Button(saving ? "Saving…" : (savedDraft == draft ? "Saved" : "Save changes")) {
                     Task {
                         saving = true
                         savedDraft = nil
@@ -93,11 +86,15 @@ struct PanelDisplaySettingsScreen: View {
                         if let result = await model.saveDisplaySettings(draft) {
                             draft = PanelSettingsDraft(panel: result.panel)
                             savedDraft = draft
+                            Announce.say("Display settings saved.")
                         }
                     }
                 }
                 .disabled(saving || model.isSavingPanel(draft.original))
                 .accessibilityIdentifier("panelSettings.save")
+                if let error = model.errorMessage { Text(error).foregroundStyle(Fiesta.Colors.destructive).focusable() }
+                if let warning = model.warningMessage { Text(warning).foregroundStyle(Fiesta.Colors.brand).focusable() }
+                if savedDraft == draft { Text("Display settings saved.").accessibilityIdentifier("panelSettings.saved") }
             }
         }
         .disabled(saving)

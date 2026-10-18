@@ -53,8 +53,8 @@ final class FiestaBotPresentationTests: XCTestCase {
         attachment.name = "FiestaBot remote choices"
         attachment.lifetime = .keepAlways
         add(attachment)
-        XCUIRemote.shared.press(.right)
-        selectRow("Weather", app: app)
+        waitForFocus("Weather", app: app)
+        XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.staticTexts["Weather is ready for this panel."].waitForExistence(timeout: 10))
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.textFields["fiestabot.composer"].waitForNonExistence(timeout: 5))
@@ -67,7 +67,18 @@ final class FiestaBotPresentationTests: XCTestCase {
     }
     private func waitForFocus(_ label: String, app: XCUIApplication) {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { [self] _, _ in focused(label, app: app) }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 5), .completed)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if result != .completed {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Focus failure hierarchy: \(label)"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Focus failure: \(label)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
+        XCTAssertEqual(result, .completed)
     }
     private func selectRow(_ label: String, app: XCUIApplication) {
         for _ in 0..<16 {

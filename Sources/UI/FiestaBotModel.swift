@@ -335,13 +335,31 @@ final class FiestaBotModel {
                     : "The page wasn't displayed. Check this panel's silence settings and connection."
                 return
             }
+            // Follow-up requests refer to the page actually shown, including
+            // an existing page chosen outside the conversation's tool results.
+            let name = pages.first { $0.id == result.pageId }?.name
+                ?? (currentPage?["id"]?.stringValue == result.pageId ? currentPage?["name"]?.stringValue : nil)
+                ?? "Current page"
+            currentPage = .object(["id": .string(result.pageId), "name": .string(name)])
             app?.openPanel(ref: panel.id)
         } catch { report(error) }
     }
 
+    func panelsForTool(_ tool: BotTool) -> [Panel] {
+        guard tool.name == "list_panels", tool.phase == "ok" else { return [] }
+        let ids = Set((tool.result?["panels"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue })
+        return panels.filter { ids.contains($0.id) && !$0.boardMissing }
+    }
+
+    func openPanel(_ panel: Panel) {
+        guard isCurrentConnection, !isRunning, !isShowingPage,
+              panels.contains(where: { $0.id == panel.id && !$0.boardMissing }) else { return }
+        app?.openPanel(ref: panel.id)
+    }
+
     func openSelectedPanel() {
         guard let panel = selectedPanel, isCurrentConnection else { return }
-        app?.openPanel(ref: panel.id)
+        openPanel(panel)
     }
 
     private func report(_ error: Error) {

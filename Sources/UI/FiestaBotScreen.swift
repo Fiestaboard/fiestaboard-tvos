@@ -4,6 +4,7 @@ struct FiestaBotScreen: View {
     @Environment(AppModel.self) private var app
     @Bindable var model: FiestaBotModel
     @State private var path: [Destination] = []
+    @FocusState private var focusedAnswer: String?
     private enum Destination: Hashable { case panels, pages }
 
     var body: some View {
@@ -67,69 +68,97 @@ struct FiestaBotScreen: View {
     }
 
     private var transcript: some View {
-        List {
-            if model.isLoading { ProgressView("Connecting to FiestaBot…") }
-            if let message = model.availabilityMessage {
-                Section {
-                    Text(message).focusable()
-                    Button("Check again") { Task { await model.load() } }
+        ScrollViewReader { scroll in
+            List {
+                if model.isLoading { ProgressView("Connecting to FiestaBot…") }
+                if let message = model.availabilityMessage {
+                    Section {
+                        Text(message).focusable()
+                        Button("Check again") { Task { await model.load() } }
+                    }
                 }
-            }
-            if model.entries.isEmpty {
-                Section {
-                    Text("Ask FiestaBot to make a page or change what's showing.")
-                        .font(.title3).focusable()
-                    Text("Requests go to your board and its configured AI provider. This chat stays here until you start a new chat or sign out.")
-                        .foregroundStyle(.secondary).font(.caption).focusable()
+                if model.entries.isEmpty {
+                    Section {
+                        Text("Ask FiestaBot to make a page or change what's showing.")
+                            .font(.title3).focusable()
+                        Text("Requests go to your board and its configured AI provider. This chat stays here until you start a new chat or sign out.")
+                            .foregroundStyle(.secondary).font(.caption).focusable()
+                    }
                 }
-            }
-            ForEach(model.entries) { entry in
-                Section(entry.role == "user" ? "You" : "FiestaBot") {
-                    if !entry.content.isEmpty { Text(entry.content).focusable() }
-                    ForEach(entry.tools) { tool in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label(tool.title, systemImage: toolIcon(tool.phase))
-                            if !tool.summary.isEmpty { Text(tool.summary).font(.caption).foregroundStyle(.secondary) }
-                        }
-                        .focusable()
-                        if let pageID = tool.pageID {
-                            Button("Show page on \(model.selectedPanel?.name ?? "this TV")") {
-                                Task { await model.showPage(pageID) }
+                ForEach(model.entries) { entry in
+                    Section(entry.role == "user" ? "You" : "FiestaBot") {
+                        if !entry.content.isEmpty { Text(entry.content).focusable() }
+                        ForEach(entry.tools) { tool in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(tool.title, systemImage: toolIcon(tool.phase))
+                                if !tool.summary.isEmpty { Text(tool.summary).font(.caption).foregroundStyle(.secondary) }
                             }
-                            .disabled(model.isRunning || model.isShowingPage)
+                            .focusable()
+                            ForEach(model.panelsForTool(tool)) { panel in
+                                Button("Open \(panel.name)") { model.openPanel(panel) }
+                                    .disabled(model.isRunning || model.isShowingPage)
+                            }
+                            if let pageID = tool.pageID {
+                                Button("Show page on \(model.selectedPanel?.name ?? "this TV")") {
+                                    Task { await model.showPage(pageID) }
+                                }
+                                .disabled(model.isRunning || model.isShowingPage)
+                            }
                         }
                     }
                 }
+                if let approval = model.pendingApproval {
+                    Section("FiestaBot needs your approval") {
+                        Text(approval.title).focusable()
+                        ForEach((approval.args.objectValue ?? [:]).keys.sorted(), id: \.self) { key in
+                            Text("\(key.replacingOccurrences(of: "_", with: " ").capitalized): \(argumentDescription(approval.args[key] ?? .null))")
+                                .font(.caption).focusable()
+                        }
+                        Button("Approve") { model.approve(true) }
+                        Button("Decline") { model.approve(false) }
+                    }.disabled(model.isRunning)
+                }
+                if let question = model.pendingQuestion {
+                    Section(question.message) {
+                        ForEach(question.options.indices, id: \.self) { index in
+                            Button(question.options[index]) { model.answer(question.options[index]) }
+                                .id(answerID(question.id, index))
+                                .focused($focusedAnswer, equals: answerID(question.id, index))
+                        }
+                        if question.allowsFreeText { Text("You can also type or dictate your answer below.").font(.caption) }
+                        Button("Skip this question") { model.answer(nil, action: "decline") }
+                    }.disabled(model.isRunning)
+                }
+                if let error = model.errorMessage { Text(error).foregroundStyle(Fiesta.Colors.destructive).focusable() }
+                if model.isRunning {
+                    HStack { ProgressView(); Text(model.statusText) }
+                    Button("Stop") { model.stop() }
+                }
+                if model.canContinue { Button("Continue") { model.continueTurn() }.disabled(model.isRunning) }
             }
-            if let approval = model.pendingApproval {
-                Section("FiestaBot needs your approval") {
-                    Text(approval.title).focusable()
-                    ForEach((approval.args.objectValue ?? [:]).keys.sorted(), id: \.self) { key in
-                        Text("\(key.replacingOccurrences(of: "_", with: " ").capitalized): \(argumentDescription(approval.args[key] ?? .null))")
-                            .font(.caption).focusable()
-                    }
-                    Button("Approve") { model.approve(true) }
-                    Button("Decline") { model.approve(false) }
-                }.disabled(model.isRunning)
+            .listStyle(.grouped)
+            .accessibilityIdentifier("fiestabot.transcript")
+            .task(id: readyQuestionID) {
+                // Suggestions disappear after sending, so native focus otherwise
+                // falls back to the sidebar. Put a new question within reach.
+                guard !model.isRunning, let question = model.pendingQuestion,
+                      !question.options.isEmpty else { return }
+                let target = answerID(question.id, 0)
+                scroll.scrollTo(target, anchor: .center)
+                await Task.yield()
+                guard !Task.isCancelled, !model.isRunning,
+                      model.pendingQuestion?.id == question.id else { return }
+                focusedAnswer = target
             }
-            if let question = model.pendingQuestion {
-                Section(question.message) {
-                    ForEach(question.options, id: \.self) { option in
-                        Button(option) { model.answer(option) }
-                    }
-                    if question.allowsFreeText { Text("You can also type or dictate your answer below.").font(.caption) }
-                    Button("Skip this question") { model.answer(nil, action: "decline") }
-                }.disabled(model.isRunning)
-            }
-            if let error = model.errorMessage { Text(error).foregroundStyle(Fiesta.Colors.destructive).focusable() }
-            if model.isRunning {
-                HStack { ProgressView(); Text(model.statusText) }
-                Button("Stop") { model.stop() }
-            }
-            if model.canContinue { Button("Continue") { model.continueTurn() }.disabled(model.isRunning) }
         }
-        .listStyle(.grouped)
-        .accessibilityIdentifier("fiestabot.transcript")
+    }
+
+    private var readyQuestionID: String? {
+        model.isRunning ? nil : model.pendingQuestion?.id
+    }
+
+    private func answerID(_ questionID: String, _ index: Int) -> String {
+        "answer:\(questionID):\(index)"
     }
 
     private var composer: some View {
