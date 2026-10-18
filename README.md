@@ -24,8 +24,12 @@ runs on every pull request and push to `main`, using standard Apple Silicon
 - The informational Home Top Shelf screenshot test runs on pushes to `main`.
   Use **Actions → CI → Run workflow** and enable `home_ui` to run it on demand.
 
-For branch protection, require `build-and-test` and `Release archive`; leave the
-Home screenshot check optional. Test result bundles, including screenshots, are
+`main` is protected: changes must use a pull request, be up to date with `main`,
+and pass `build-and-test` and `Release archive` from GitHub Actions. No approving
+review, code-owner review, or organization-admin approval is required. Contributors
+with write access can merge their own PRs once these requirements pass. The rules
+also apply to repository admins; force-pushes and deletion of `main` are blocked.
+The Home screenshot check remains optional. Test result bundles, including screenshots, are
 available as run artifacts for seven days. Open the `.xcresult` bundle in Xcode
 to inspect failures. Verbose simulator diagnostic collection is disabled because
 it can stall for ten minutes; XCTest assertions and attachments are still saved.
@@ -37,6 +41,10 @@ clean checkout instead of transferring DerivedData between runners. Signing and
 TestFlight uploads are separate from CI; see [publishing](docs/PUBLISHING.md).
 
 ## Local development
+
+Start each change on a branch from the latest `main`, commit and push that branch,
+then open a pull request targeting `main`. Wait for the two required CI checks
+before merging. Keep changes scoped so a failing check is easy to investigate.
 
 Export simulator demos with `bash scripts/export-demo-video.sh source.mov demo.mp4`.
 This preserves 60 fps output and retains the original recording. A 30 fps export
