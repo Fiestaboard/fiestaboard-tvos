@@ -128,6 +128,18 @@ jobs:
             archive -archivePath build/FiestaBoardTV.xcarchive \
             CODE_SIGNING_ALLOWED=NO
 
+      # Preserve executable permissions for local distribution signing/export.
+      - name: Package Release archive
+        run: tar -czf build/FiestaBoardTV.xcarchive.tar.gz -C build FiestaBoardTV.xcarchive
+
+      - name: Upload Release archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-xcarchive
+          path: build/FiestaBoardTV.xcarchive.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
   # Home's icon placement/focus makes this informational. Run after merges
   # and optionally by hand, avoiding a second simulator job on every PR.
   ui-tests:
