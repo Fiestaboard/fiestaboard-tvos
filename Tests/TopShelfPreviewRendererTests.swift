@@ -88,11 +88,22 @@ final class TopShelfPreviewRendererTests: XCTestCase {
             add(attachment)
             XCTAssertEqual(image.size.width, 1920)
             XCTAssertEqual(image.size.height, 1080)
-            XCTAssertEqual(Int(try XCTUnwrap(image.pixel(x: 5, y: 65)).r), 235, accuracy: 2)
-            let corner = try XCTUnwrap(image.pixel(x: 1, y: 61))
+            XCTAssertEqual(Int(try XCTUnwrap(image.pixel(x: 69, y: 97)).r), 235, accuracy: 2)
+            let corner = try XCTUnwrap(image.pixel(x: 65, y: 93))
             if shape == "square" { XCTAssertGreaterThan(corner.r, 200) }
             else { XCTAssertLessThan(corner.r, 80, "round LEDs must retain their dark corners") }
         }
+    }
+
+    func testBoardContentStaysClearOfHomeCardRoundedEdges() throws {
+        let preview = PanelPreview(rows: 1, cols: 1, cells: [[.color(.red)]], message: "RED")
+        let panel = try MatrixDisplayTests.panel(["render_style": "led_matrix"])
+        let png = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
+        let image = try XCTUnwrap(UIImage(data: png))
+        // Home crops the corners and adds a focus rim. Lit edge LEDs need
+        // breathing room inside the image instead of touching that crop.
+        XCTAssertLessThan(try XCTUnwrap(image.pixel(x: 5, y: 65)).r, 80)
+        XCTAssertLessThan(try XCTUnwrap(image.pixel(x: 1915, y: 1015)).r, 80)
     }
 
     func testPublisherUsesExplicitUnavailableArtworkWithoutTouchingTheNetwork() async throws {

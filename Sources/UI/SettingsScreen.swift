@@ -18,6 +18,14 @@ struct SettingsScreen: View {
         case tv = "This Apple TV", appearance = "Panel appearance"
         case connection = "Connection", help = "About & help"
         var id: Self { self }
+        var symbol: String {
+            switch self {
+            case .tv: return "appletv"
+            case .appearance: return "rectangle.grid.2x2"
+            case .connection: return "network"
+            case .help: return "questionmark.circle"
+            }
+        }
     }
 
     private enum Destination: Hashable {
@@ -29,7 +37,7 @@ struct SettingsScreen: View {
     var body: some View {
         NavigationStack(path: $path) {
             HStack(alignment: .top, spacing: 56) {
-                categoryList.frame(width: 400)
+                categoryList.frame(width: 440)
                 categoryContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     // The panel preview sits above the controls. Extend their
@@ -69,7 +77,9 @@ struct SettingsScreen: View {
                 ForEach(Category.allCases) { item in
                     Button { category = item } label: {
                         HStack {
-                            Text(item.rawValue)
+                            Label(item.rawValue, systemImage: item.symbol)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
                             Spacer()
                             if category == item { Image(systemName: "checkmark") }
                         }
@@ -114,8 +124,8 @@ struct SettingsScreen: View {
                 } header: { Text("LED matrix") }
                 footer: {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(matrixSizingExplanation + " Panels with matrix sizing configured in FiestaBoard use their shared panel settings instead.")
-                        Text("Transition style applies only to this Apple TV. Turn on Matrix transitions in Panel appearance to use it.")
+                        Text(matrixSizingExplanation + " Shared panel sizing takes priority.")
+                        Text("For effects, enable Matrix transitions in Panel appearance.")
                         if reduceMotion { Text("Effects pause while Reduce Motion is on.") }
                     }
                 }
@@ -235,20 +245,26 @@ struct SettingsScreen: View {
     private var appearanceContent: some View {
         VStack(spacing: 12) {
             if let panel = selectedPanel, let model {
-                VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 28) {
                     SettingsPanelPreview(panel: panel, state: model.previewState(for: panel))
-                        .frame(height: 200)
-                        .background(.black)
+                        .frame(width: 360, height: 196)
+                        .padding(14)
+                        .background(Fiesta.Colors.surface,
+                                    in: RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius))
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("\(panel.name) preview")
                         .accessibilityValue(previewDescription(for: panel))
                         .accessibilityIdentifier("settings.panelPreview")
-                    HStack {
-                        Text(panel.name).font(.headline)
-                        Spacer()
-                        Text(dimensions(for: panel)).monospacedDigit()
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(panel.name).font(Fiesta.Text.heading).lineLimit(2)
+                        Text(dimensions(for: panel)).font(Fiesta.Text.caption).monospacedDigit()
+                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                        Text(previewDescription(for: panel))
+                            .font(Fiesta.Text.caption)
+                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                            .lineLimit(2)
                     }
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 20)
                 .task(id: "\(panel.id):\(panel.rows ?? 0):\(panel.cols ?? 0):\(previewReload)") {

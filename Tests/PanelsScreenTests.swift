@@ -409,14 +409,37 @@ extension PanelsScreenTests {
         XCTAssertTrue(card.accessibilityLabel.contains("Board reads: COFFEE IS READY"))
     }
 
-    /// A board with nothing on it falls back to describing the panel.
+    func testCardUsesActualFlapsWhenThePlainTextMessageIsMissing() throws {
+        let panel = try decodedPanel()
+        let preview = PanelPreview(rows: 1, cols: 2, cells: [[.character("H"), .character("I")]], message: nil)
+        XCTAssertEqual(PanelCard(panel: panel, preview: .ready(preview)) {}.subtitle, "HI")
+    }
+
+    func testCardSummarizesRenderedFlapsInsteadOfServerColorMarkup() throws {
+        let panel = try decodedPanel()
+        let preview = PanelPreview(rows: 1, cols: 2,
+                                   cells: [[.character("H"), .character("I")]],
+                                   message: "{63} HI")
+        let card = PanelCard(panel: panel, preview: .ready(preview)) {}
+        XCTAssertEqual(card.subtitle, "HI")
+        XCTAssertTrue(card.accessibilityLabel.contains("Board reads: HI"))
+        XCTAssertFalse(card.accessibilityLabel.contains("{63}"))
+    }
+
+    func testMatrixMessageNamedBlankIsNotAnEmptyState() throws {
+        let panel = try MatrixDisplayTests.panel(["render_style": "led_matrix"])
+        let preview = PanelPreview(rows: 1, cols: 5, cells: [], message: "Blank")
+        XCTAssertEqual(PanelCard(panel: panel, preview: .ready(preview)) {}.subtitle, "Blank")
+    }
+
+    /// Empty and loading previews need different, actionable descriptions.
     func testACardWithNoMessageDescribesThePanel() throws {
         let panel = try decodedPanel()
         let blank = PanelPreview(rows: 12, cols: 30, cells: [], message: "  ")
         XCTAssertEqual(PanelCard(panel: panel, preview: .ready(blank)) {}.subtitle,
-                       "30 × 12 · Built for a 65\" screen")
+                       "No message yet")
         XCTAssertEqual(PanelCard(panel: panel, preview: .loading) {}.subtitle,
-                       "30 × 12 · Built for a 65\" screen")
+                       "Loading preview…")
     }
 
     /// `board_missing` means the virtual board was DELETED on the server, not
@@ -494,6 +517,10 @@ extension PanelsScreenTests {
     /// the layout it is handed is the correct size either way.
     func testTheBoardIsCentredInTheCard() throws {
         let image = try cardImage()
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Panel card centering"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         let left = Self.cardMargin
         let right = left + Int(PanelCard.width) - 1
 

@@ -36,6 +36,7 @@ public final class AppModel {
 
     public var errorMessage: String?
     var offeredResizeRefs: Set<String> = []
+    var lastViewedPanelRef: String?
     /// Where Settings was opened from, so leaving it goes back there.
     private var routeBeforeSettings: Route?
     private var previewTask: Task<Void, Never>?
@@ -125,6 +126,7 @@ public final class AppModel {
     }
 
     public func openPanel(ref: String) {
+        lastViewedPanelRef = ref
         errorMessage = nil
         route = .viewer(ref)
     }
@@ -148,6 +150,7 @@ public final class AppModel {
     }
 
     public func showPanels() {
+        if case .viewer(let ref) = route { lastViewedPanelRef = ref }
         previewTask?.cancel()
         errorMessage = nil
         route = .panels
@@ -185,6 +188,7 @@ public final class AppModel {
     }
 
     func clearTopShelf() {
+        lastViewedPanelRef = nil
         beginTopShelfUpdate()
         panelReloadTask?.cancel()
         panelReloadTask = nil

@@ -9,7 +9,7 @@ enum TopShelfPreviewRenderer {
     static func image(panel: Panel, preview: PanelPreview) -> Data? {
         guard preview.rows > 0, preview.cols > 0 else { return unavailable }
         BoardFont.registerIfNeeded()
-        return render(PanelPreviewBoard(panel: panel, preview: preview))
+        return render(PanelPreviewBoard(panel: panel, preview: preview).padding(64))
     }
 
     /// A failed frame must never look like an invented board message.
@@ -23,7 +23,7 @@ enum TopShelfPreviewRenderer {
     private static func render(_ content: some View) -> Data? {
         let canvas = content
         .frame(width: size.width, height: size.height)
-        .background(.black)
+        .background(Fiesta.Colors.surface)
         .environment(\.colorScheme, .dark)
         .environment(\.displayScale, 1)
         let renderer = ImageRenderer(content: canvas)

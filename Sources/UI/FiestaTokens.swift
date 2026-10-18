@@ -36,9 +36,33 @@ public enum Fiesta {
     }
 
     public enum Text {
-        public static let title = Font.system(size: 64, weight: .bold)
+        public static let title = Font.system(size: 56, weight: .bold)
         public static let heading = Font.system(size: 38, weight: .semibold)
         public static let body = Font.system(size: 29, weight: .regular)
         public static let caption = Font.system(size: 24, weight: .regular)
+    }
+}
+
+/// Shared hierarchy for the app's browsing and connection screens.
+struct FiestaScreenHeading: View {
+    let title: String
+    let subtitle: String
+    var context: String = "FiestaBoard"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(context)
+                .font(Fiesta.Text.caption.weight(.medium))
+                .foregroundStyle(Fiesta.Colors.brand)
+                .lineLimit(1)
+            Text(title)
+                .font(Fiesta.Text.title)
+                .foregroundStyle(Fiesta.Colors.foreground)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle)
+                .font(Fiesta.Text.caption)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

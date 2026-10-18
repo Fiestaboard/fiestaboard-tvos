@@ -23,6 +23,9 @@ struct PanelPreviewBoard: View {
                 // Placement is `PanelCard`'s inset mount — see the note on
                 // `PanelCard.boardInset`, and the test that measures it.
                 .frame(width: proxy.size.width, height: proxy.size.height)
+                // SwiftUI can paint a fixed Canvas background beyond the
+                // proposed preview bounds. Keep that paint on its mount.
+                .clipped()
         }
     }
 

@@ -1,5 +1,31 @@
 # Orientation
 
+## Visual refresh (2026-10-17)
+
+The panel grid now sizes two columns from its actual safe area. Fixed 860-point
+cards previously produced one column on a real tvOS screen despite the old
+arithmetic-only unit test passing. `PanelsPresentationTests` exercises six
+panels with remote focus, complete last-row visibility, viewer return, and a
+reordered foreground refresh while Settings is focused. Initial focus is
+restored once per screen; subsequent refreshes must never steal it.
+
+Cards label split-flap / square / round matrix hardware, summarize actual
+content (including frames without a plain message, using rendered flap text
+instead of server colour markup), and distinguish blank,
+loading, and unavailable states. A clipped preview mount prevents SwiftUI's
+Canvas background from spilling over one edge. Top Shelf uses a 64-point
+inset with complete board proportions. Connection and sign-in share heading
+hierarchy; settings has category icons and a compact board/message preview.
+
+Visual evidence is collected in
+`build/display-review/FiestaBoard-TV-Design-Review-2026-10-17/`.
+`DesignReleaseRegression.xcresult`: 447 passed, zero failures, ten opt-in recording
+tests skipped. `TopShelfClockIndependent.xcresult`: Home navigation passed again.
+The earlier GitHub informational Home job failed because the fixture's night
+schedule appended “Dimmed for the night” to the expected accessibility value.
+Its attachment confirmed correct content and focus. This navigation test now
+launches with a temporary never-dim override, independent of runner timezone.
+
 ## Actual Top Shelf board snapshots (2026-10-17)
 
 The named cards now render the latest fetched frame through `PanelPreviewBoard`,

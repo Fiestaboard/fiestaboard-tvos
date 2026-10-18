@@ -57,24 +57,9 @@ struct ConnectScreen: View {
     // MARK: Pieces
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Find your FiestaBoard")
-                .font(.system(size: 56, weight: .bold))
-                .foregroundStyle(Fiesta.Colors.foreground)
-
-            // Unconditional, because it used to be gated behind having found
-            // something: a reviewer whose network has no board read the word
-            // "FiestaBoard" and was told nothing else about the product.
-            Text("A FiestaBoard is a physical split-flap display. This app shows one of its panels full-screen on this Apple TV.")
-                .font(Fiesta.Text.caption)
-                .foregroundStyle(Fiesta.Colors.mutedForeground)
-
-            if !(model?.boards.isEmpty ?? true) {
-                Text("Choose the board this Apple TV should show.")
-                    .font(Fiesta.Text.caption)
-                    .foregroundStyle(Fiesta.Colors.mutedForeground)
-            }
-        }
+        FiestaScreenHeading(title: "Find your FiestaBoard",
+                            subtitle: "Bring your split-flap and LED matrix panels to this TV. Choose a FiestaBoard on your network to get started.")
+            .frame(maxWidth: 1200, alignment: .leading)
     }
 
     /// Every failure on this screen surfaces here, in the same place and the
@@ -150,7 +135,11 @@ struct ConnectScreen: View {
     /// Nothing found yet. Scanning is normal, so it is said in words next to
     /// the spinner and in muted foreground — never in the error colour.
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
+            Image(systemName: "network")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(Fiesta.Colors.brand)
+                .accessibilityHidden(true)
             emptyStateMessage
             if !isLooking {
                 Button("Search again") { Task { await model?.rescan() } }

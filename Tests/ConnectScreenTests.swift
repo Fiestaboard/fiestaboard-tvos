@@ -402,7 +402,11 @@ final class ConnectScreenTests: XCTestCase {
 
     func testConnectScreenRendersInEveryState() {
         let app = makeApp()
-        RenderHarness.render(ConnectScreen().environment(app))
+        let image = RenderHarness.image(ConnectScreen().environment(app).background(Fiesta.Colors.background).preferredColorScheme(.dark))
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Connect — looking for boards"
+        attachment.lifetime = .keepAlways
+        add(attachment)
 
         let withError = makeApp()
         withError.errorMessage = "This FiestaBoard has no account yet."
@@ -410,7 +414,11 @@ final class ConnectScreenTests: XCTestCase {
     }
 
     func testSignInScreenRenders() {
-        RenderHarness.render(SignInScreen().environment(makeApp()))
+        let image = RenderHarness.image(SignInScreen().environment(makeApp()).background(Fiesta.Colors.background).preferredColorScheme(.dark))
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Sign in — presentation"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     func testDiscoveredBoardCardRenders() {
@@ -436,7 +444,11 @@ final class ConnectScreenTests: XCTestCase {
         await Task.yield()
         XCTAssertTrue(model.connectInFlight(for: board.id))
 
-        RenderHarness.render(ConnectScreen(model: model).environment(app))
+        let image = RenderHarness.image(ConnectScreen(model: model).environment(app).background(Fiesta.Colors.background).preferredColorScheme(.dark))
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "Connect — discovered boards"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         await connecting.value
 
         model.stopScan()

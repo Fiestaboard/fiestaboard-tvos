@@ -3,6 +3,7 @@ import SwiftUI
 struct PanelsScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: PanelsModel?
+    @State private var restoredInitialFocus = false
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
@@ -21,11 +22,6 @@ struct PanelsScreen: View {
     /// enclosing `ScrollView` clips to its own bounds. This is the room the
     /// lift needs; without it the selected card's edges are cut off.
     private static let focusInset: CGFloat = 44
-
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: PanelCard.width, maximum: PanelCard.width),
-                  spacing: Fiesta.Metrics.gutter + 16)]
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Fiesta.Metrics.gutter) {
@@ -50,24 +46,14 @@ struct PanelsScreen: View {
             await fresh.load()
         }
         .onDisappear { model?.stopPreviews() }
-        .onChange(of: panelIDs) { old, new in
-            // Only when the first list lands, and only when no card holds
-            // focus already. A TV screen should open with something chosen,
-            // and Settings is not it — but once the list is up, focus
-            // belongs to whoever is holding the remote, and previews
-            // arriving later must never take it back.
-            guard old.isEmpty, !new.isEmpty, focusedPanel == nil else { return }
-            focusedPanel = defaultFocusID
-        }
     }
 
     private var panelIDs: [String] { model?.panels.map(\.id) ?? [] }
 
-    /// The card to open on: the first one that can actually be opened. A
-    /// panel whose board is missing is disabled, so focusing it would
-    /// leave the screen with nothing focused at all.
+    /// Restore the panel just watched, falling back to the first available
+    /// panel if it was removed. Never restore focus to a disabled card.
     private var defaultFocusID: String? {
-        Self.defaultFocusPanel(in: model?.panels ?? [])
+        Self.defaultFocusPanel(in: model?.panels ?? [], preferredRef: app.lastViewedPanelRef)
     }
 
     /// Nil when nothing here can be opened.
@@ -77,22 +63,23 @@ struct PanelsScreen: View {
     /// engine is handed a target it must refuse, and the screen opens with
     /// nothing focused at all. Naming nobody lets tvOS pick the header,
     /// which is at least somewhere the remote can move from.
-    static func defaultFocusPanel(in panels: [Panel]) -> String? {
-        panels.first(where: { !$0.boardMissing })?.id
+    static func defaultFocusPanel(in panels: [Panel], preferredRef: String? = nil) -> String? {
+        let available = panels.filter { !$0.boardMissing }
+        return available.first { $0.id == preferredRef || String($0.shortCode) == preferredRef }?.id
+            ?? available.first?.id
     }
 
     private var header: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Panels").font(Fiesta.Text.title)
-                    .foregroundStyle(Fiesta.Colors.foreground)
-                Text(app.connection.saved?.displayName ?? "")
-                    .font(Fiesta.Text.caption)
-                    .foregroundStyle(Fiesta.Colors.mutedForeground)
+            FiestaScreenHeading(title: "Panels",
+                                subtitle: "Choose a panel to show on this TV.",
+                                context: app.connection.saved?.displayName ?? "FiestaBoard")
+            Spacer(minLength: 32)
+            Button { app.showSettings() } label: {
+                Label("Settings", systemImage: "gearshape")
             }
-            Spacer()
-            Button("Settings") { app.showSettings() }
-                .font(Fiesta.Text.body)
+            .font(Fiesta.Text.body)
+
         }
     }
 
@@ -222,30 +209,41 @@ struct PanelsScreen: View {
     }
 
     private var grid: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading,
-                      spacing: Fiesta.Metrics.gutter + 16) {
-                ForEach(model?.panels ?? []) { panel in
-                    card(for: panel)
+        GeometryReader { proxy in
+            let spacing: CGFloat = 48
+            let cardWidth = max(1, (proxy.size.width - spacing) / 2)
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: spacing), GridItem(.flexible())],
+                              alignment: .leading, spacing: 48) {
+                        ForEach(model?.panels ?? []) { panel in
+                            card(for: panel, width: cardWidth).id(panel.id)
+                        }
+                    }
+                    .padding(Self.focusInset)
+                }
+                // Expand the viewport, then inset its content: lifted cards fit
+                // without moving the columns out of alignment with the heading.
+                .padding(.horizontal, -Self.focusInset)
+                .focusScope(gridScope)
+                .focusSection()
+                .task(id: panelIDs) {
+                    guard !restoredInitialFocus, !panelIDs.isEmpty else { return }
+                    restoredInitialFocus = true
+                    guard focusedPanel == nil, let id = defaultFocusID else { return }
+                    scroll.scrollTo(id, anchor: .center)
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    focusedPanel = id
                 }
             }
-            .padding(Self.focusInset)
         }
-        // Sideways only: the screen's safe inset already leaves room there,
-        // so widening the scroll view into it keeps the cards lined up with
-        // the title while giving the lift somewhere to go. Vertically the
-        // padding stays, because pulling the scroll view up would let
-        // scrolled cards run underneath the header.
-        .padding(.horizontal, -Self.focusInset)
-        .focusScope(gridScope)
-        .focusSection()
     }
 
-    private func card(for panel: Panel) -> some View {
+    private func card(for panel: Panel, width: CGFloat) -> some View {
         PanelCard(panel: panel,
-                  preview: model?.previewState(for: panel) ?? .loading) {
-            app.openPanel(ref: panel.id)
-        }
+                  preview: model?.previewState(for: panel) ?? .loading,
+                  action: { app.openPanel(ref: panel.id) }, cardWidth: width)
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
     }

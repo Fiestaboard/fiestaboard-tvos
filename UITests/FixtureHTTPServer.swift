@@ -9,7 +9,7 @@ final class FixtureHTTPServer {
     private let onPanels: () -> Void
     private let frameBody: String
     private let frameProvider: (() -> String)?
-    private let panelsBody: String
+    private var panelsBody: String
     private let additionalPanels: [String: String]
     private let additionalFrames: [String: String]
     private let lock = NSLock()
@@ -51,6 +51,12 @@ final class FixtureHTTPServer {
 
     deinit { listener.cancel() }
 
+    func updatePanels(_ body: String) {
+        lock.lock()
+        panelsBody = body
+        lock.unlock()
+    }
+
     private func handle(_ connection: NWConnection) {
         connection.start(queue: queue)
         connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] data, _, _, _ in
@@ -71,8 +77,8 @@ final class FixtureHTTPServer {
                 self.lock.unlock()
                 if firstFrame { self.onFrame() }
             case "/api/panels":
-                body = panelsBody
                 self.lock.lock()
+                body = panelsBody
                 let firstPanels = !self.sawPanels
                 self.sawPanels = true
                 self.lock.unlock()

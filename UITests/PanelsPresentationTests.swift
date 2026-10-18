@@ -1,0 +1,101 @@
+import XCTest
+
+@MainActor
+final class PanelsPresentationTests: XCTestCase {
+    private var server: FixtureHTTPServer?
+
+    override func tearDown() {
+        server = nil
+        super.tearDown()
+    }
+
+    /// Exercises the real safe area and focus lift; an offscreen render that
+    /// ignores safe areas missed the old one-column layout on a real TV.
+    func testTwoColumnsFitAndRemoteCanBrowseEveryRow() throws {
+        continueAfterFailure = false
+        var panels: [String] = []
+        var byID: [String: String] = [:]
+        let names = ["Living Room", "Kitchen", "Studio", "Patio", "Bedroom", "Office"]
+        for (index, name) in names.enumerated() {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+            let id = "review-\(index)"
+            object["id"] = id
+            object["name"] = name
+            if index % 3 != 0 {
+                object["render_style"] = "led_matrix"
+                object["device_model_spec"] = ["geometry": ["kind": "pixels", "width": 192, "height": 96],
+                    "appearance": ["pixelShape": index % 3 == 1 ? "round" : "square"]]
+            }
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            panels.append(json)
+            byID[id] = json
+        }
+        var cells = Array(repeating: Array(repeating: 0, count: 30), count: 12)
+        for (offset, byte) in "HELLO FIESTABOARD".utf8.enumerated() {
+            cells[5][7 + offset] = (65...90).contains(byte) ? Int(byte - 64) : 0
+        }
+        for col in 0..<30 { cells[1][col] = 63 + col / 5; cells[10][col] = 68 - col / 5 }
+        let frame = String(decoding: try JSONSerialization.data(withJSONObject:
+            ["characters": cells, "rows": 12, "cols": 30, "message": "HELLO FIESTABOARD"]), as: UTF8.self)
+        let server = try FixtureHTTPServer(frameBody: frame,
+            panelsBody: "{\"panels\":[\(panels.joined(separator: ","))],\"total\":6}", additionalPanels: byID)
+        self.server = server
+        let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Home FiestaBoard\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        func card(_ name: String) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
+        }
+        let first = card("Living Room"), second = card("Kitchen")
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "Board reads:"), object: second)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        capture(app, "Panel browser — first row")
+        XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 30,
+                       "Two panels should share a row inside the TV safe area")
+        XCTAssertGreaterThan(second.frame.minX, first.frame.midX)
+        XCTAssertTrue(first.hasFocus)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(second.hasFocus, "Right should reach the second card, not Settings")
+        XCUIRemote.shared.press(.down)
+        XCTAssertTrue(card("Patio").hasFocus)
+        XCUIRemote.shared.press(.down)
+        XCTAssertTrue(card("Office").hasFocus)
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let frame = card("Office").frame
+            return frame.minY > 250 && frame.maxY < app.frame.maxY - 40
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 5), .completed,
+                       "The final focused card must scroll fully into view")
+        capture(app, "Panel browser — final row")
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Office"].waitForExistence(timeout: 5))
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasFocus == YES"), object: card("Office"))
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed,
+                       "Returning from a panel should keep the user's place in the browser")
+        for _ in 0..<6 {
+            if app.buttons["Settings"].hasFocus { break }
+            XCUIRemote.shared.press(.up)
+        }
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        let refreshed = panels.reversed().joined(separator: ",").replacingOccurrences(of: "Office", with: "Office updated")
+        server.updatePanels("{\"panels\":[\(refreshed)],\"total\":6}")
+        XCUIRemote.shared.press(.menu)
+        app.activate()
+        XCTAssertTrue(card("Office updated").waitForExistence(timeout: 10), "Foreground refresh must load the reordered panels")
+        XCTAssertTrue(app.buttons["Settings"].hasFocus,
+                      "A refreshed panel order must not steal intentional focus from Settings")
+    }
+
+    private func capture(_ app: XCUIApplication, _ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}

@@ -46,7 +46,11 @@ final class HomeTopShelfUITests: XCTestCase {
         let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>",
-                               "-fiestaboard.signedOut", "NO"]
+                               "-fiestaboard.signedOut", "NO",
+                               // This checks navigation and actual board content.
+                               // CI's timezone can put the fixture inside its night
+                               // window, adding a dimming suffix to the spoken value.
+                               "-fiestaboard.signage.autoDimOverride", "neverDim"]
         app.launch()
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
         wait(for: [panelsLoaded], timeout: 10)

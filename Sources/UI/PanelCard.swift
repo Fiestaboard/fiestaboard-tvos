@@ -11,27 +11,13 @@ struct PanelCard: View {
     let preview: PanelPreviewState
     let action: () -> Void
 
-    /// Two cards to a row, not three.
-    ///
-    /// A board is only worth showing if it reads as a board. At three to a
-    /// row the flaps came out 19pt tall, which puts the glyphs at under 8pt
-    /// and makes `BoardCanvas`'s 1px seam a third the weight of the letter
-    /// above it — the board turned into grey stripes. Two to a row is 32pt
-    /// flaps, where the seam falls back to a hairline and the message is
-    /// legible. The shape is close to a real FiestaPanel grid (30 x 12 lays
-    /// out at about 1.85:1) so little of the card is spent letterboxing.
+    // Defaults keep standalone previews useful. The browser passes the width
+    // of its actual safe-area column instead of assuming a 1920-point canvas.
     static let width: CGFloat = 860
-    static let previewHeight: CGFloat = 440
-    static let detailHeight: CGFloat = 124
-    /// The plate left showing around the board.
-    ///
-    /// Load bearing twice over. It is what mounts the board on the card
-    /// instead of bleeding it to the edges — a 30 x 12 grid fits this box
-    /// by height, so without it the board takes the card's own top and
-    /// bottom edge with it. And measurably it is also what CENTRES the
-    /// board: with the preview laid straight into the frame the board came
-    /// out flush left, 2pt of plate on one side and 22pt on the other.
-    static let boardInset: CGFloat = 14
+    static let previewHeight: CGFloat = width * 9 / 16
+    static let detailHeight: CGFloat = 166
+    static let boardInset: CGFloat = 24
+    var cardWidth: CGFloat = Self.width
 
     var body: some View {
         Button(action: action) {
@@ -39,7 +25,7 @@ struct PanelCard: View {
                 previewArea
                 details
             }
-            .frame(width: Self.width)
+            .frame(width: cardWidth)
             .background(Fiesta.Colors.surface)
             .clipShape(RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius))
             // A hairline, not a focus ring — it is there in every state.
@@ -59,6 +45,7 @@ struct PanelCard: View {
         .buttonStyle(.card)
         .disabled(panel.boardMissing)
         .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Shows this panel full-screen.")
     }
 
     // MARK: Picture
@@ -67,12 +54,8 @@ struct PanelCard: View {
         ZStack {
             previewContent
         }
-        // The board is inset rather than bled to the card's edges, so the
-        // plate shows as a mount all the way round it. A 30 x 12 grid fits
-        // this box by height, which means it would otherwise touch the top
-        // and bottom edges exactly and take the card's own edge with it.
         .padding(Self.boardInset)
-        .frame(width: Self.width, height: Self.previewHeight)
+        .frame(width: cardWidth, height: cardWidth * 9 / 16)
         .clipped()
     }
 
@@ -108,32 +91,35 @@ struct PanelCard: View {
     // MARK: Words
 
     private var details: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(displayKind, systemImage: panel.renderStyle == .ledMatrix ? "circle.grid.3x3.fill" : "rectangle.split.3x3.fill")
+                .font(Fiesta.Text.caption)
+                .foregroundStyle(Fiesta.Colors.brand)
             Text(panel.name)
-                .font(Fiesta.Text.body.weight(.semibold))
+                .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(Fiesta.Colors.foreground)
                 .lineLimit(1)
             Text(subtitle)
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 24)
-        .frame(width: Self.width, height: Self.detailHeight, alignment: .leading)
+        .padding(.horizontal, 28)
+        .frame(width: cardWidth, height: Self.detailHeight, alignment: .leading)
     }
 
-    /// What the board says, when it says anything.
-    ///
-    /// Even at two cards to a row the flaps are 13pt glyphs — recognisable
-    /// as a board, well under the 24pt tvOS treats as the floor for text
-    /// read across a room. So the message is also set in type someone can
-    /// actually read from the sofa; the grid and screen are the fallback
-    /// for a board with nothing on it, and live in Settings anyway.
+    private var displayKind: String {
+        guard panel.renderStyle == .ledMatrix else { return "Split-flap" }
+        return panel.matrixDisplay.appearance?.pixelShape == "round" ? "LED matrix · Round" : "LED matrix · Square"
+    }
+
     var subtitle: String {
         if panel.boardMissing { return panel.gridDescription }
-        if let message = boardMessage { return message }
-        return "\(panel.gridDescription) · \(panel.screenDescription)"
+        switch preview {
+        case .loading: return "Loading preview…"
+        case .unavailable: return "Preview unavailable · Select to open"
+        case .ready: return boardMessage ?? "No message yet"
+        }
     }
 
     var accessibilityLabel: String {
@@ -142,24 +128,33 @@ struct PanelCard: View {
             parts.append("Board removed. This panel can't be shown.")
             return parts.joined(separator: ", ")
         }
+        parts.append(displayKind)
         parts.append(panel.gridDescription)
         parts.append(panel.screenDescription)
         if let message = boardMessage { parts.append("Board reads: \(message)") }
         return parts.joined(separator: ", ")
     }
 
-    /// The frame's own message rather than its flaps: VoiceOver reading
-    /// 360 characters one row at a time is not a preview, and neither is a
-    /// 13pt rendering of them.
+    /// A readable summary of the displayed content. Rendered flaps avoid
+    /// exposing server colour tokens such as `{63}` in the source message.
     private var boardMessage: String? {
         guard case .ready(let ready) = preview else { return nil }
+        let message = ready.message?.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") ?? ""
         if panel.renderStyle == .ledMatrix {
-            return MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells).spoken(message: ready.message)
+            let raster = MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells)
+            guard !message.isEmpty || !raster.text.isEmpty || raster.pixels.contains(where: { $0 != 0 }) else { return nil }
+            return raster.spoken(message: ready.message)
         }
-        guard let message = ready.message else { return nil }
-        let flattened = message
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return flattened.isEmpty ? nil : flattened
+        let hasContent = ready.cells.contains { row in
+            row.contains { cell in
+                switch cell {
+                case .blank: return false
+                case .character(let value): return !value.isWhitespace
+                case .color: return true
+                }
+            }
+        }
+        guard !message.isEmpty || hasContent else { return nil }
+        return BoardSpeech.spoken(message: hasContent ? nil : ready.message, cells: ready.cells)
     }
 }

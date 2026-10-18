@@ -124,6 +124,13 @@ them. Discrete LED effects intentionally hold each hardware step; choose
 intervals and limits appropriate to the effect. Restore a 4K simulator with
 `xcrun simctl io booted screenConfig geometry 3840x2160@2` after capturing.
 
+## Browsing panels
+
+The panel browser shows two preview cards per row, sized to the TV's available
+space. Each card names the display style and shows its current message. Return
+from a viewer to keep your place in the list; background refreshes preserve
+remote focus. Empty boards and unavailable previews have distinct labels.
+
 ## Top Shelf
 
 Loading the panel list publishes an **Available panels** row on Top Shelf,

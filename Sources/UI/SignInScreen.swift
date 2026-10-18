@@ -123,7 +123,10 @@ struct SignInScreen: View {
                 anotherBoardSection
             }
             .listStyle(.grouped)
+            .frame(maxWidth: 1120)
+            .padding(.horizontal, 40)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         // Not the root: without this, Menu falls through to the system and
         // quits the app. See `SignInModel.back()`.
         .onExitCommand { model?.back() }
@@ -145,15 +148,8 @@ struct SignInScreen: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Sign in")
-                .font(.system(size: 56, weight: .bold))
-                .foregroundStyle(Fiesta.Colors.foreground)
-                .accessibilityAddTraits(.isHeader)
-            Text(boardName)
-                .font(Fiesta.Text.caption)
-                .foregroundStyle(Fiesta.Colors.mutedForeground)
-        }
+        FiestaScreenHeading(title: "Sign in", subtitle: "Use the account you created on your FiestaBoard.",
+                            context: boardName)
         .padding(.horizontal, Fiesta.Metrics.safeInset)
         .padding(.top, Fiesta.Metrics.safeInset)
         .padding(.bottom, 12)

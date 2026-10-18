@@ -29,7 +29,16 @@ wrong.
 **Browsing content — panels, boards, anything with a picture:**
 `Button { … } .buttonStyle(.card)`. `CardButtonStyle` is the tvOS
 focus treatment: lift, shadow, and the parallax tilt users already expect.
-Lay cards out in a `LazyVGrid` or a row.
+Lay cards out in a `LazyVGrid` or a row. The panel browser uses two flexible
+columns sized from its actual safe-area width, not a hard-coded 1920-point
+screen. Keep the full board inside an inset 16:9 preview; the card also names
+the hardware style and shows a readable message summary. Returning from the
+viewer restores that panel and scroll position. A later refresh must not
+move focus away from Settings or Try again.
+
+Top Shelf snapshots reserve a 64-point inset within the 1920×1080 image, so
+Home's rounded corners and focus rim never eat the board's edge LEDs/flaps.
+The image uses the same charcoal mount as panel cards, with native Home titles.
 
 **Settings-like screens — choices, switches, values:**
 `List` of `Section`s, `.listStyle(.grouped)`. Put explanatory copy in the
