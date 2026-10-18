@@ -1,0 +1,3 @@
+// Keep signing choices out of generated project files, which XcodeGen replaces.
+// The optional local file applies to the app and its Top Shelf extension.
+#include? "Signing.local.xcconfig"

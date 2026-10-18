@@ -1,8 +1,15 @@
 # Publishing FiestaBoard for Apple TV
 
-The app bundle ID is `com.fiestaboard.tv`. Set `DEVELOPMENT_TEAM` in a local
-Xcode configuration or signing override before creating a signed archive. Do
-not commit a team ID or signing credentials. The unsigned Release archive in
+The app bundle ID is `com.fiestaboard.tv`. For a physical Apple TV or signed
+archive, copy `Config/Signing.local.xcconfig.example` to
+`Config/Signing.local.xcconfig`, then set `DEVELOPMENT_TEAM` to your Apple
+Developer team ID. Run `xcodegen generate` and open `FiestaBoardTV.xcodeproj`.
+The local file is ignored by Git and applies to both the app and Top Shelf
+extension in Debug and Release. It survives project regeneration; choosing a
+team only inside the generated Xcode project does not. Do not commit a team ID
+or signing credentials. Select your paired Apple TV in Xcode and use Run;
+Xcode's signed-in Apple account must have access to that team and its signing
+certificate. The unsigned Release archive in
 CI checks compilation and bundle assembly; it is not an App Store upload.
 
 Archive with a **tvOS 26 or newer SDK**. Apple rejects uploads built against
