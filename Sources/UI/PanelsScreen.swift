@@ -18,9 +18,8 @@ struct PanelsScreen: View {
         _model = State(initialValue: model)
     }
 
-    /// A card lifts by about a tenth of its size when focused, and the
-    /// enclosing `ScrollView` clips to its own bounds. This is the room the
-    /// lift needs; without it the selected card's edges are cut off.
+    /// Breathing room between cards and the scrolling viewport's edges.
+    /// Keep the layout stable as focus moves; the card's outline is inset.
     private static let focusInset: CGFloat = 44
 
     var body: some View {
@@ -222,8 +221,8 @@ struct PanelsScreen: View {
                     }
                     .padding(Self.focusInset)
                 }
-                // Expand the viewport, then inset its content: lifted cards fit
-                // without moving the columns out of alignment with the heading.
+                // Expand the viewport, then inset its content without moving
+                // the columns out of alignment with the heading.
                 .padding(.horizontal, -Self.focusInset)
                 .focusScope(gridScope)
                 .focusSection()

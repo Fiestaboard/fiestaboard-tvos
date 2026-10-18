@@ -2,10 +2,9 @@ import SwiftUI
 
 /// One panel, shown as what its board currently says.
 ///
-/// Focus is entirely the platform's: `.buttonStyle(.card)` is the tvOS lift,
-/// shadow and parallax. The previous hand-rolled version scaled itself on
-/// focus, which grew it past its layout bounds inside the enclosing
-/// `ScrollView` — so selecting a panel visibly cut its edges off.
+/// The focus engine handles navigation, while a stationary outline marks the
+/// selected card. Scaling and tilting a dense board preview makes its pixels
+/// shimmer and competes with the scroll motion during remote swipes.
 struct PanelCard: View {
     let panel: Panel
     let preview: PanelPreviewState
@@ -42,7 +41,8 @@ struct PanelCard: View {
                     .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
             .opacity(panel.boardMissing ? 0.45 : 1)
         }
-        .buttonStyle(.card)
+        .buttonStyle(PanelCardButtonStyle())
+        .focusEffectDisabled()
         .disabled(panel.boardMissing)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Shows this panel full-screen.")
@@ -156,5 +156,30 @@ struct PanelCard: View {
         }
         guard !message.isEmpty || hasContent else { return nil }
         return BoardSpeech.spoken(message: hasContent ? nil : ready.message, cells: ready.cells)
+    }
+}
+
+private struct PanelCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        FocusAppearance(label: configuration.label, isPressed: configuration.isPressed)
+    }
+
+    private struct FocusAppearance: View {
+        let label: ButtonStyleConfiguration.Label
+        let isPressed: Bool
+        @Environment(\.isFocused) private var isFocused
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            label
+                .overlay {
+                    RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius)
+                        .strokeBorder(Fiesta.Colors.brand, lineWidth: 4)
+                        .opacity(isFocused ? 1 : 0)
+                        .allowsHitTesting(false)
+                }
+                .opacity(isPressed ? 0.9 : 1)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isFocused)
+        }
     }
 }
