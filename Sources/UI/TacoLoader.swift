@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// A shared, lightweight indeterminate loading indicator. The artwork is
 /// decorative; VoiceOver gets one stable status instead of animation updates.
@@ -29,43 +30,9 @@ struct TacoLoader: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Group {
-                if isAnimating && !reduceMotion && scenePhase == .active {
-                    taco.keyframeAnimator(initialValue: Hop(), repeating: true) { content, hop in
-                        content
-                            .scaleEffect(x: hop.scaleX, y: hop.scaleY, anchor: .bottom)
-                            .offset(y: hop.height * size.points)
-                    } keyframes: { _ in
-                        // A small hop, soft landing, then a rest: 1.92 seconds.
-                        KeyframeTrack(\.height) {
-                            LinearKeyframe(0, duration: 0.14)
-                            CubicKeyframe(-0.14, duration: 0.22)
-                            CubicKeyframe(0, duration: 0.26)
-                            LinearKeyframe(0, duration: 1.30)
-                        }
-                        KeyframeTrack(\.scaleX) {
-                            CubicKeyframe(1.06, duration: 0.14)
-                            CubicKeyframe(0.97, duration: 0.22)
-                            CubicKeyframe(1, duration: 0.26)
-                            CubicKeyframe(1.06, duration: 0.10)
-                            CubicKeyframe(1, duration: 0.14)
-                            LinearKeyframe(1, duration: 1.06)
-                        }
-                        KeyframeTrack(\.scaleY) {
-                            CubicKeyframe(0.94, duration: 0.14)
-                            CubicKeyframe(1.03, duration: 0.22)
-                            CubicKeyframe(1, duration: 0.26)
-                            CubicKeyframe(0.94, duration: 0.10)
-                            CubicKeyframe(1, duration: 0.14)
-                            LinearKeyframe(1, duration: 1.06)
-                        }
-                    }
-                } else {
-                    taco
-                }
-            }
-            .frame(width: size.points, height: size.points)
-            .accessibilityHidden(true)
+            TacoAnimationView(isAnimating: isAnimating && !reduceMotion && scenePhase == .active)
+                .frame(width: size.points, height: size.points)
+                .accessibilityHidden(true)
             if let label { Text(label) }
         }
         .accessibilityElement(children: .ignore)
@@ -73,18 +40,66 @@ struct TacoLoader: View {
         .accessibilityIdentifier("taco-loader")
     }
 
-    private var taco: some View {
-        Image("TacoLoader")
-            .resizable()
-            .interpolation(.none)
-            .scaledToFit()
-            .frame(width: size.points * 0.82, height: size.points * 0.82)
-            .offset(y: size.points * 0.07)
+}
+
+/// Cache image objects once, even when several panel previews are loading.
+/// Repeated references preserve GIF frame delays without duplicate pixel data.
+struct TacoAnimation {
+    let images: [UIImage]
+    let timedImages: [UIImage]
+    let duration: TimeInterval
+
+    static let shared: TacoAnimation? = {
+        struct Manifest: Decodable {
+            struct Frame: Decodable {
+                let file: String
+                let durationMs: Int
+            }
+            let frames: [Frame]
+        }
+        guard let url = Bundle.main.url(forResource: "manifest", withExtension: "json", subdirectory: "TacoLoader"),
+              let data = try? Data(contentsOf: url),
+              let manifest = try? JSONDecoder().decode(Manifest.self, from: data),
+              !manifest.frames.isEmpty,
+              manifest.frames.allSatisfy({ $0.durationMs > 0 }) else { return nil }
+        let images = manifest.frames.compactMap { frame in
+            UIImage(contentsOfFile: url.deletingLastPathComponent().appendingPathComponent(frame.file).path)
+        }
+        guard images.count == manifest.frames.count else { return nil }
+        func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
+        let tick = manifest.frames.reduce(manifest.frames[0].durationMs) { gcd($0, $1.durationMs) }
+        let timedImages = zip(images, manifest.frames).flatMap { image, frame in
+            Array(repeating: image, count: frame.durationMs / tick)
+        }
+        return TacoAnimation(images: images, timedImages: timedImages,
+                             duration: Double(manifest.frames.reduce(0) { $0 + $1.durationMs }) / 1000)
+    }()
+}
+
+private struct TacoAnimationView: UIViewRepresentable {
+    let isAnimating: Bool
+
+    func makeUIView(context: Context) -> UIImageView {
+        let view = UIImageView(image: TacoAnimation.shared?.images.first)
+        view.contentMode = .scaleAspectFit
+        view.isAccessibilityElement = false
+        view.layer.magnificationFilter = .nearest
+        view.layer.minificationFilter = .nearest
+        view.animationImages = TacoAnimation.shared?.timedImages
+        view.animationDuration = TacoAnimation.shared?.duration ?? 0
+        return view
     }
 
-    private struct Hop {
-        var height: CGFloat = 0
-        var scaleX: CGFloat = 1
-        var scaleY: CGFloat = 1
+    func updateUIView(_ view: UIImageView, context: Context) {
+        if isAnimating {
+            if !view.isAnimating { view.startAnimating() }
+        } else {
+            view.stopAnimating()
+        }
+    }
+
+    static func dismantleUIView(_ view: UIImageView, coordinator: ()) {
+        view.stopAnimating()
+        view.animationImages = nil
     }
 }
