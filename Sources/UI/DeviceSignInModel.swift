@@ -74,11 +74,12 @@ final class DeviceSignInModel {
         task = Task { await poll(client: client, attempt: attempt, generation: generation) }
     }
     func cancel() {
+        let completed = state == .complete
         attempt = UUID(); task?.cancel(); task = nil
         if let challenge, let client = challengeClient {
             Task { try? await client.cancelDeviceSignIn(deviceCode: challenge.deviceCode) }
         }
-        connection.invalidatePendingSignIn()
+        if !completed { connection.invalidatePendingSignIn() }
         challenge = nil; manualURL = nil; completeURL = nil; expiresAt = nil
         challengeClient = nil; expectedGeneration = nil
         state = .idle

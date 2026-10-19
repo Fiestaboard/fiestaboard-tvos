@@ -171,6 +171,10 @@ public final class FiestaClient: @unchecked Sendable {
             let allowed = (method == "GET" && ["/auth/status", "/panels"].contains(path)) ||
                 (method == "DELETE" && path == "/auth/device/session") || panelRead || panelPatch
             guard allowed, !path.contains(".."), !path.contains("%"), !path.contains("?"), !path.contains("#") else { throw FiestaError.http(403) }
+            if panelPatch {
+                let fields: Set<String> = ["screen_diagonal_inches", "screen_aspect_w", "screen_aspect_h", "calibration_scale", "animations_enabled", "render_style"]
+                guard Set(body?.keys.map { $0 } ?? []).isSubset(of: fields) else { throw FiestaError.http(403) }
+            }
             request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
             request.httpShouldHandleCookies = false
         }

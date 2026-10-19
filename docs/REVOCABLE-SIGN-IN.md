@@ -38,3 +38,8 @@ permissions. CI is the simulator execution record. Physical QR scanning at 1080p
 and 4K, iPhone/Android/desktop approval against the coordinated server, real remote
 and VoiceOver checks, and the 24-hour signage soak remain beta qualification work.
 No TestFlight upload or physical-device result is claimed by this change.
+
+A native macOS harness also executes the platform-independent Core contract and
+credential tests against the same production Swift sources. This checks protocol,
+Keychain abstraction failures, migration and generation races; it does not exercise
+tvOS Keychain entitlement behavior, focus, or actual device rendering.

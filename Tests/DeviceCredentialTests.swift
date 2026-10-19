@@ -74,7 +74,7 @@ final class DeviceCredentialTests: XCTestCase {
     }
     func testStoredPasswordMigratesOnceWhenCapabilityEnabled() async throws {
         try credentials.save(StoredCredential(username: "user", password: "secret"), for: host.absoluteString)
-        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
         StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
         authenticated()
         let result = try await store.connect(to: host, displayName: "Board")
@@ -82,6 +82,91 @@ final class DeviceCredentialTests: XCTestCase {
         XCTAssertNil(credentials.load(for: host.absoluteString)?.password)
         XCTAssertEqual(credentials.load(for: host.absoluteString)?.accessToken, "fb_tv_test-only")
     }
+    func testReconnectingWithRevokedTokenOffersSignInWithoutPasswordLogin() async throws {
+        try credentials.save(.deviceToken(accessToken: "fb_tv_revoked", sessionID: "old", expiresAt: Date().addingTimeInterval(1000)), for: host.absoluteString)
+        StubURLProtocol.enqueue(.json("{}", status: 401), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
+        let result = try await store.connect(to: host, displayName: "Board")
+        XCTAssertEqual(result, .needsSignIn)
+        XCTAssertTrue(store.deviceSignInEnabled)
+        XCTAssertNil(credentials.load(for: host.absoluteString))
+        XCTAssertFalse(StubURLProtocol.requests.contains { $0.url.path.hasSuffix("/login") })
+    }
+    func testColdStartMigratesBeforePublicDefaultPanelCanBypassAuthentication() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: host, displayName: "Board")
+        try credentials.save(.legacyPassword(username: "user", password: "secret"), for: host.absoluteString)
+        let restored = makeStore(credentials)
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
+        authenticated()
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
+        _ = try await restored.authorized { try await $0.panel(ref: "1") }
+        XCTAssertEqual(StubURLProtocol.requests.last?.authorization, "Bearer fb_tv_test-only")
+        XCTAssertNil(credentials.load(for: host.absoluteString)?.password)
+    }
+
+    func testReplacementIsValidatedBeforeDeletingLegacyPassword() async throws {
+        try await connect()
+        try credentials.save(.legacyPassword(username: "old", password: "old-secret"), for: host.absoluteString)
+        StubURLProtocol.enqueue(.json("{}", status: 401), for: "/api/auth/status")
+        do { try await store.adoptDeviceCredential(token(), expectedGeneration: store.connectionGeneration); XCTFail("validation must fail") }
+        catch FiestaError.unauthorized {}
+        XCTAssertEqual(credentials.load(for: host.absoluteString)?.password, "old-secret")
+        XCTAssertTrue(store.isSignedOut)
+        XCTAssertNil(store.client?.deviceToken)
+    }
+    func testLateValidationAfterHostSwitchCannotOverwriteNewConnection() async throws {
+        try await connect()
+        let reached = expectation(description: "validation is held")
+        var release: (() -> Void)?
+        var response = StubURLProtocol.Stub.json(DeviceAuthorizationTests.enabled.replacingOccurrences(of: "\"authenticated\":false", with: "\"authenticated\":true"))
+        response.beforeReply = { reply in release = reply; reached.fulfill() }
+        StubURLProtocol.enqueue(response, for: "/api/auth/status")
+        let result = try token()
+        let generation = store.connectionGeneration
+        let adoption = Task { try await store.adoptDeviceCredential(result, expectedGeneration: generation) }
+        await fulfillment(of: [reached], timeout: 3)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: URL(string: "http://replacement.test")!, displayName: "Replacement")
+        release?()
+        do { try await adoption.value; XCTFail("old adoption must cancel") } catch is CancellationError {}
+        XCTAssertEqual(store.saved?.displayName, "Replacement")
+        XCTAssertNil(credentials.load(for: "http://replacement.test"))
+        XCTAssertNil(credentials.load(for: host.absoluteString))
+    }
+
+    func testFailedKeychainDeletionCannotRestoreSignInAfterRestartOrReconnect() async throws {
+        let stubborn = UndeletableCredentialStore()
+        store = makeStore(stubborn)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: host, displayName: "Board")
+        stubborn.value = .deviceToken(accessToken: "fb_tv_stubborn", sessionID: "old", expiresAt: Date().addingTimeInterval(1000))
+        store.signOut()
+        let restarted = makeStore(stubborn)
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
+        _ = try await restarted.connect(to: host, displayName: "Board")
+        XCTAssertNil(StubURLProtocol.requests.last?.authorization)
+        XCTAssertTrue(restarted.isSignedOut)
+    }
+
+    func testConcurrentColdStartSharesOneMigration() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: host, displayName: "Board")
+        try credentials.save(.legacyPassword(username: "user", password: "secret"), for: host.absoluteString)
+        let restored = makeStore(credentials)
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
+        authenticated()
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
+        async let first = try? restored.authorized { try await $0.panel(ref: "1") }
+        async let second = try? restored.authorized { try await $0.panel(ref: "1") }
+        let results = await [first, second]
+        XCTAssertTrue(results.allSatisfy { $0 != nil })
+        XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path.hasSuffix("/device/login") }.count, 1)
+    }
+
 }
 
 private final class FailingCredentialStore: CredentialStore {
@@ -90,4 +175,12 @@ private final class FailingCredentialStore: CredentialStore {
     func load(for account: String) -> StoredCredential? { value }
     func delete(for account: String) throws { value = nil }
     func deleteAll() throws { value = nil }
+}
+
+private final class UndeletableCredentialStore: CredentialStore {
+    var value: StoredCredential?
+    func save(_ credential: StoredCredential, for account: String) throws { value = credential }
+    func load(for account: String) -> StoredCredential? { value }
+    func delete(for account: String) throws { throw KeychainError.unexpectedStatus(-1) }
+    func deleteAll() throws { throw KeychainError.unexpectedStatus(-1) }
 }

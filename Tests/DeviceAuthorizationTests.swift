@@ -75,3 +75,58 @@ final class DeviceAuthorizationTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.requests.count, 1)
     }
 }
+
+extension DeviceAuthorizationTests {
+    func testRedirectsNeverForwardCopiedCookiesTokensOrPasswords() async throws {
+        let delegate = NoCredentialRedirects()
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: URL(string: "https://board.test/api/auth/device/login")!)
+        for target in ["https://attacker.test/api/panels", "http://board.test/api/panels", "https://board.test/other/api/panels"] {
+            var redirected = URLRequest(url: URL(string: target)!)
+            redirected.setValue("Bearer fb_tv_test", forHTTPHeaderField: "Authorization")
+            redirected.setValue("fiestaboard_session=test", forHTTPHeaderField: "Cookie")
+            redirected.httpBody = Data("password=test".utf8)
+            let response = HTTPURLResponse(url: task.originalRequest!.url!, statusCode: 307, httpVersion: nil, headerFields: ["Location": target])!
+            let result: URLRequest? = await withCheckedContinuation { continuation in
+                delegate.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: redirected) { continuation.resume(returning: $0) }
+            }
+            XCTAssertNil(result)
+        }
+    }
+    func testNormalizedKeyPreservesServerPrefixAndPort() {
+        XCTAssertEqual(FiestaClient.normalizedBaseURL(URL(string: "HTTPS://BOARD.test:443/fiesta/api/")!).absoluteString, "https://board.test/fiesta")
+        XCTAssertEqual(FiestaClient.normalizedBaseURL(URL(string: "http://[::1]:4420/fiesta/")!).absoluteString, "http://[::1]:4420/fiesta")
+    }
+    func testDeviceBearerRejectsOutOfScopePatchFieldsLocally() async throws {
+        let client = FiestaClient(baseURL: URL(string: "http://board.test")!, session: StubURLProtocol.makeSession())
+        client.setDeviceToken("fb_tv_test")
+        do {
+            _ = try await client.send(method: "PATCH", path: "/panels/one", body: ["render_style": "matrix", "name": "not-permitted"])
+            XCTFail("mixed fields must fail closed")
+        } catch FiestaError.http(403) {}
+        XCTAssertTrue(StubURLProtocol.requests.isEmpty)
+    }
+}
+
+extension DeviceAuthorizationTests {
+    func testCanonicalServerFixtureDecodesAndBuildsAllDeploymentURLs() throws {
+        let url = Bundle(for: Self.self).url(forResource: "tv-sign-in-v1", withExtension: "json") ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/tv-sign-in-v1.json")
+        let fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        func data(_ key: String) throws -> Data { try JSONSerialization.data(withJSONObject: fixture[key]!) }
+        let status = try JSONDecoder().decode(AuthStatus.self, from: data("status"))
+        XCTAssertTrue(status.tvSignIn?.isEnabled == true)
+        let old = try JSONDecoder().decode(AuthStatus.self, from: data("old_server_status"))
+        XCTAssertNil(old.tvSignIn)
+        let challenge = try JSONDecoder().decode(DeviceChallenge.self, from: data("challenge"))
+        let token = try JSONDecoder().decode(DeviceTokenResult.self, from: data("token"))
+        XCTAssertNotNil(try token.credential(now: Date()).accessToken)
+        let urls = try XCTUnwrap(fixture["url_examples"] as? [[String: String]])
+        for entry in urls {
+            let base = try XCTUnwrap(URL(string: entry["base"]!))
+            let actual = try challenge.verificationURLs(baseURL: base)
+            XCTAssertEqual(actual.manual.absoluteString, entry["base"]! + "/activate")
+            XCTAssertEqual(actual.complete.absoluteString, entry["activation"])
+        }
+    }
+}

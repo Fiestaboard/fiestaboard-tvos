@@ -242,6 +242,17 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
     public let firstRun: Bool
     public let tvSignIn: TVSignInCapability?
 
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        setupRequired = try c.decode(Bool.self, forKey: .setupRequired)
+        authenticated = try c.decode(Bool.self, forKey: .authenticated)
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        mode = try c.decodeIfPresent(String.self, forKey: .mode) ?? "enabled"
+        firstRun = try c.decodeIfPresent(Bool.self, forKey: .firstRun) ?? false
+        tvSignIn = try c.decodeIfPresent(TVSignInCapability.self, forKey: .tvSignIn)
+    }
+
     enum CodingKeys: String, CodingKey {
         case enabled, authenticated, username, mode
         case setupRequired = "setup_required"
