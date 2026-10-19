@@ -26,7 +26,7 @@ final class StubURLProtocol: URLProtocol {
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var queues: [String: [Stub]] = [:]
-    nonisolated(unsafe) private static var recorded: [(url: URL, method: String, body: Data?)] = []
+    nonisolated(unsafe) private static var recorded: [(url: URL, method: String, body: Data?, authorization: String?)] = []
 
     static func reset() {
         lock.lock(); defer { lock.unlock() }
@@ -40,7 +40,7 @@ final class StubURLProtocol: URLProtocol {
         queues[pathFragment, default: []].append(stub)
     }
 
-    static var requests: [(url: URL, method: String, body: Data?)] {
+    static var requests: [(url: URL, method: String, body: Data?, authorization: String?)] {
         lock.lock(); defer { lock.unlock() }
         return recorded
     }
@@ -87,7 +87,7 @@ final class StubURLProtocol: URLProtocol {
         }
 
         StubURLProtocol.lock.lock()
-        StubURLProtocol.recorded.append((url, request.httpMethod ?? "GET", body))
+        StubURLProtocol.recorded.append((url, request.httpMethod ?? "GET", body, request.value(forHTTPHeaderField: "Authorization")))
         StubURLProtocol.lock.unlock()
 
         guard let stub = StubURLProtocol.dequeue(for: url) else {
