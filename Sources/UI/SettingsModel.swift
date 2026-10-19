@@ -145,7 +145,7 @@ final class SettingsModel {
         guard !Task.isCancelled, let client, app.connection.client === client,
               (generation == app.connection.connectionGeneration || app.connection.isSignedOut),
               app.connection.saved != nil else { return }
-        panels = []; preview = .unavailable; previewPanelID = nil
+        panels = []; preview = .unavailable
         errorMessage = nil; warningMessage = nil
         app.requestSignIn()
     }
