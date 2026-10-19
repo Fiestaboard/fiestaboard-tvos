@@ -13,7 +13,7 @@ struct SettingsPanelPreview: View {
             Group {
                 switch state {
                 case .loading:
-                    ProgressView("Loading preview…")
+                    TacoLoader("Loading preview…")
                         .font(Fiesta.Text.caption)
                 case .unavailable:
                     Label(panel.boardMissing ? "Board unavailable" : "Preview unavailable",

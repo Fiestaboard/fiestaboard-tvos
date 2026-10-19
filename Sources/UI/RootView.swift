@@ -46,7 +46,7 @@ public struct RootView: View {
     private var content: some View {
         switch model.route {
         case .connecting:
-            ProgressView().tint(Fiesta.Colors.brand)
+            TacoLoader(size: .large)
         case .connect:
             ConnectScreen()
         case .signIn:

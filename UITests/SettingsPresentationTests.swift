@@ -53,7 +53,7 @@ final class SettingsPresentationTests: XCTestCase {
                                "-fiestaboard.signedOut", "NO"]
         app.launch()
         wait(for: [frameLoaded], timeout: 10)
-        XCTAssertTrue(app.progressIndicators.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
         XCUIRemote.shared.press(.right)

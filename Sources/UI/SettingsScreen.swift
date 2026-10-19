@@ -232,7 +232,7 @@ struct SettingsScreen: View {
             Section { Text(warning).foregroundStyle(Fiesta.Colors.brand) }
         }
         if model == nil || model?.isLoading == true {
-            Section { ProgressView("Loading panels…") }
+            Section { TacoLoader("Loading panels…") }
         } else if model?.hasLoaded != true {
             Section { Button("Retry loading panels") { panelsReload += 1 } }
         }
