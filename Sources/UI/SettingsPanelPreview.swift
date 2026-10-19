@@ -38,7 +38,7 @@ struct SettingsPanelPreview: View {
     private func board(_ preview: PanelPreview, in size: CGSize) -> some View {
         if panel.renderStyle == .ledMatrix {
             MatrixCanvas(raster: MatrixRaster.make(panel: panel, cells: preview.cells,
-                                                   richCells: preview.richCells),
+                                                   richCells: preview.richCells, layers: preview.layers),
                          display: panel.matrixDisplay)
                 .accessibilityHidden(true)
         } else if let layout = Self.layout(panel: panel, preview: preview, in: size,

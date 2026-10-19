@@ -1,8 +1,31 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import FiestaBoardTV
 
 final class MatrixDisplayTests: XCTestCase {
+    @MainActor
+    func testWirePixelsReachViewerSettingsCardsAndTopShelf() throws {
+        let panel = try PixelLayerTests.panel(width: 1, height: 1)
+        let frame = try PixelLayerTests.frame([PixelLayerTests.layer([255, 0, 0, 255])])
+        let preview = PanelPreview.make(from: frame, code62: .degree)
+        let app = AppModel(connection: ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!, credentials: InMemoryCredentialStore()))
+        let model = ViewerModel(app: app, ref: panel.id,
+            signage: SignageSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!))
+        model.apply(PanelSnapshot(panel: panel, cells: [], rows: 1, cols: 1,
+            connection: .live, dimmed: false, deleted: false, layers: frame.layers))
+        let card = RenderHarness.image(PanelPreviewBoard(panel: panel, preview: preview))
+        let settings = RenderHarness.image(SettingsPanelPreview(panel: panel, state: .ready(preview)))
+        let viewer = RenderHarness.image(ViewerScreen(ref: panel.id, model: model).environment(app))
+        let shelf = UIImage(cgImage: try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview)))
+        for image in [card, settings, viewer, shelf] {
+            let pixel = try XCTUnwrap(image.pixel(x: 960, y: 540))
+            XCTAssertGreaterThan(pixel.r, 200)
+            XCTAssertLessThan(pixel.g, 50)
+            XCTAssertLessThan(pixel.b, 50)
+        }
+    }
+
     @MainActor
     func testViewerFillsTVWithUnlitLEDsWithoutMovingTheMessage() throws {
         let panel = try Self.matrixPanel(width: 192, height: 96)

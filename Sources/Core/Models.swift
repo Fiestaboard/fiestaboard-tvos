@@ -154,6 +154,38 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// A validated row-major RGBA bitmap positioned in LED pixel coordinates.
+/// Invalid layers are discarded individually by PanelFrame.
+public struct CanvasLayer: Decodable, Equatable, Sendable {
+    public static let maxDimension = 256
+    public static let maxCount = 64
+    public let x: Int
+    public let y: Int
+    public let width: Int
+    public let height: Int
+    public let rgba: Data
+
+    private enum CodingKeys: String, CodingKey { case x, y, width, height, rgba }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        x = try c.decode(Int.self, forKey: .x)
+        y = try c.decode(Int.self, forKey: .y)
+        width = try c.decode(Int.self, forKey: .width)
+        height = try c.decode(Int.self, forKey: .height)
+        guard (1...Self.maxDimension).contains(width), (1...Self.maxDimension).contains(height) else {
+            throw DecodingError.dataCorruptedError(forKey: .width, in: c, debugDescription: "Invalid bitmap dimensions")
+        }
+        let count = width * height * 4
+        let encoded = try c.decode(String.self, forKey: .rgba)
+        guard encoded.utf8.count == ((count + 2) / 3) * 4,
+              let data = Data(base64Encoded: encoded), data.count == count else {
+            throw DecodingError.dataCorruptedError(forKey: .rgba, in: c, debugDescription: "Invalid RGBA bitmap")
+        }
+        rgba = data
+    }
+}
+
 /// The virtual board's current content.
 public struct PanelFrame: Decodable, Equatable, Sendable {
     /// The largest grid this app will believe from the wire.
@@ -171,13 +203,14 @@ public struct PanelFrame: Decodable, Equatable, Sendable {
 
     public let characters: [[Int]]?
     public let richCells: [[MatrixCell]]?
+    public let layers: [CanvasLayer]
     public let message: String?
     public let rows: Int
     public let cols: Int
     public let updatedAt: Date?
 
     enum CodingKeys: String, CodingKey {
-        case characters, message, rows, cols
+        case characters, message, rows, cols, layers
         case richCells = "cells"
         case updatedAt = "updated_at"
     }
@@ -197,6 +230,17 @@ public struct PanelFrame: Decodable, Equatable, Sendable {
         richCells = try c.decodeIfPresent([[MatrixCell]].self, forKey: .richCells).map {
             $0.prefix(rowLimit).map { Array($0.prefix(colLimit)) }
         }
+        var validLayers: [CanvasLayer] = []
+        if var items = try? c.nestedUnkeyedContainer(forKey: .layers) {
+            // Bound work by wire entries, including malformed ones. A decoder
+            // for each entry advances past bad scalars/objects without losing siblings.
+            for _ in 0..<CanvasLayer.maxCount {
+                guard !items.isAtEnd else { break }
+                let item = try items.superDecoder()
+                if let layer = try? CanvasLayer(from: item) { validLayers.append(layer) }
+            }
+        }
+        layers = validLayers
         if let raw = try c.decodeIfPresent(String.self, forKey: .updatedAt) {
             updatedAt = ISO8601DateFormatter.fiestaDate(from: raw)
         } else {
@@ -204,13 +248,14 @@ public struct PanelFrame: Decodable, Equatable, Sendable {
         }
     }
 
-    public init(characters: [[Int]]?, message: String?, rows: Int, cols: Int, updatedAt: Date?, richCells: [[MatrixCell]]? = nil) {
+    public init(characters: [[Int]]?, message: String?, rows: Int, cols: Int, updatedAt: Date?, richCells: [[MatrixCell]]? = nil, layers: [CanvasLayer] = []) {
         self.characters = characters
         self.message = message
         self.rows = min(max(rows, 0), Self.maxDimension)
         self.cols = min(max(cols, 0), Self.maxDimension)
         self.updatedAt = updatedAt
         self.richCells = richCells
+        self.layers = Array(layers.prefix(CanvasLayer.maxCount))
     }
 }
 
