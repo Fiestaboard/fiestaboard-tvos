@@ -73,6 +73,8 @@ final class SettingsModel {
     /// Fetch only the selected panel. The caller's SwiftUI task owns cancellation;
     /// a generation also rejects late replies from overlapping retries.
     func loadPreview(for panel: Panel) async {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         guard !Task.isCancelled else { return }
         let panel = current(panel)
         let generation = UUID()
@@ -90,7 +92,7 @@ final class SettingsModel {
             preview = .unavailable
             guard !Task.isCancelled else { return }
             if let error = error as? FiestaError, error == .unauthorized {
-                app.route = .signIn
+                requestSignIn(client: client, generation: shelfGeneration)
             }
             // A missing preview must not replace an unrelated settings-save error.
         }
@@ -112,6 +114,8 @@ final class SettingsModel {
     }
 
     func load() async {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         guard !Task.isCancelled else { return }
         let generation = UUID()
         loadGeneration = generation
@@ -126,12 +130,22 @@ final class SettingsModel {
         } catch {
             guard loadGeneration == generation, !Task.isCancelled else { return }
             if let error = error as? FiestaError {
-                if error == .unauthorized { app.route = .signIn }
+                if error == .unauthorized { requestSignIn(client: client, generation: shelfGeneration) }
                 else { report(error: error.userMessage) }
             } else {
                 report(error: FiestaError.transport("\(error)").userMessage)
             }
         }
+    }
+
+    private func requestSignIn(client: FiestaClient?, generation: UUID) {
+        // Token rejection already marks the connection signed out. Keep the
+        // identity/cancellation guards without rejecting that terminal state.
+        guard !Task.isCancelled, let client, app.connection.client === client,
+              generation == app.topShelfGeneration, app.connection.saved != nil else { return }
+        panels = []; preview = .unavailable; previewPanelID = nil
+        errorMessage = nil; warningMessage = nil
+        app.requestSignIn()
     }
 
     /// Record an error or a warning and say it out loud — see
@@ -196,6 +210,8 @@ final class SettingsModel {
     func isSavingPanel(_ panel: Panel) -> Bool { pendingPanelWrites.contains(panel.id) }
 
     func setRenderStyle(_ style: PanelRenderStyle, for panel: Panel) async {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         guard current(panel).supportsRenderStyle, pendingPanelWrites.insert(panel.id).inserted else { return }
         defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
@@ -207,7 +223,7 @@ final class SettingsModel {
             }
             if let index = panels.firstIndex(where: { $0.id == panel.id }) { panels[index] = result.panel }
         } catch FiestaError.unauthorized {
-            app.route = .signIn
+            requestSignIn(client: client, generation: shelfGeneration)
         } catch let error as FiestaError {
             report(error: "Couldn't save the display style. " + error.userMessage)
         } catch {
@@ -231,6 +247,8 @@ final class SettingsModel {
     }
 
     func setAnimationEnabled(_ enabled: Bool, for panel: Panel) async {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         guard pendingPanelWrites.insert(panel.id).inserted else { return }
         defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
@@ -245,7 +263,7 @@ final class SettingsModel {
                 panels[index] = result.panel
             }
         } catch FiestaError.unauthorized {
-            app.route = .signIn
+            requestSignIn(client: client, generation: shelfGeneration)
         } catch let error as FiestaError {
             report(error: "Couldn't save the animation setting. " + error.userMessage)
         } catch {
@@ -255,6 +273,8 @@ final class SettingsModel {
 
     /// Save a full editor draft while retaining it in the caller on failure.
     func saveDisplaySettings(_ draft: PanelSettingsDraft) async -> PanelUpdateResult? {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         let id = draft.original.id
         guard pendingPanelWrites.insert(id).inserted else { return nil }
         defer { pendingPanelWrites.remove(id) }
@@ -276,8 +296,7 @@ final class SettingsModel {
             }
             return result
         } catch FiestaError.unauthorized {
-            report(error: FiestaError.unauthorized.userMessage)
-            app.route = .signIn
+            requestSignIn(client: client, generation: shelfGeneration)
         } catch let error as FiestaError {
             report(error: error.userMessage)
         } catch let error as PanelSettingsError {
@@ -387,6 +406,8 @@ final class SettingsModel {
 
     @discardableResult
     func saveCalibration(panel: Panel) async -> Bool {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         guard current(panel).renderStyle == .splitFlap, pendingPanelWrites.insert(panel.id).inserted else { return false }
         defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
@@ -400,7 +421,7 @@ final class SettingsModel {
             }
             return true
         } catch FiestaError.unauthorized {
-            app.route = .signIn
+            requestSignIn(client: client, generation: shelfGeneration)
         } catch let error as FiestaError {
             report(error: "Couldn't save the calibration. " + error.userMessage)
         } catch {
@@ -410,6 +431,8 @@ final class SettingsModel {
     }
 
     func resize(panel: Panel) async {
+        let client = app.connection.client
+        let shelfGeneration = app.topShelfGeneration
         guard current(panel).renderStyle == .splitFlap, pendingPanelWrites.insert(panel.id).inserted else { return }
         defer { pendingPanelWrites.remove(panel.id) }
         errorMessage = nil
@@ -435,7 +458,7 @@ final class SettingsModel {
                 panels[index] = result.panel
             }
         } catch FiestaError.unauthorized {
-            app.route = .signIn
+            requestSignIn(client: client, generation: shelfGeneration)
         } catch let error as FiestaError {
             // The bare catch here threw the typed error away and blamed the
             // resize, so a board that answered 429 or replied in a shape this
