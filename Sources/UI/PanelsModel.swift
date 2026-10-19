@@ -95,6 +95,7 @@ final class PanelsModel {
         let load = UUID()
         loadGeneration = load
         let client = app.connection.client
+        let authGeneration = app.connection.connectionGeneration
         stopPreviews()
         app.activePanelsModel = self
         isLoading = true
@@ -115,7 +116,7 @@ final class PanelsModel {
             app.rememberPanelBrowser(panels: loaded, previews: previews, client: client)
             await app.publishTopShelf(panels: loaded, previews: previews)?.value
         } catch FiestaError.unauthorized {
-            requestSignIn(generation: generation, client: client)
+            requestSignIn(generation: authGeneration, client: client)
         } catch let error as FiestaError {
             guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             fail(with: error.userMessage)
@@ -127,9 +128,10 @@ final class PanelsModel {
 
     private func requestSignIn(generation: UUID, client: FiestaClient?) {
         // A token rejection has already marked this connection signed out.
-        // Keep the request identity guards, but accept that terminal state.
-        guard !Task.isCancelled, generation == app.topShelfGeneration,
-              let client, app.connection.client === client,
+        // Keep auth identity guards, but accept that terminal state. Another
+        // list/preview refresh can advance Home's generation independently.
+        guard !Task.isCancelled, let client, app.connection.client === client,
+              generation == app.connection.connectionGeneration || app.connection.isSignedOut,
               app.connection.saved != nil else { return }
         stopPreviews()
         panels = []; previews = [:]; previewClient = nil
@@ -173,6 +175,7 @@ final class PanelsModel {
         let connection = app.connection
         let client = connection.client
         let generation = app.topShelfGeneration
+        let authGeneration = connection.connectionGeneration
         let run = previewGeneration
         guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
         defer {
@@ -203,10 +206,10 @@ final class PanelsModel {
                 started += 1
             }
             while let result = await group.next() {
-                if result.2, run == previewGeneration {
-                    requestSignIn(generation: generation, client: client)
+                if result.2, run == previewGeneration || connection.isSignedOut {
+                    requestSignIn(generation: authGeneration, client: client)
                     group.cancelAll()
-                    continue
+                    break
                 }
                 if run != previewGeneration || !app.isCurrentTopShelfUpdate(generation, client: client) {
                     group.cancelAll()

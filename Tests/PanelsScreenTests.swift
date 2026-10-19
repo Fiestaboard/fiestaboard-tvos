@@ -75,6 +75,40 @@ final class PanelsScreenTests: XCTestCase {
         XCTAssertEqual(SignInModel(app: app).errorMessage, FiestaError.unauthorized.userMessage)
     }
 
+    func testOverlappingLoadsCannotDiscardARevokedTokenRejection() async throws {
+        let app = await makeApp()
+        let token = try JSONDecoder().decode(DeviceTokenResult.self, from: Data(DeviceAuthorizationTests.token.utf8))
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled.replacingOccurrences(of: "\"authenticated\":false", with: "\"authenticated\":true")), for: "/api/auth/status")
+        try await app.connection.adoptDeviceCredential(token, expectedGeneration: app.connection.connectionGeneration)
+        app.route = .panels
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        app.rememberPanelBrowser(panels: [panel], previews: [:], client: app.connection.client)
+        let model = PanelsModel(app: app)
+        let firstReached = expectation(description: "first panel load held")
+        let secondReached = expectation(description: "second panel load held")
+        var releaseFirst: (() -> Void)?
+        var releaseSecond: (() -> Void)?
+        var first = StubURLProtocol.Stub.json("{}", status: 401)
+        first.beforeReply = { reply in releaseFirst = reply; firstReached.fulfill() }
+        var second = StubURLProtocol.Stub.json(Fixtures.panelsList)
+        second.beforeReply = { reply in releaseSecond = reply; secondReached.fulfill() }
+        StubURLProtocol.enqueue(first, for: "/api/panels")
+        StubURLProtocol.enqueue(second, for: "/api/panels")
+        let firstLoad = Task { await model.load() }
+        await fulfillment(of: [firstReached], timeout: 2)
+        let secondLoad = Task { await model.load() }
+        await fulfillment(of: [secondReached], timeout: 2)
+        releaseFirst?()
+        await firstLoad.value
+        releaseSecond?()
+        await secondLoad.value
+        XCTAssertTrue(app.connection.isSignedOut)
+        XCTAssertEqual(app.route, .signIn)
+        XCTAssertNil(app.panelBrowserCache)
+        XCTAssertTrue(model.panels.isEmpty)
+        XCTAssertEqual(SignInModel(app: app).errorMessage, FiestaError.unauthorized.userMessage)
+    }
+
     func testAnUnreachableBoardShowsAnError() async {
         let app = await makeApp()
         let model = PanelsModel(app: app)

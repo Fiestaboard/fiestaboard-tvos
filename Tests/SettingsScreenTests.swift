@@ -20,6 +20,14 @@ final class SettingsScreenTests: XCTestCase {
     override func tearDown() { StubURLProtocol.reset(); super.tearDown() }
 
     func testRevokedDeviceTokenClearsSettingsCacheAndHomeBeforeSignIn() async throws {
+        try await assertSettingsRevocationRecovery(refreshHomeWhileWaiting: false)
+    }
+
+    func testSameHostHomeRefreshCannotSuppressSettingsRevocationRecovery() async throws {
+        try await assertSettingsRevocationRecovery(refreshHomeWhileWaiting: true)
+    }
+
+    private func assertSettingsRevocationRecovery(refreshHomeWhileWaiting: Bool) async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let shelf = TopShelfSnapshotStore(directory: directory)
@@ -38,8 +46,21 @@ final class SettingsScreenTests: XCTestCase {
         app.route = .settings
         let model = SettingsModel(app: app)
         model.panels = [panel]
-        StubURLProtocol.enqueue(.json("{}", status: 401), for: "/api/panels")
-        await model.load()
+        if refreshHomeWhileWaiting {
+            let reached = expectation(description: "settings rejection held during Home refresh")
+            var release: (() -> Void)?
+            var response = StubURLProtocol.Stub.json("{}", status: 401)
+            response.beforeReply = { reply in release = reply; reached.fulfill() }
+            StubURLProtocol.enqueue(response, for: "/api/panels")
+            let load = Task { await model.load() }
+            await fulfillment(of: [reached], timeout: 2)
+            app.beginTopShelfUpdate()
+            release?()
+            await load.value
+        } else {
+            StubURLProtocol.enqueue(.json("{}", status: 401), for: "/api/panels")
+            await model.load()
+        }
         XCTAssertTrue(connection.isSignedOut)
         XCTAssertEqual(app.route, .signIn)
         XCTAssertNil(app.panelBrowserCache)
