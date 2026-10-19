@@ -66,12 +66,48 @@ final class DeviceCredentialTests: XCTestCase {
         try await connect()
         failing.value = StoredCredential(username: "old", password: "old-secret")
         StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
+        let revoked = expectation(description: "issued token is revoked after staging fails")
+        var revokeResponse = StubURLProtocol.Stub.json("{}")
+        revokeResponse.beforeReply = { reply in reply(); revoked.fulfill() }
+        StubURLProtocol.enqueue(revokeResponse, for: "/auth/device/session")
         do { try await store.signIn(username: "user", password: "secret"); XCTFail("storage failure expected") }
         catch DeviceCredentialError.storageFailed {}
         XCTAssertTrue(store.isSignedOut)
         XCTAssertEqual(failing.value?.password, "old-secret")
         XCTAssertNil(store.client?.deviceToken)
+        await fulfillment(of: [revoked], timeout: 2)
+        let deletion = StubURLProtocol.requests.first { $0.method == "DELETE" }
+        XCTAssertEqual(deletion?.url.absoluteString, host.absoluteString + "/api/auth/device/session")
+        XCTAssertEqual(deletion?.authorization, "Bearer fb_tv_test-only")
     }
+    func testLateDevicePasswordReplyRevokesAtIssuingHostBeforeStaging() async throws {
+        try await connect()
+        let loginReached = expectation(description: "password exchange is held")
+        var release: (() -> Void)?
+        var loginResponse = StubURLProtocol.Stub.json(DeviceAuthorizationTests.token)
+        loginResponse.beforeReply = { reply in release = reply; loginReached.fulfill() }
+        StubURLProtocol.enqueue(loginResponse, for: "/auth/device/login")
+        let login = Task { try await store.signIn(username: "user", password: "secret") }
+        await fulfillment(of: [loginReached], timeout: 2)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await store.connect(to: URL(string: "http://replacement.test")!, displayName: "Replacement")
+        let revoked = expectation(description: "late token is revoked at original issuer")
+        var revokeResponse = StubURLProtocol.Stub.json("{}")
+        revokeResponse.beforeReply = { reply in reply(); revoked.fulfill() }
+        StubURLProtocol.enqueue(revokeResponse, for: "/auth/device/session")
+        release?()
+        do { try await login.value; XCTFail("stale generation must cancel adoption") }
+        catch is CancellationError {}
+        await fulfillment(of: [revoked], timeout: 2)
+        let deletion = StubURLProtocol.requests.first { $0.method == "DELETE" }
+        XCTAssertEqual(deletion?.url.absoluteString, host.absoluteString + "/api/auth/device/session")
+        XCTAssertEqual(deletion?.authorization, "Bearer fb_tv_test-only")
+        XCTAssertNil(credentials.load(for: host.absoluteString))
+        XCTAssertNil(credentials.load(for: host.absoluteString + ".pending-device"))
+        XCTAssertNil(credentials.load(for: "http://replacement.test"))
+        XCTAssertNil(store.client?.deviceToken)
+    }
+
     func testStoredPasswordMigratesOnceWhenCapabilityEnabled() async throws {
         try credentials.save(StoredCredential(username: "user", password: "secret"), for: host.absoluteString)
         StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")

@@ -247,7 +247,7 @@ public final class ConnectionStore: @unchecked Sendable {
         if deviceSignInEnabled {
             let result = try await client.loginDevice(username: username, password: password,
                                                      deviceName: "Apple TV", appVersion: Self.appVersion)
-            try await adoptDeviceCredential(result, expectedGeneration: generation)
+            try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
             return
         }
         try await client.login(username: username, password: password)
@@ -261,20 +261,31 @@ public final class ConnectionStore: @unchecked Sendable {
         }
     }
 
-    public func adoptDeviceCredential(_ result: DeviceTokenResult, expectedGeneration: UUID) async throws {
-        let credential = try result.credential(now: clock())
-        let (client, host): (FiestaClient, URL) = try lock.withLock {
-            try checkCurrentLocked(expectedGeneration)
-            guard let client = storedClient, let saved = storedSaved else { throw CancellationError() }
-            // Stage in Keychain first. The old password is replaced only after
-            // this token has also passed server validation.
-            do { try credentials.save(credential, for: saved.host.absoluteString + ".pending-device") }
-            catch { throw DeviceCredentialError.storageFailed }
-            client.setDeviceToken(result.accessToken)
-            defaults.set(true, forKey: Keys.signedOut)
-            return (client, saved.host)
+    public func adoptDeviceCredential(_ result: DeviceTokenResult, expectedGeneration: UUID,
+                                      issuingClient: FiestaClient? = nil) async throws {
+        // Capture the issuer independently of the current connection. A response
+        // may arrive after a host switch, before staging has even started.
+        let issuer = issuingClient ?? lock.withLock {
+            generation == expectedGeneration ? storedClient : nil
         }
+        var stagedHost: URL?
+        var adoptingClient: FiestaClient?
         do {
+            let credential = try result.credential(now: clock())
+            let (client, host): (FiestaClient, URL) = try lock.withLock {
+                try checkCurrentLocked(expectedGeneration)
+                guard let client = storedClient, let saved = storedSaved,
+                      client === issuer else { throw CancellationError() }
+                stagedHost = saved.host
+                adoptingClient = client
+                // Stage in Keychain first. The old password is replaced only after
+                // this token has also passed server validation.
+                do { try credentials.save(credential, for: saved.host.absoluteString + ".pending-device") }
+                catch { throw DeviceCredentialError.storageFailed }
+                client.setDeviceToken(result.accessToken)
+                defaults.set(true, forKey: Keys.signedOut)
+                return (client, saved.host)
+            }
             let status = try await client.authStatus()
             try lock.withLock {
                 try checkCurrentLocked(expectedGeneration)
@@ -287,20 +298,27 @@ public final class ConnectionStore: @unchecked Sendable {
             }
         } catch {
             lock.withLock {
-                if generation == expectedGeneration { client.setDeviceToken(nil) }
-                if credentials.load(for: host.absoluteString + ".pending-device")?.accessToken == result.accessToken {
+                if generation == expectedGeneration,
+                   adoptingClient?.deviceToken == result.accessToken { adoptingClient?.setDeviceToken(nil) }
+                if let host = stagedHost,
+                   credentials.load(for: host.absoluteString + ".pending-device")?.accessToken == result.accessToken {
                     try? credentials.delete(for: host.absoluteString + ".pending-device")
                 }
             }
-            // Redemption can succeed before local storage/validation fails.
-            // Revoke that orphan if reachable; never claim this succeeded.
-            let revoker = clientFactory(host)
-            revoker.setDeviceToken(result.accessToken)
-            Task { try? await revoker.revokeDeviceSession() }
+            // Every failed adoption, including a staging failure or stale
+            // generation, can leave an already-issued session on the server.
+            // Use only the original issuer, never the replacement connection.
+            if let issuer, result.accessToken.hasPrefix("fb_tv_"),
+               !result.accessToken.contains(where: { $0.isWhitespace }) {
+                let revoker = clientFactory(issuer.baseURL)
+                revoker.setDeviceToken(result.accessToken)
+                Task { try? await revoker.revokeDeviceSession() }
+            }
             throw error
         }
         lock.withLock {
-            if credentials.load(for: host.absoluteString + ".pending-device")?.accessToken == result.accessToken {
+            if let host = stagedHost,
+               credentials.load(for: host.absoluteString + ".pending-device")?.accessToken == result.accessToken {
                 try? credentials.delete(for: host.absoluteString + ".pending-device")
             }
         }
@@ -321,7 +339,7 @@ public final class ConnectionStore: @unchecked Sendable {
                 }
                 let result = try await client.loginDevice(username: username, password: password,
                                                          deviceName: "Apple TV", appVersion: Self.appVersion)
-                try await adoptDeviceCredential(result, expectedGeneration: generation)
+                try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
             } else {
                 try await client.login(username: username, password: password)
             }

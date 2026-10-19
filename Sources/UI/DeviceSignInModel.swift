@@ -96,8 +96,9 @@ final class DeviceSignInModel {
                 guard isCurrent(attempt, generation) else { return }
                 guard now() < expiry else { fail(DevicePollError(code: "expired_token").userMessage); return }
                 let result = try await client.pollDeviceSignIn(deviceCode: challenge.deviceCode)
-                guard isCurrent(attempt, generation) else { return }
-                try await connection.adoptDeviceCredential(result, expectedGeneration: generation)
+                // Adoption also owns orphan revocation for a response that
+                // arrives after cancellation or a host switch.
+                try await connection.adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
                 guard isCurrent(attempt, generation) else { return }
                 self.challenge = nil; manualURL = nil; completeURL = nil; expiresAt = nil
                 state = .complete; statusMessage = "Signed in."
