@@ -299,7 +299,8 @@ struct SettingsScreen: View {
                         if case .unavailable = model?.previewState(for: panel) {
                             Button("Retry preview") { previewReload += 1 }
                         }
-                        NavigationLink("All display settings", value: Destination.displaySettings(panel.id))
+                        NavigationLink(model?.canEditAllDisplaySettings == false ? "Display settings" : "All display settings",
+                                       value: Destination.displaySettings(panel.id))
                             .accessibilityIdentifier("settings.allDisplaySettings")
                             .disabled(model?.isSavingPanel(panel) == true)
                         if panel.supportsRenderStyle {

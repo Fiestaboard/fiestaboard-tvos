@@ -18,6 +18,7 @@ final class FixtureHTTPServer {
     private let tvSignInEnabled: Bool
     private let deviceAuthorizationError: String?
     private let devicePollError: String
+    private let approveDeviceSignIn: Bool
     private var heldPanelUpdates: [NWConnection] = []
     private var discoveryBody: Data?
     private var heldDiscoveryConnection: NWConnection?
@@ -36,6 +37,7 @@ final class FixtureHTTPServer {
          tvSignInEnabled: Bool = false,
          deviceAuthorizationError: String? = nil,
          devicePollError: String = "authorization_pending",
+         approveDeviceSignIn: Bool = false,
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -50,6 +52,7 @@ final class FixtureHTTPServer {
         self.tvSignInEnabled = tvSignInEnabled
         self.deviceAuthorizationError = deviceAuthorizationError
         self.devicePollError = devicePollError
+        self.approveDeviceSignIn = approveDeviceSignIn
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -120,6 +123,14 @@ final class FixtureHTTPServer {
                 return
             }
             let path = request.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+            // This fixture must require the issued token on panel reads, so
+            // restoration follows the same sign-in path as an auth-required board.
+            if approveDeviceSignIn, path == "/api/panels" || path.hasPrefix("/api/panel/"),
+               !request.lowercased().contains("authorization: bearer fb_tv_ui-settings") {
+                connection.send(content: Data("HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".utf8),
+                                completion: .contentProcessed { _ in connection.cancel() })
+                return
+            }
             if path == "/__fixtures/discovery" {
                 lock.lock()
                 let body = discoveryBody
@@ -139,7 +150,8 @@ final class FixtureHTTPServer {
             var status = "200 OK"
             switch path {
             case "/api/auth/status":
-                body = tvSignInEnabled ? #"{"enabled":true,"setup_required":false,"authenticated":false,"username":null,"mode":"required","first_run":false,"tv_sign_in":{"supported":true,"enabled":true,"protocol_version":1}}"# : Fixtures.authStatusDisabled
+                let authenticated = approveDeviceSignIn && request.lowercased().contains("authorization: bearer fb_tv_ui-settings")
+                body = tvSignInEnabled ? #"{"enabled":true,"setup_required":false,"authenticated":\#(authenticated),"username":null,"mode":"required","first_run":false,"tv_sign_in":{"supported":true,"enabled":true,"protocol_version":1}}"# : Fixtures.authStatusDisabled
             case "/api/auth/device/authorize":
                 if let deviceAuthorizationError {
                     status = "403 Forbidden"
@@ -148,8 +160,12 @@ final class FixtureHTTPServer {
                     body = #"{"device_code":"ui-private-test","user_code":"WDJB-MJHT","verification_path":"/activate","verification_path_complete":"/activate?user_code=WDJB-MJHT","expires_in":600,"interval":5}"#
                 }
             case "/api/auth/device/token":
-                status = "400 Bad Request"
-                body = "{\"error\":\"\(devicePollError)\"}"
+                if approveDeviceSignIn {
+                    body = #"{"access_token":"fb_tv_ui-settings","token_type":"Bearer","expires_in":31536000,"session_id":"ui-settings","scope":"tv_panels"}"#
+                } else {
+                    status = "400 Bad Request"
+                    body = "{\"error\":\"\(devicePollError)\"}"
+                }
             case "/api/auth/device/cancel": body = "{}"
             case "/api/settings/ai":
                 body = #"{"enabled":true,"tv_chat_supported":true,"providers":[{"id":"fixture"}]}"#
