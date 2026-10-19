@@ -151,7 +151,7 @@ struct ViewerScreen: View {
         } else if model?.boardMissing == true {
             missingBoardState
         } else if let snapshot = model?.snapshot, let panel = snapshot.panel, panel.renderStyle == .ledMatrix {
-            MatrixCanvas(raster: MatrixRaster.make(panel: panel, cells: snapshot.cells, richCells: snapshot.richCells),
+            MatrixCanvas(raster: MatrixRaster.make(panel: panel, cells: snapshot.cells, richCells: snapshot.richCells, layers: snapshot.layers),
                          display: panel.matrixDisplay, presentation: model?.matrixPresentation ?? .init(),
                          drift: snapshot.drift, animated: panel.animationsEnabled,
                          transitionStyle: model?.matrixTransitionStyle ?? .characterWipe)

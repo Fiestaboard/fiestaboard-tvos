@@ -149,7 +149,7 @@ struct PanelCard: View {
             // Server text already has priority in MatrixRaster.spoken.
             // Avoid rebuilding all pixels just to read that same message.
             if !message.isEmpty { return message }
-            let raster = MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells)
+            let raster = MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells, layers: ready.layers)
             guard !message.isEmpty || !raster.text.isEmpty || raster.pixels.contains(where: { $0 != 0 }) else { return nil }
             return raster.spoken(message: ready.message)
         }
