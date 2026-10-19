@@ -6,9 +6,11 @@ struct PanelsScreen: View {
     @State private var restoredInitialFocus = false
     @State private var previewImages = PanelPreviewImageCache()
     @State private var pendingFocusTarget: String?
+    @State private var latestFocusUpdate: UIFocusUpdateContext?
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
+    @FocusState private var settingsFocused: Bool
     /// The scope `prefersDefaultFocus` is answered in.
     @Namespace private var gridScope
 
@@ -41,9 +43,29 @@ struct PanelsScreen: View {
             PanelNavigationProbe.shared.start()
             #endif
         }
-        .onChange(of: focusedPanel) { _, id in
+        .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { notification in
+            latestFocusUpdate = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey] as? UIFocusUpdateContext
+        }
+        .onChange(of: focusedPanel) { previousID, id in
+            defer { latestFocusUpdate = nil }
             #if DEBUG
             PanelNavigationProbe.shared.event("focus.changed", index: panelIDs.firstIndex(of: id ?? "") ?? -1)
+            #endif
+            // A recycled row above the viewport may be absent from the
+            // native focus search. Up then finds Settings and consumes the
+            // command before onMoveCommand can recover it. Materialize the
+            // preceding row; Settings is reachable once no row remains above.
+            // Require a direct card-to-Settings transition, not a historical
+            // card visited before another control such as Try again.
+            guard let previousID, id == nil, settingsFocused, app.route == .panels,
+                  let update = latestFocusUpdate, update.focusHeading.contains(.up),
+                  let next = update.nextFocusedItem,
+                  UIFocusSystem.focusSystem(for: next)?.focusedItem === next,
+                  let target = Self.verticalFocusTarget(in: model?.panels ?? [],
+                                                        from: previousID, direction: .up) else { return }
+            pendingFocusTarget = target
+            #if DEBUG
+            PanelNavigationProbe.shared.event("focus.recoverHeader", index: panelIDs.firstIndex(of: target))
             #endif
         }
         .task {
@@ -63,6 +85,7 @@ struct PanelsScreen: View {
             model?.stopPreviews()
             previewImages.removeAll()
             pendingFocusTarget = nil
+            latestFocusUpdate = nil
         }
     }
 
@@ -119,6 +142,7 @@ struct PanelsScreen: View {
                 Label("Settings", systemImage: "gearshape")
             }
             .font(Fiesta.Text.body)
+            .focused($settingsFocused)
 
         }
     }

@@ -109,8 +109,8 @@ struct SettingsScreen: View {
                     .disabled(model?.hasLoaded != true)
                     choiceLink("Split-flap size", value: sizingBinding.wrappedValue == .fit ? "Fit the screen" : "True flap size",
                                destination: .flapSizing)
-                } header: { Text("Playback") }
-                footer: { Text("Applies only to this Apple TV.") }
+                } header: { Text("Playback").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                footer: { Text("Applies only to this Apple TV.").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 Section {
                     choiceLink("Matrix size", value: matrixSizeOptions.first { $0.0 == matrixSizingBinding.wrappedValue }?.1 ?? "Fill TV",
                                destination: .matrixSizing)
@@ -124,34 +124,35 @@ struct SettingsScreen: View {
                         choiceLink("LED spacing", value: "\(Int(matrixPitchBinding.wrappedValue)) mm",
                                    destination: .matrixPitch)
                     }
-                } header: { Text("LED matrix") }
+                } header: { Text("LED matrix").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 footer: {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(matrixSizingExplanation + " Shared panel sizing takes priority.")
                         Text("For effects, enable Matrix transitions in Panel appearance.")
                         if reduceMotion { Text("Effects pause while Reduce Motion is on.") }
                     }
+                    .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
                 Section {
                     choiceLink("Night dimming", value: autoDimBinding.wrappedValue == .followPanel ? "Follow panel schedule" : "Never dim",
                                destination: .autoDim)
                     Toggle("Slowly shift the board", isOn: driftBinding)
                     NavigationLink("Screen protection & dimming", value: Destination.screenProtection)
-                } header: { Text("Screen protection") }
-                footer: { Text("Shifting moves the board a few pixels to vary the image.") }
+                } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                footer: { Text("Shifting moves the board a few pixels to vary the image.").foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
         case .appearance:
             appearanceContent
         case .connection:
             controlList {
-                Section("Connected board") {
+                Section {
                     LabeledContent("Name", value: model?.boardName ?? "")
                     LabeledContent("Address", value: model?.boardAddress ?? "")
-                }
+                } header: { Text("Connected board").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 Section {
                     Button("Sign out") { model?.signOut() }
                     Button("Forget this board", role: .destructive) { confirmingForget = true }
-                } footer: { Text("Nothing on the board itself changes.") }
+                } footer: { Text("Nothing on the board itself changes.").foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
         case .help:
             controlList {
@@ -160,7 +161,7 @@ struct SettingsScreen: View {
                     NavigationLink("Home screen shortcut", value: Destination.topShelf)
                     NavigationLink("Screen protection & dimming", value: Destination.screenProtection)
                     NavigationLink("Privacy", value: Destination.privacy)
-                } footer: { Text("Edit panel display settings in Panel appearance. Manage content on your board's web page.") }
+                } footer: { Text("Edit panel display settings in Panel appearance. Manage content on your board's web page.").foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
         }
     }
@@ -302,7 +303,7 @@ struct SettingsScreen: View {
                                isOn: animationBinding(for: panel))
                             .disabled(reduceMotion || model?.isSavingPanel(panel) == true)
                             .accessibilityIdentifier("settings.animationToggle")
-                    } footer: { Text("Applies to every viewer of this panel.") }
+                    } footer: { Text("Applies to every viewer of this panel.").foregroundStyle(Fiesta.Colors.mutedForeground) }
                     if reduceMotion {
                         Section {
                             Text(panel.renderStyle == .ledMatrix
@@ -312,10 +313,10 @@ struct SettingsScreen: View {
                         }
                     }
                     if panel.renderStyle == .splitFlap {
-                        Section("Advanced") {
+                        Section {
                             NavigationLink("Resize for this TV", value: Destination.resize(panel.id))
                             NavigationLink("True-size calibration", value: Destination.calibration(panel.id))
-                        }
+                        } header: { Text("Advanced").foregroundStyle(Fiesta.Colors.mutedForeground) }
                         .disabled(model?.isSavingPanel(panel) == true)
                     }
                 } else if model?.hasLoaded == true {
@@ -403,18 +404,18 @@ struct SettingsScreen: View {
             }
         case .topShelf:
             controlList {
-                Section("Board shortcut on the Home screen") { Text(Self.topShelfBody) }
+                Section { Text(Self.topShelfBody) } header: { Text("Board shortcut on the Home screen").foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
             .navigationTitle("Home screen shortcut")
         case .privacy:
             controlList {
-                Section { Text(Self.privacyBody) } footer: { Text(Self.privacyFooter) }
+                Section { Text(Self.privacyBody) } footer: { Text(Self.privacyFooter).foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
             .navigationTitle("Privacy")
         case .screenProtection:
             controlList {
-                Section("Night dimming") { Text(model?.autoDimSummary ?? "") }
-                Section("Screen protection") { Text(Self.burnInBody) }
+                Section { Text(model?.autoDimSummary ?? "") } header: { Text("Night dimming").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                Section { Text(Self.burnInBody) } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
             .navigationTitle("Screen protection & dimming")
         }
@@ -426,8 +427,8 @@ struct SettingsScreen: View {
             TextField("Custom size in inches", text: customDiagonalBinding)
             LabeledContent("New grid", value: model?.previewGrid ?? "—")
             Button("Resize \(panel.name)") { Task { await model?.resize(panel: panel) } }
-        } header: { Text(panel.name) }
-        footer: { Text("Rebuilds this panel's grid. Applies to every viewer of this panel.") }
+        } header: { Text(panel.name).foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Rebuilds this panel's grid. Applies to every viewer of this panel.").foregroundStyle(Fiesta.Colors.mutedForeground) }
         .disabled(model?.isSavingPanel(panel) == true)
     }
 
@@ -483,8 +484,8 @@ struct SettingsScreen: View {
             }
             .accessibilityLabel("Save \(panel.name) flap size")
             .accessibilityValue(spoken)
-        } header: { Text(panel.name) }
-        footer: { Text("Match the visible flaps to their real size, then save. Applies to every viewer of this panel using True flap size.") }
+        } header: { Text(panel.name).foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Match the visible flaps to their real size, then save. Applies to every viewer of this panel using True flap size.").foregroundStyle(Fiesta.Colors.mutedForeground) }
         .disabled(model?.isSavingPanel(panel) == true)
     }
 

@@ -1,5 +1,43 @@
 # Orientation
 
+## Whole-app UX pass (2026-10-18)
+
+Reviewed Connect and sign-in, panel browsing and focus restoration, the viewer
+and its controls, local/shared settings, calibration, privacy, FiestaBot, and
+Home Top Shelf using source review, simulator navigation and screenshot evidence.
+The pass preserves the native layouts and the stationary panel focus treatment.
+
+The pass reproduced these problems:
+
+- Native navigation titles and section labels had insufficient contrast on the
+  dark background in simulator captures. Navigation title attributes and
+  noninteractive section text now use explicit readable colors; focused control
+  colors remain native. Before/after screenshots verified the change.
+- A first discovery result took focus from manual address entry. Connect now
+  tracks its manual controls as well as board cards. The UI regression holds a
+  discovery response until the address field has focus, then releases it. Its
+  loopback discovery driver is DEBUG-only and explicitly launch-argument gated;
+  real LAN services cannot affect this test.
+- Shared display fields lost their meaning once a value replaced the placeholder.
+  Names, numeric units/ranges and schedule fields now retain visible labels.
+  Save stays focusable while editable fields are disabled; synchronous guards
+  prevent duplicate writes. A remote test exercises failure and retry.
+- FiestaBot retained a stale error after a successful availability retry, allowed
+  sending with stale availability, and presented a loading/failed page list as
+  empty. Availability refresh now blocks sending and rejects stale responses.
+  Page loading has distinct loading, failure/retry and loaded-empty states;
+  cancelling it does not report a chat failure or stop an unrelated reply.
+
+The 14-panel cache-traversal test also exposed an upward move from the second
+row reaching Settings while the preceding lazy row was absent. The browser now
+recovers that directional escape using its existing scroll/focus task. It keeps
+lazy previews and allows normal Settings access from the first available row.
+
+The simulator and automated tests do not establish physical Siri Remote feel,
+VoiceOver usability, couch-distance legibility on the target TV, or a long-running
+hardware performance/thermal soak. Those remain device acceptance checks. This
+pass also does not create the App Store Connect record or distribution signing.
+
 ## Visual refresh (2026-10-17)
 
 The panel grid now sizes two columns from its actual safe area. Fixed 860-point

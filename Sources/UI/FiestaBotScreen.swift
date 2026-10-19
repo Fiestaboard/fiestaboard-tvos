@@ -37,7 +37,7 @@ struct FiestaBotScreen: View {
 
     private var sidebar: some View {
         List {
-            Section("This conversation") {
+            Section {
                 NavigationLink(value: Destination.panels) {
                     VStack(alignment: .leading) {
                         Text("Panel")
@@ -49,13 +49,13 @@ struct FiestaBotScreen: View {
                     .disabled(model.selectedPanel == nil || model.isRunning)
                 NavigationLink("Choose a page", value: Destination.pages)
                     .disabled(model.selectedPanel == nil || model.isRunning)
-            }
+            } header: { Text("This conversation").foregroundStyle(Fiesta.Colors.mutedForeground) }
             if model.entries.isEmpty {
-                Section("Try asking") {
+                Section {
                     Button("Make a welcome page") { model.submit("Create a welcome page for this panel.") }
                     Button("Show the weather") { model.submit("Create a weather page for this panel using available weather data, then show it here.") }
                     Button("What can I show?") { model.submit("What pages can I show on this panel? Give me a few choices.") }
-                }
+                } header: { Text("Try asking").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 .disabled(!model.canSend)
             }
             Section {
@@ -75,6 +75,7 @@ struct FiestaBotScreen: View {
                     Section {
                         Text(message).focusable()
                         Button("Check again") { Task { await model.load() } }
+                            .disabled(model.isLoading || model.isRunning || model.isShowingPage)
                     }
                 }
                 if model.entries.isEmpty {
@@ -86,7 +87,7 @@ struct FiestaBotScreen: View {
                     }
                 }
                 ForEach(model.entries) { entry in
-                    Section(entry.role == "user" ? "You" : "FiestaBot") {
+                    Section {
                         if !entry.content.isEmpty { Text(entry.content).focusable() }
                         ForEach(entry.tools) { tool in
                             VStack(alignment: .leading, spacing: 8) {
@@ -105,10 +106,10 @@ struct FiestaBotScreen: View {
                                 .disabled(model.isRunning || model.isShowingPage)
                             }
                         }
-                    }
+                    } header: { Text(entry.role == "user" ? "You" : "FiestaBot").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 }
                 if let approval = model.pendingApproval {
-                    Section("FiestaBot needs your approval") {
+                    Section {
                         Text(approval.title).focusable()
                         ForEach((approval.args.objectValue ?? [:]).keys.sorted(), id: \.self) { key in
                             Text("\(key.replacingOccurrences(of: "_", with: " ").capitalized): \(argumentDescription(approval.args[key] ?? .null))")
@@ -116,10 +117,10 @@ struct FiestaBotScreen: View {
                         }
                         Button("Approve") { model.approve(true) }
                         Button("Decline") { model.approve(false) }
-                    }.disabled(model.isRunning)
+                    } header: { Text("FiestaBot needs your approval").foregroundStyle(Fiesta.Colors.mutedForeground) }.disabled(model.isRunning)
                 }
                 if let question = model.pendingQuestion {
-                    Section(question.message) {
+                    Section {
                         ForEach(question.options.indices, id: \.self) { index in
                             Button(question.options[index]) { model.answer(question.options[index]) }
                                 .id(answerID(question.id, index))
@@ -127,7 +128,7 @@ struct FiestaBotScreen: View {
                         }
                         if question.allowsFreeText { Text("You can also type or dictate your answer below.").font(.caption) }
                         Button("Skip this question") { model.answer(nil, action: "decline") }
-                    }.disabled(model.isRunning)
+                    } header: { Text(question.message).foregroundStyle(Fiesta.Colors.mutedForeground) }.disabled(model.isRunning)
                 }
                 if let error = model.errorMessage { Text(error).foregroundStyle(Fiesta.Colors.destructive).focusable() }
                 if model.isRunning {
@@ -197,11 +198,20 @@ struct FiestaBotScreen: View {
             Section {
                 Text("Show a page now on \(model.selectedPanel?.name ?? "this panel"). Its schedule may replace it at the next update.")
                     .font(.caption).foregroundStyle(.secondary)
-                ForEach(model.pages) { page in
-                    Button(page.name) { Task { await model.showPage(page.id) } }
-                        .disabled(model.isShowingPage)
+                switch model.pageLoadState {
+                case .idle, .loading:
+                    ProgressView("Loading saved pages…")
+                case .failed(let message):
+                    Text(message).foregroundStyle(Fiesta.Colors.destructive).focusable()
+                    Button("Try again") { Task { await model.loadPages() } }
+                        .accessibilityIdentifier("fiestabot.pages.retry")
+                case .loaded:
+                    ForEach(model.pages) { page in
+                        Button(page.name) { Task { await model.showPage(page.id) } }
+                            .disabled(model.isShowingPage || model.isRunning)
+                    }
+                    if model.pages.isEmpty { Text("No saved pages available.").focusable() }
                 }
-                if model.pages.isEmpty { Text("No saved pages available.") }
                 if let error = model.errorMessage { Text(error).foregroundStyle(Fiesta.Colors.destructive) }
             }
         }

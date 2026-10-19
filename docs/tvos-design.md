@@ -27,8 +27,11 @@ wrong.
 ## Structure
 
 **Browsing content — panels, boards, anything with a picture:**
-`Button { … } .buttonStyle(.card)`. `CardButtonStyle` is the tvOS
-focus treatment: lift, shadow, and the parallax tilt users already expect.
+Use `Button` and the native focus engine. Discovered boards use `.card`
+for the platform's lift, shadow and parallax. Panel previews deliberately use
+`PanelCardButtonStyle`: a stationary amber outline keeps dense board pixels
+stable while focus moves. Do not restore scaling or parallax to that grid
+without testing cold and warm navigation on hardware.
 Lay cards out in a `LazyVGrid` or a row. The panel browser uses two flexible
 columns sized from its actual safe-area width, not a hard-coded 1920-point
 screen. Keep the full board inside an inset 16:9 preview; the card also names
@@ -56,11 +59,12 @@ Never a button whose title grows a tick.
 
 ## Hard rules
 
-- **Never hand-roll focus.** No `.scaleEffect(focused ? …)`, no
-  `@FocusState` driving a background colour, no `.buttonStyle(.plain)` with
-  manual styling on top. This is not a style preference: a `scaleEffect`
-  inside a `ScrollView` grows the view past its layout bounds and the scroll
-  view clips it, so a selected item visibly gets its edges cut off.
+- **Keep native focus navigation.** Use the focus engine for movement and
+  native control styles by default. The panel grid's stationary outline is
+  the measured exception for dense previews; do not add a second lift or
+  scale effect. Scaling inside a scroll container can clip card edges.
+  Track every control when restoring focus: a missing manual-entry binding
+  must not look like an unfocused screen when discovery completes.
 - **Give focus room.** Anything that lifts on focus needs padding inside its
   scroll container, or the lift is clipped at the edges.
 - **Screen edges** use `Fiesta.Metrics.safeInset`. Overscan is still real.
