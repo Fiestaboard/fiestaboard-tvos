@@ -66,8 +66,18 @@ final class HomeTopShelfUITests: XCTestCase {
         // Recent tvOS versions host the icon grid and Top Shelf in HeadBoard;
         // PineBoard's accessibility tree contains only its scene containers.
         let headboard = XCUIApplication(bundleIdentifier: "com.apple.HeadBoard")
-        let home = headboard.state == .runningForeground
-            ? headboard : XCUIApplication(bundleIdentifier: "com.apple.PineBoard")
+        let pineboard = XCUIApplication(bundleIdentifier: "com.apple.PineBoard")
+        // Menu returns before Home's asynchronous foreground transition ends.
+        // Selecting a host from that instantaneous state can lock this test
+        // onto PineBoard even when HeadBoard owns the visible icon grid.
+        var readyHome: XCUIApplication?
+        let homeReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            readyHome = [headboard, pineboard].first { $0.icons["FiestaBoard"].exists }
+            return readyHome != nil
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [homeReady], timeout: 5), .completed,
+                       "Home must expose FiestaBoard's icon before choosing its accessibility host")
+        let home = try XCTUnwrap(readyHome)
         let icon = home.icons["FiestaBoard"]
         XCTAssertTrue(icon.waitForExistence(timeout: 5))
         // Focus the app independently of asynchronous extension loading.
