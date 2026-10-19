@@ -10,13 +10,34 @@ public final class FiestaClient: @unchecked Sendable {
     public let baseURL: URL
     let session: URLSession
     private let decoder = JSONDecoder()
+    private let tokenLock = NSLock()
+    private var storedDeviceToken: String?
+    let redirectGuard = NoCredentialRedirects()
+    public var deviceToken: String? { tokenLock.withLock { storedDeviceToken } }
+    public func setDeviceToken(_ token: String?) {
+        tokenLock.withLock { storedDeviceToken = token }
+        if token != nil {
+            for cookie in session.configuration.httpCookieStorage?.cookies ?? [] {
+                session.configuration.httpCookieStorage?.deleteCookie(cookie)
+            }
+        }
+    }
+    public static func normalizedBaseURL(_ url: URL) -> URL {
+        guard var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        c.scheme = c.scheme?.lowercased(); c.host = c.host?.lowercased()
+        if (c.scheme == "http" && c.port == 80) || (c.scheme == "https" && c.port == 443) { c.port = nil }
+        c.query = nil; c.fragment = nil; c.user = nil; c.password = nil
+        while c.path.hasSuffix("/") { c.path.removeLast() }
+        if c.path.hasSuffix("/api") { c.path.removeLast(4) }
+        return c.url ?? url
+    }
+    func requireLegacyPermission() throws {
+        guard deviceToken == nil else { throw FiestaError.http(403) }
+    }
 
     public init(baseURL: URL, session: URLSession? = nil) {
         // Normalising here means every caller can pass whatever the user typed.
-        var normalized = baseURL.absoluteString
-        while normalized.hasSuffix("/") { normalized.removeLast() }
-        if normalized.hasSuffix("/api") { normalized.removeLast(4) }
-        self.baseURL = URL(string: normalized) ?? baseURL
+        self.baseURL = Self.normalizedBaseURL(baseURL)
 
         if let session {
             self.session = session
@@ -139,9 +160,20 @@ public final class FiestaClient: @unchecked Sendable {
     }
 
     @discardableResult
-    private func send(method: String, path: String, body: [String: Any]?) async throws -> Data {
+    func send(method: String, path: String, body: [String: Any]?, deviceEndpoint: Bool = false) async throws -> Data {
         var request = URLRequest(url: url(for: path))
         request.httpMethod = method
+        if let token = deviceToken {
+            let parts = path.split(separator: "/")
+            let panelRead = method == "GET" && parts.first == "panel" &&
+                (parts.count == 2 || (parts.count == 3 && parts.last == "frame"))
+            let panelPatch = method == "PATCH" && parts.count == 2 && parts.first == "panels"
+            let allowed = (method == "GET" && ["/auth/status", "/panels"].contains(path)) ||
+                (method == "DELETE" && path == "/auth/device/session") || panelRead || panelPatch
+            guard allowed, !path.contains(".."), !path.contains("%"), !path.contains("?"), !path.contains("#") else { throw FiestaError.http(403) }
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            request.httpShouldHandleCookies = false
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -151,7 +183,7 @@ public final class FiestaClient: @unchecked Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.data(for: request, delegate: redirectGuard)
         } catch {
             throw FiestaError.transport("\(error)")
         }
@@ -160,6 +192,14 @@ public final class FiestaClient: @unchecked Sendable {
             throw FiestaError.transport("non-HTTP response")
         }
 
+        if deviceEndpoint && !(200..<300).contains(http.statusCode) {
+            if http.statusCode == 401 { throw FiestaError.unauthorized }
+            if http.statusCode == 503 { throw FiestaError.unavailable }
+            struct Payload: Decodable { let error: String }
+            let code = (try? JSONDecoder().decode(Payload.self, from: data).error) ?? "http_\(http.statusCode)"
+            let retry = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            throw DevicePollError(code: code, retryAfter: retry, status: http.statusCode)
+        }
         switch http.statusCode {
         case 200..<300:
             return data

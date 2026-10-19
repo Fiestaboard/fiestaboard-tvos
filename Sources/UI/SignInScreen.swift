@@ -29,6 +29,7 @@ final class SignInModel {
     /// reflex, and losing the saved connection to one would be a surprise.
     func back() {
         submissionGeneration = UUID()
+        app.connection.invalidatePendingSignIn()
         app.route = .connect
     }
 
@@ -89,11 +90,16 @@ final class SignInModel {
         do {
             try await app.connection.signIn(username: name, password: password)
             guard generation == submissionGeneration, !Task.isCancelled else { return }
-            app.route = .panels
+            password = ""
+            app.finishSignIn()
         } catch {
             guard generation == submissionGeneration, !Task.isCancelled,
                   !(error is CancellationError) else { return }
-            if let error = error as? FiestaError {
+            if let error = error as? DeviceCredentialError {
+                fail(error.userMessage)
+            } else if let error = error as? DevicePollError {
+                fail(error.userMessage)
+            } else if let error = error as? FiestaError {
                 fail(error == .unauthorized ? "That username or password didn't work." : error.userMessage)
             } else {
                 fail(FiestaError.transport("\(error)").userMessage)
@@ -120,6 +126,7 @@ final class SignInModel {
 struct SignInScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: SignInModel?
+    @State private var deviceSignInEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -127,6 +134,14 @@ struct SignInScreen: View {
 
             List {
                 errorSection
+                if deviceSignInEnabled {
+                    Section {
+                        Button("Sign in with a phone or computer") { app.route = .deviceSignIn }
+                            .accessibilityIdentifier("device-sign-in")
+                    } footer: {
+                        Text("Scan a QR code or enter a short code in your browser. You can also use username and password below.")
+                    }
+                }
                 credentialsSection
                 submitSection
                 anotherBoardSection
@@ -139,7 +154,14 @@ struct SignInScreen: View {
         // Not the root: without this, Menu falls through to the system and
         // quits the app. See `SignInModel.back()`.
         .onExitCommand { model?.back() }
-        .onAppear { if model == nil { model = SignInModel(app: app) } }
+        .onAppear {
+            if model == nil { model = SignInModel(app: app) }
+            deviceSignInEnabled = app.connection.deviceSignInEnabled
+        }
+        .task {
+            try? await app.connection.refreshSignInCapability()
+            deviceSignInEnabled = app.connection.deviceSignInEnabled
+        }
     }
 
     private var boardName: String {
@@ -210,7 +232,7 @@ struct SignInScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             // Said plainly because it is a real commitment: the credential is
             // kept so a lapsed session never sends anyone back to a remote.
-            Text("Your sign-in is stored on this Apple TV so it stays connected.")
+            Text(deviceSignInEnabled ? "Only a revocable TV credential is stored in this Apple TV’s Keychain. Your account password is not saved." : "Your username and password are stored in this Apple TV’s Keychain for this server’s legacy sign-in.")
 
             if isUnencrypted {
                 Text("The connection to this board isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")

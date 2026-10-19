@@ -67,7 +67,7 @@ targets:
         # that POSTs a password to that board. This string is one of four
         # coupled privacy artifacts — see the privacy section of
         # docs/PUBLISHING.md before editing it.
-        NSLocalNetworkUsageDescription: FiestaBoard connects to the board you choose to sign in, display panels, and send requests. FiestaBot requests also reach the AI provider configured on that board.
+        NSLocalNetworkUsageDescription: FiestaBoard connects to the board you choose to sign in with a password or device credential, display panels, and send requests. FiestaBot requests also reach the AI provider configured on that board.
         NSBonjourServices: ["_http._tcp"]
         UIAppFonts: [SplineSansMono.ttf]
         CFBundleURLTypes:

@@ -5,6 +5,7 @@ public enum Route: Equatable, Hashable {
     case connecting
     case connect
     case signIn
+    case deviceSignIn
     case panels
     case viewer(String)
     case settings
@@ -135,6 +136,12 @@ public final class AppModel {
         }
     }
 
+    public func finishSignIn() {
+        errorMessage = nil
+        if let ref = connection.saved?.defaultPanelRef { route = .viewer(ref) }
+        else { route = .panels }
+    }
+
     public func openPanel(ref: String) {
         lastViewedPanelRef = ref
         errorMessage = nil
@@ -173,6 +180,10 @@ public final class AppModel {
     }
 
     func showFiestaBot() {
+        guard !connection.usesDeviceCredential else {
+            errorMessage = "TV sign-in allows panels and display settings. FiestaBot is unavailable with this sign-in."
+            return
+        }
         if route != .fiestaBot { routeBeforeBot = route }
         if case .viewer(let ref) = route { botPanelRef = ref }
         else { botPanelRef = lastViewedPanelRef }

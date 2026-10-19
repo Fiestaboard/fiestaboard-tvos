@@ -240,11 +240,13 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
     public let username: String?
     public let mode: String
     public let firstRun: Bool
+    public let tvSignIn: TVSignInCapability?
 
     enum CodingKeys: String, CodingKey {
         case enabled, authenticated, username, mode
         case setupRequired = "setup_required"
         case firstRun = "first_run"
+        case tvSignIn = "tv_sign_in"
     }
 }
 

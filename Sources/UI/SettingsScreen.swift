@@ -62,7 +62,7 @@ struct SettingsScreen: View {
             Button("Forget this board", role: .destructive) { model?.forget() }
             Button("Keep it", role: .cancel) { }
         } message: {
-            Text("This Apple TV will forget \(model?.boardName ?? "this board") — its address and its saved password — and go back to looking for a board.")
+            Text("This Apple TV will forget \(model?.boardName ?? "this board") — its address and its saved sign-in — and go back to looking for a board.")
         }
         .task(id: panelsReload) {
             if model == nil {
@@ -519,8 +519,12 @@ struct SettingsScreen: View {
         Apple's system keyboard and privacy settings. FiestaBoard's servers and the \
         app developer receive no analytics or tracking from this app. The board's \
         address and display preferences are kept in this device's app preferences; \
-        your password is kept in this device's Keychain and sent to that board when \
-        this Apple TV signs in. Chat history stays in app memory until a new chat, \
+        a revocable TV credential is kept in this device's Keychain on supporting \
+        servers. Your password is sent to that board only to sign in and is not saved \
+        after a TV credential is issued. Older servers use a saved Keychain password \
+        to reconnect. Sign out removes local credentials and attempts server revocation; \
+        if the board is offline, revoke this TV in Account → Signed-in devices. \
+        FiestaBot is unavailable with a scoped TV credential. Chat history stays in app memory until a new chat, \
         sign-out, or app restart; your board and AI provider may retain their own records.
         """
 

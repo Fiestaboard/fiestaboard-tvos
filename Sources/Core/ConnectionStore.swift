@@ -79,6 +79,31 @@ public final class ConnectionStore: @unchecked Sendable {
     /// When the silent re-login may be trusted again, if it has just failed.
     private var silentLoginBlockedUntil: Date?
     private var generation = UUID()
+    private var capability: TVSignInCapability?
+    private var capabilityKnown = false
+    private var recoveryTask: Task<Void, Error>?
+    public var connectionGeneration: UUID { lock.withLock { generation } }
+    public var deviceSignInEnabled: Bool { lock.withLock { capability?.isEnabled ?? false } }
+    public var usesDeviceCredential: Bool { client?.deviceToken != nil }
+    public static var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1" }
+
+    /// Persisted before a migration request: a lost response must never cause
+    /// another automatic password exchange on the next launch.
+    private func migrationKey(_ host: URL) -> String { "fiestaboard.deviceMigration." + host.absoluteString }
+
+    public func invalidatePendingSignIn() {
+        lock.withLock { generation = UUID(); recoveryTask?.cancel(); recoveryTask = nil }
+    }
+
+    public func refreshSignInCapability() async throws {
+        let (client, generation) = lock.withLock { (storedClient, self.generation) }
+        guard let client else { return }
+        let status = try await client.authStatus()
+        try lock.withLock {
+            try checkCurrentLocked(generation)
+            capability = status.tvSignIn; capabilityKnown = true
+        }
+    }
 
     private var storedSaved: SavedConnection?
     private var storedClient: FiestaClient?
@@ -102,6 +127,12 @@ public final class ConnectionStore: @unchecked Sendable {
             // Restore the client too: a TV that reboots must come straight
             // back up on its panel without a round trip through Connect.
             self.storedClient = clientFactory(connection.host)
+            if !defaults.bool(forKey: Keys.signedOut),
+               let credential = credentials.load(for: connection.host.absoluteString),
+               case .deviceToken(let token, _, let expiry) = credential {
+                if expiry > clock() { self.storedClient?.setDeviceToken(token) }
+                else { defaults.set(true, forKey: Keys.signedOut); try? credentials.delete(for: connection.host.absoluteString) }
+            }
         }
     }
 
@@ -112,7 +143,12 @@ public final class ConnectionStore: @unchecked Sendable {
             self.generation = UUID()
             return self.generation
         }
+        let host = FiestaClient.normalizedBaseURL(host)
         let client = clientFactory(host)
+        if let credential = credentials.load(for: host.absoluteString),
+           case .deviceToken(let token, _, let expiry) = credential, expiry > clock() {
+            client.setDeviceToken(token)
+        }
         let status = try await client.authStatus()
         try checkCurrent(generation)
 
@@ -137,6 +173,7 @@ public final class ConnectionStore: @unchecked Sendable {
             storedClient = client
             storedSaved = updated
             silentLoginBlockedUntil = nil
+            capability = status.tvSignIn; capabilityKnown = true
             writeToDisk(updated)
             defaults.set(status.enabled && !status.authenticated, forKey: Keys.signedOut)
         }
@@ -150,7 +187,7 @@ public final class ConnectionStore: @unchecked Sendable {
         // retype a password on a remote.
         if let stored = credentials.load(for: host.absoluteString) {
             do {
-                try await client.login(username: stored.username, password: stored.password)
+                try await recover(stored, client: client, host: host, generation: generation)
                 // The same bookkeeping the by-hand sign-in does. This branch
                 // used to return `.ready` with `signedOut` still true, so the
                 // next cold boot went to Sign In and asked for a password it
@@ -174,14 +211,62 @@ public final class ConnectionStore: @unchecked Sendable {
         guard let client = maybeClient, let saved = maybeSaved else {
             throw FiestaError.transport("not connected")
         }
+        if !lock.withLock({ capabilityKnown }) { try await refreshSignInCapability() }
+        try lock.withLock { try checkCurrentLocked(generation); client.setDeviceToken(nil) }
+        if deviceSignInEnabled {
+            let result = try await client.loginDevice(username: username, password: password,
+                                                     deviceName: "Apple TV", appVersion: Self.appVersion)
+            try await adoptDeviceCredential(result, expectedGeneration: generation)
+            return
+        }
         try await client.login(username: username, password: password)
         try lock.withLock {
             try checkCurrentLocked(generation)
+            do { try credentials.save(StoredCredential(username: username, password: password), for: saved.host.absoluteString) }
+            catch { throw DeviceCredentialError.storageFailed }
             defaults.set(false, forKey: Keys.signedOut)
             silentLoginBlockedUntil = nil
-            // A reply from before Sign Out or Forget must not restore secrets.
-            try? credentials.save(StoredCredential(username: username, password: password),
-                                  for: saved.host.absoluteString)
+        }
+    }
+
+    public func adoptDeviceCredential(_ result: DeviceTokenResult, expectedGeneration: UUID) async throws {
+        let credential = try result.credential(now: clock())
+        let client: FiestaClient = try lock.withLock {
+            try checkCurrentLocked(expectedGeneration)
+            guard let client = storedClient, let saved = storedSaved else { throw CancellationError() }
+            do { try credentials.save(credential, for: saved.host.absoluteString) }
+            catch { throw DeviceCredentialError.storageFailed }
+            client.setDeviceToken(result.accessToken)
+            defaults.set(true, forKey: Keys.signedOut)
+            return client
+        }
+        let status = try await client.authStatus()
+        try lock.withLock {
+            try checkCurrentLocked(expectedGeneration)
+            guard status.authenticated else { throw FiestaError.unauthorized }
+            defaults.set(false, forKey: Keys.signedOut)
+            silentLoginBlockedUntil = nil
+        }
+    }
+
+    private func recover(_ credential: StoredCredential, client: FiestaClient, host: URL, generation: UUID) async throws {
+        switch credential {
+        case .deviceToken:
+            throw FiestaError.unauthorized
+        case .legacyPassword(let username, let password):
+            if !lock.withLock({ capabilityKnown }) { try await refreshSignInCapability() }
+            if deviceSignInEnabled {
+                try lock.withLock {
+                    try checkCurrentLocked(generation)
+                    guard !defaults.bool(forKey: migrationKey(host)) else { throw FiestaError.unauthorized }
+                    defaults.set(true, forKey: migrationKey(host))
+                }
+                let result = try await client.loginDevice(username: username, password: password,
+                                                         deviceName: "Apple TV", appVersion: Self.appVersion)
+                try await adoptDeviceCredential(result, expectedGeneration: generation)
+            } else {
+                try await client.login(username: username, password: password)
+            }
         }
     }
 
@@ -223,12 +308,29 @@ public final class ConnectionStore: @unchecked Sendable {
         do {
             return try await perform()
         } catch FiestaError.unauthorized {
+            if client.deviceToken != nil {
+                try lock.withLock {
+                    try checkCurrentLocked(generation)
+                    defaults.set(true, forKey: Keys.signedOut)
+                    try? credentials.delete(for: host.absoluteString)
+                    client.setDeviceToken(nil)
+                }
+                throw FiestaError.unauthorized
+            }
             guard let stored = credentials.load(for: host.absoluteString),
                   !silentLoginIsBlocked else {
                 throw FiestaError.unauthorized
             }
             do {
-                try await client.login(username: stored.username, password: stored.password)
+                let task = try lock.withLock { () -> Task<Void, Error> in
+                    try checkCurrentLocked(generation)
+                    if let existing = recoveryTask { return existing }
+                    let task = Task { try await self.recover(stored, client: client, host: host, generation: generation) }
+                    recoveryTask = task
+                    return task
+                }
+                defer { lock.withLock { if self.generation == generation { recoveryTask = nil } } }
+                try await task.value
             } catch {
                 try checkCurrent(generation)
                 // An outage or cancellation says nothing about the password.
@@ -271,8 +373,11 @@ public final class ConnectionStore: @unchecked Sendable {
     }
 
     public func signOut() {
+        let previousClient = client
+        let hadToken = previousClient?.deviceToken != nil
         lock.withLock {
             generation = UUID()
+            recoveryTask?.cancel(); recoveryTask = nil
             guard let saved = storedSaved else { return }
             // Per-host, unlike forget(): other boards retain their credentials.
             try? credentials.delete(for: saved.host.absoluteString)
@@ -282,11 +387,15 @@ public final class ConnectionStore: @unchecked Sendable {
             storedClient = clientFactory(saved.host)
             defaults.set(true, forKey: Keys.signedOut)
         }
+        if hadToken { Task { try? await previousClient?.revokeDeviceSession() } }
     }
 
     public func forget() {
+        let previousClient = client
+        let hadToken = previousClient?.deviceToken != nil
         lock.withLock {
             generation = UUID()
+            recoveryTask?.cancel(); recoveryTask = nil
             let previous = storedSaved
             storedSaved = nil
             storedClient = nil
@@ -298,6 +407,7 @@ public final class ConnectionStore: @unchecked Sendable {
             defaults.removeObject(forKey: Keys.connection)
             defaults.removeObject(forKey: Keys.signedOut)
         }
+        if hadToken { Task { try? await previousClient?.revokeDeviceSession() } }
     }
 
     private func clearCookies(for host: URL) {

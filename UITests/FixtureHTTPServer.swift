@@ -15,6 +15,7 @@ final class FixtureHTTPServer {
     private let lock = NSLock()
     private var chatResponses: [String]
     private let holdPanelUpdates: Bool
+    private let tvSignInEnabled: Bool
     private var heldPanelUpdates: [NWConnection] = []
     private var discoveryBody: Data?
     private var heldDiscoveryConnection: NWConnection?
@@ -30,6 +31,7 @@ final class FixtureHTTPServer {
          additionalFrames: [String: String] = [:],
          chatResponses: [String] = [],
          holdPanelUpdates: Bool = false,
+         tvSignInEnabled: Bool = false,
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -41,6 +43,7 @@ final class FixtureHTTPServer {
         self.additionalFrames = additionalFrames
         self.chatResponses = chatResponses
         self.holdPanelUpdates = holdPanelUpdates
+        self.tvSignInEnabled = tvSignInEnabled
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -127,8 +130,16 @@ final class FixtureHTTPServer {
             }
             let body: String
             var contentType = "application/json"
+            var status = "200 OK"
             switch path {
-            case "/api/auth/status": body = Fixtures.authStatusDisabled
+            case "/api/auth/status":
+                body = tvSignInEnabled ? #"{"enabled":true,"setup_required":false,"authenticated":false,"username":null,"mode":"required","first_run":false,"tv_sign_in":{"supported":true,"enabled":true,"protocol_version":1}}"# : Fixtures.authStatusDisabled
+            case "/api/auth/device/authorize":
+                body = #"{"device_code":"ui-private-test","user_code":"WDJB-MJHT","verification_path":"/activate","verification_path_complete":"/activate?user_code=WDJB-MJHT","expires_in":600,"interval":5}"#
+            case "/api/auth/device/token":
+                status = "400 Bad Request"
+                body = #"{"error":"authorization_pending"}"#
+            case "/api/auth/device/cancel": body = "{}"
             case "/api/settings/ai":
                 body = #"{"enabled":true,"tv_chat_supported":true,"providers":[{"id":"fixture"}]}"#
             case "/api/pages": body = #"{"pages":[]}"#
@@ -163,7 +174,7 @@ final class FixtureHTTPServer {
                 }
             }
             let payload = Data(body.utf8)
-            let header = "HTTP/1.1 200 OK\r\nContent-Type: \(contentType)\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
+            let header = "HTTP/1.1 \(status)\r\nContent-Type: \(contentType)\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
             connection.send(content: Data(header.utf8) + payload,
                             completion: .contentProcessed { _ in connection.cancel() })
         }
