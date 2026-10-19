@@ -176,4 +176,124 @@ final class FiestaBotModelTests: XCTestCase {
         app.route = .signIn
         XCTAssertNil(app.fiestaBot)
     }
+
+    func testAvailabilityRetryClearsThePreviousConnectionError() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"Temporarily unavailable"}"#, status: 503), for: "/settings/ai")
+        await bot.load()
+        XCTAssertNotNil(bot.errorMessage)
+
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(#"{"enabled":true,"providers":[{"name":"test"}],"tv_chat_supported":true}"#), for: "/settings/ai")
+        await bot.load()
+
+        XCTAssertTrue(bot.canSend)
+        XCTAssertNil(bot.errorMessage)
+        XCTAssertNil(bot.availabilityMessage)
+    }
+
+    func testFailedAvailabilityRefreshDisablesSending() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        bot.isAvailable = true
+        XCTAssertTrue(bot.canSend)
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(#"{"detail":"Temporarily unavailable"}"#, status: 503), for: "/settings/ai")
+
+        await bot.load()
+
+        XCTAssertFalse(bot.isAvailable)
+        XCTAssertFalse(bot.canSend)
+        XCTAssertNotNil(bot.availabilityMessage)
+    }
+
+    func testAvailabilityRefreshDisablesSendingUntilTheResponseArrives() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        bot.isAvailable = true
+        let started = expectation(description: "availability request started")
+        var release: (() -> Void)?
+        var held = StubURLProtocol.Stub.json(#"{"enabled":true,"providers":[{"name":"test"}],"tv_chat_supported":true}"#)
+        held.beforeReply = { reply in
+            Task { @MainActor in release = reply; started.fulfill() }
+        }
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        StubURLProtocol.enqueue(held, for: "/settings/ai")
+        let loading = Task { await bot.load() }
+        await fulfillment(of: [started], timeout: 2)
+
+        XCTAssertTrue(bot.isLoading)
+        XCTAssertFalse(bot.canSend)
+        release?()
+        await loading.value
+        XCTAssertTrue(bot.canSend)
+    }
+
+    func testPageListFailureDoesNotReplaceTheConversationError() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        bot.errorMessage = "An action may have finished."
+        StubURLProtocol.enqueue(.json(#"{"detail":"Pages unavailable"}"#, status: 503), for: "/pages")
+
+        await bot.loadPages()
+
+        XCTAssertEqual(bot.errorMessage, "An action may have finished.")
+        guard case .failed(let message) = bot.pageLoadState else {
+            return XCTFail("A failed page request must offer recovery instead of an empty library")
+        }
+        XCTAssertFalse(message.isEmpty)
+        StubURLProtocol.enqueue(.json(#"{"pages":[]}"#), for: "/pages")
+        await bot.loadPages()
+        XCTAssertEqual(bot.pageLoadState, .loaded)
+        XCTAssertTrue(bot.pages.isEmpty)
+        XCTAssertEqual(bot.errorMessage, "An action may have finished.")
+    }
+
+    func testPageListLoadingDoesNotClaimTheLibraryIsEmpty() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        bot.pages = []
+        let started = expectation(description: "page request started")
+        var release: (() -> Void)?
+        var held = StubURLProtocol.Stub.json(#"{"pages":[]}"#)
+        held.beforeReply = { reply in
+            Task { @MainActor in release = reply; started.fulfill() }
+        }
+        StubURLProtocol.enqueue(held, for: "/pages")
+        let loading = Task { await bot.loadPages() }
+        await fulfillment(of: [started], timeout: 2)
+
+        XCTAssertEqual(bot.pageLoadState, .loading)
+        release?()
+        await loading.value
+        XCTAssertEqual(bot.pageLoadState, .loaded)
+        XCTAssertTrue(bot.pages.isEmpty)
+    }
+
+    func testCancelledPageListDoesNotReportAChatErrorOrStopTheReply() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let bot = try modelForPageSend()
+        bot.beginReply()
+        let started = expectation(description: "page request started")
+        var held = StubURLProtocol.Stub.json(#"{"pages":[]}"#)
+        held.beforeReply = { _ in started.fulfill() }
+        StubURLProtocol.enqueue(held, for: "/pages")
+        let loading = Task { await bot.loadPages() }
+        await fulfillment(of: [started], timeout: 2)
+
+        loading.cancel()
+        await loading.value
+
+        XCTAssertNil(bot.errorMessage)
+        XCTAssertTrue(bot.isRunning)
+        XCTAssertEqual(bot.pageLoadState, .idle)
+    }
 }

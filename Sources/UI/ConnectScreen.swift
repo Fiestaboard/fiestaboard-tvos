@@ -13,11 +13,17 @@ struct ConnectScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: ConnectModel?
 
-    /// Which card holds focus, by board id.
-    @FocusState private var focusedBoard: String?
-    /// The scope `prefersDefaultFocus` is answered in. Same arrangement as
-    /// `PanelsScreen`: without it the remote parks on the address field and
-    /// stays there even once the user's board is on screen above it.
+    private enum FocusTarget: Hashable {
+        case board(String)
+        case address
+        case connect
+        case searchAgain
+    }
+
+    /// Track the manual controls too, so discovery cannot steal their focus.
+    @FocusState private var focusedControl: FocusTarget?
+    /// The scope `prefersDefaultFocus` is answered in, so the first board is
+    /// the default when focus enters the grid, as on `PanelsScreen`.
     @Namespace private var boardScope
 
     /// Injectable so tests can drive a screen that has boards on it and a
@@ -42,15 +48,23 @@ struct ConnectScreen: View {
         // quitting to the Apple TV home screen is the correct behaviour.
         .onAppear {
             if model == nil { model = ConnectModel(app: app) }
-            Task { await model?.startScan() }
+            Task {
+                #if DEBUG
+                if let discovery = ConnectReviewDiscovery.fromLaunchArguments() {
+                    await model?.startScan(using: discovery)
+                    return
+                }
+                #endif
+                await model?.startScan()
+            }
         }
         .onDisappear { model?.stopScan() }
         .onChange(of: boardIDs) { old, new in
             // Only when the first board lands, and only when nothing holds
             // focus yet. Once the remote is somewhere, a board appearing
             // later must not snatch it back mid-press.
-            guard old.isEmpty, !new.isEmpty, focusedBoard == nil else { return }
-            focusedBoard = new.first
+            guard old.isEmpty, let first = new.first, focusedControl == nil else { return }
+            focusedControl = .board(first)
         }
     }
 
@@ -118,7 +132,7 @@ struct ConnectScreen: View {
                             isConnecting: model?.connectInFlight(for: board.id) ?? false) {
             Task { await model?.connect(to: board.host, name: board.name) }
         }
-        .focused($focusedBoard, equals: board.id)
+        .focused($focusedControl, equals: .board(board.id))
         .prefersDefaultFocus(board.id == boardIDs.first, in: boardScope)
     }
 
@@ -143,6 +157,7 @@ struct ConnectScreen: View {
             emptyStateMessage
             if !isLooking {
                 Button("Search again") { Task { await model?.rescan() } }
+                    .focused($focusedControl, equals: .searchAgain)
                     .padding(.top, 12)
             }
         }
@@ -206,6 +221,7 @@ struct ConnectScreen: View {
                     .autocorrectionDisabled()
                     .frame(maxWidth: 560)
                     .accessibilityLabel("FiestaBoard address")
+                    .focused($focusedControl, equals: .address)
 
                 // Not `.disabled` while a connect is in flight: on tvOS
                 // disabling the focused control moves focus off it and it
@@ -213,6 +229,7 @@ struct ConnectScreen: View {
                 // model is the re-entry guard; this is only the feedback.
                 Button("Connect") { Task { await model?.connectManually() } }
                     .accessibilityLabel("Connect to the address you entered")
+                    .focused($focusedControl, equals: .connect)
 
                 if model?.manualConnectInFlight ?? false {
                     ProgressView()

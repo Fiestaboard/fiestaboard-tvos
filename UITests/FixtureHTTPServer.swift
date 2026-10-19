@@ -14,6 +14,10 @@ final class FixtureHTTPServer {
     private let additionalFrames: [String: String]
     private let lock = NSLock()
     private var chatResponses: [String]
+    private let holdPanelUpdates: Bool
+    private var heldPanelUpdates: [NWConnection] = []
+    private var discoveryBody: Data?
+    private var heldDiscoveryConnection: NWConnection?
     private var sawFrame = false
     private var sawPanels = false
 
@@ -25,6 +29,7 @@ final class FixtureHTTPServer {
          additionalPanels: [String: String] = [:],
          additionalFrames: [String: String] = [:],
          chatResponses: [String] = [],
+         holdPanelUpdates: Bool = false,
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -35,6 +40,7 @@ final class FixtureHTTPServer {
         self.additionalPanels = additionalPanels
         self.additionalFrames = additionalFrames
         self.chatResponses = chatResponses
+        self.holdPanelUpdates = holdPanelUpdates
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -54,10 +60,46 @@ final class FixtureHTTPServer {
 
     deinit { listener.cancel() }
 
+    func releaseDiscoveredBoard(name: String) {
+        let host = "http://127.0.0.1:\(port)"
+        let body = try! JSONSerialization.data(withJSONObject: [["id": host, "name": name, "host": host]])
+        lock.lock()
+        discoveryBody = body
+        let connection = heldDiscoveryConnection
+        heldDiscoveryConnection = nil
+        lock.unlock()
+        if let connection { sendDiscovery(body, to: connection) }
+    }
+
+    private func sendDiscovery(_ body: Data, to connection: NWConnection) {
+        let header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+        connection.send(content: Data(header.utf8) + body,
+                        completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    var heldPanelUpdateCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return heldPanelUpdates.count
+    }
+
     func updatePanels(_ body: String) {
         lock.lock()
         panelsBody = body
         lock.unlock()
+    }
+
+    func failHeldPanelUpdates() {
+        lock.lock()
+        let connections = heldPanelUpdates
+        heldPanelUpdates = []
+        lock.unlock()
+        for connection in connections {
+            let body = Data(#"{"detail":"Temporarily unavailable"}"#.utf8)
+            let header = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+            connection.send(content: Data(header.utf8) + body,
+                            completion: .contentProcessed { _ in connection.cancel() })
+        }
     }
 
     private func handle(_ connection: NWConnection) {
@@ -69,9 +111,24 @@ final class FixtureHTTPServer {
                 return
             }
             let path = request.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+            if path == "/__fixtures/discovery" {
+                lock.lock()
+                let body = discoveryBody
+                if body == nil { heldDiscoveryConnection = connection }
+                lock.unlock()
+                if let body { sendDiscovery(body, to: connection) }
+                return
+            }
+            if holdPanelUpdates, request.hasPrefix("PATCH "), path.hasPrefix("/api/panels/") {
+                lock.lock()
+                heldPanelUpdates.append(connection)
+                lock.unlock()
+                return
+            }
             let body: String
             var contentType = "application/json"
             switch path {
+            case "/api/auth/status": body = Fixtures.authStatusDisabled
             case "/api/settings/ai":
                 body = #"{"enabled":true,"tv_chat_supported":true,"providers":[{"id":"fixture"}]}"#
             case "/api/pages": body = #"{"pages":[]}"#

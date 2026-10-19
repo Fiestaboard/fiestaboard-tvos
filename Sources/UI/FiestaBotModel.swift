@@ -36,10 +36,15 @@ struct BotQuestion: Identifiable {
 @MainActor
 @Observable
 final class FiestaBotModel {
+    enum PageLoadState: Equatable {
+        case idle, loading, loaded, failed(String)
+    }
+
     var entries: [BotEntry] = []
     var currentPage: JSONValue?
     var panels: [Panel] = []
     var pages: [ChatPage] = []
+    var pageLoadState: PageLoadState = .idle
     var selectedPanelID: String?
     var isLoading = false
     var isRunning = false
@@ -57,6 +62,8 @@ final class FiestaBotModel {
     @ObservationIgnored private let client: FiestaClient?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
+    @ObservationIgnored private var loadGeneration = UUID()
+    @ObservationIgnored private var pageLoadGeneration = UUID()
     @ObservationIgnored private var questionDraft: BotQuestion?
     @ObservationIgnored private var submittedResume: ChatResume?
     @ObservationIgnored private var receivedDone = false
@@ -71,29 +78,34 @@ final class FiestaBotModel {
     var selectedPanel: Panel? { panels.first { $0.id == selectedPanelID } }
     var isCurrentConnection: Bool { connection.client === client && !connection.isSignedOut }
     var canSend: Bool {
-        isAvailable && selectedPanel != nil && !isRunning && !isShowingPage && pendingApproval == nil
+        isCurrentConnection && isAvailable && !isLoading && selectedPanel != nil && !isRunning && !isShowingPage && pendingApproval == nil
             && pendingQuestion?.allowsFreeText != false
     }
 
     func load(preferredRef: String? = nil) async {
-        guard isCurrentConnection else { return }
+        guard isCurrentConnection, !Task.isCancelled, !isRunning, !isShowingPage else { return }
+        let load = UUID()
+        loadGeneration = load
         isLoading = true
-        defer { isLoading = false }
+        isAvailable = false
+        errorMessage = nil
+        availabilityMessage = nil
+        defer { if loadGeneration == load { isLoading = false } }
         do {
             let loaded = try await connection.authorized { try await $0.panels() }
-            guard isCurrentConnection, !Task.isCancelled else { return }
+            guard loadGeneration == load, isCurrentConnection, !Task.isCancelled else { return }
             panels = loaded.filter { !$0.boardMissing }
             let preferred = panels.first { $0.id == preferredRef || String($0.shortCode) == preferredRef }
             if let preferred, selectedPanelID != preferred.id { selectPanel(preferred.id) }
             if selectedPanel == nil { selectPanel(panels.first?.id) }
             let availability = try await connection.authorized { try await $0.aiAvailability() }
-            guard isCurrentConnection, !Task.isCancelled else { return }
+            guard loadGeneration == load, isCurrentConnection, !Task.isCancelled else { return }
             isAvailable = availability.enabled && availability.configured && availability.supportsTV
             availabilityMessage = !availability.supportsTV
                 ? "Update FiestaBoard to use FiestaBot on Apple TV. You can still browse panels and pages."
                 : (isAvailable ? nil : "Enable FiestaBot and configure an AI provider in your board's web settings to chat here. You can still browse panels and pages.")
         } catch {
-            guard !Task.isCancelled else { return }
+            guard loadGeneration == load, isCurrentConnection, !Task.isCancelled else { return }
             availabilityMessage = "FiestaBot isn't available from this board. Check its connection, version, and AI settings."
             report(error)
         }
@@ -314,11 +326,27 @@ final class FiestaBotModel {
     }
 
     func loadPages() async {
+        guard isCurrentConnection, !Task.isCancelled else { return }
+        let load = UUID()
+        pageLoadGeneration = load
+        pageLoadState = .loading
+        defer {
+            if pageLoadGeneration == load, pageLoadState == .loading { pageLoadState = .idle }
+        }
         do {
             let loaded = try await connection.authorized { try await $0.pages() }
-            guard isCurrentConnection, !Task.isCancelled else { return }
+            guard pageLoadGeneration == load, isCurrentConnection, !Task.isCancelled else { return }
             pages = loaded
-        } catch { report(error) }
+            pageLoadState = .loaded
+        } catch {
+            guard pageLoadGeneration == load, isCurrentConnection, !Task.isCancelled else { return }
+            if let error = error as? FiestaError {
+                if error == .unauthorized { app?.route = .signIn }
+                pageLoadState = .failed(error.userMessage)
+            } else {
+                pageLoadState = .failed(error.localizedDescription)
+            }
+        }
     }
 
     func showPage(_ id: String) async {

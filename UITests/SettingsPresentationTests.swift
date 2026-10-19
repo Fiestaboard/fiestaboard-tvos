@@ -16,7 +16,7 @@ final class SettingsPresentationTests: XCTestCase {
         super.tearDown()
     }
 
-    private func launchSettings(includeSecondPanel: Bool = false, matrixPanel: Bool = false, localSettings: Bool = true) -> XCUIApplication {
+    private func launchSettings(includeSecondPanel: Bool = false, matrixPanel: Bool = false, localSettings: Bool = true, holdPanelUpdates: Bool = false) -> XCUIApplication {
         let frameLoaded = expectation(description: "Viewer loaded")
         let secondPanel = Fixtures.panelJSON
             .replacingOccurrences(of: "abc123def456", with: "kitchen-panel")
@@ -42,6 +42,7 @@ final class SettingsPresentationTests: XCTestCase {
         server = try! FixtureHTTPServer(frameBody: String(decoding: frameData, as: UTF8.self),
                                        panelsBody: panels,
                                        additionalPanels: includeSecondPanel ? ["kitchen-panel": secondPanel, "2": secondPanel] : [:],
+                                       holdPanelUpdates: holdPanelUpdates,
                                        onFrame: { frameLoaded.fulfill() })
         let app = XCUIApplication()
         let connection = """
@@ -143,11 +144,58 @@ final class SettingsPresentationTests: XCTestCase {
         openRow("All display settings", in: app)
         XCTAssertTrue(app.textFields["panelSettings.name"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["panelSettings.name"].value as? String, "Living Room")
+        XCTAssertTrue(app.staticTexts["Screen diagonal (3–200 inches)"].exists,
+                      "An entered number must keep a visible label; placeholder-only fields lose their meaning")
         attachScreenshot("Shared panel display settings", app: app)
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.otherElements["settings.panelPreview"].waitForExistence(timeout: 3))
         XCUIRemote.shared.press(.menu)
         XCTAssertFalse(app.staticTexts["Settings"].exists)
+    }
+
+    func testSharedDisplaySaveKeepsFocusDuringFailureAndAllowsRetry() {
+        let app = launchSettings(matrixPanel: true, localSettings: false, holdPanelUpdates: true)
+        defer { server?.failHeldPanelUpdates() }
+        XCUIRemote.shared.press(.right)
+        openRow("All display settings", in: app)
+        XCTAssertTrue(app.textFields["panelSettings.name"].waitForExistence(timeout: 5))
+        // Change the draft through the remote, leaving the real board untouched.
+        for _ in 0..<8 {
+            let toggle = app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Animations")).firstMatch
+            let cell = app.cells.containing(.switch, identifier: toggle.label).firstMatch
+            if toggle.hasFocus || (cell.exists && cell.hasFocus) { break }
+            XCUIRemote.shared.press(.down)
+        }
+        XCUIRemote.shared.press(.select)
+        openRow("panelSettings.save", in: app)
+        let save = app.buttons["panelSettings.save"]
+        let saving = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Saving…"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [saving], timeout: 5), .completed)
+        XCTAssertTrue(save.isEnabled, "Saving must retain its focus owner while duplicate presses are guarded")
+        XCTAssertTrue(rowHasFocus("panelSettings.save", in: app))
+        let requestArrived = XCTNSPredicateExpectation(predicate: NSPredicate { [weak self] _, _ in
+            self?.server?.heldPanelUpdateCount == 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [requestArrived], timeout: 5), .completed)
+        XCUIRemote.shared.press(.select)
+        let duplicate = XCTNSPredicateExpectation(predicate: NSPredicate { [weak self] _, _ in
+            (self?.server?.heldPanelUpdateCount ?? 0) > 1
+        }, object: nil)
+        duplicate.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [duplicate], timeout: 1), .completed,
+                       "Repeated Select must not send a duplicate save")
+        server?.failHeldPanelUpdates()
+        let retry = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Save changes"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [retry], timeout: 5), .completed)
+        waitForRowFocus("panelSettings.save", in: app)
+        XCTAssertFalse(app.staticTexts["panelSettings.saved"].exists)
+        attachScreenshot("Shared settings — failed save retains focus", app: app)
+        XCUIRemote.shared.press(.select)
+        let retried = XCTNSPredicateExpectation(predicate: NSPredicate { [weak self] _, _ in
+            self?.server?.heldPanelUpdateCount == 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [retried], timeout: 5), .completed)
+        XCTAssertTrue(rowHasFocus("panelSettings.save", in: app))
     }
 
     func testMatrixAppearanceExposesItsTransitionSwitch() {
