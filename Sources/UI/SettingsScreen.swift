@@ -149,10 +149,18 @@ struct SettingsScreen: View {
                     LabeledContent("Name", value: model?.boardName ?? "")
                     LabeledContent("Address", value: model?.boardAddress ?? "")
                 } header: { Text("Connected board").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                if app.connection.usesDeviceCredential {
+                    Section { Text("TV sign-in supports panels. FiestaBot is unavailable.") }
+                }
                 Section {
                     Button("Sign out") { model?.signOut() }
                     Button("Forget this board", role: .destructive) { confirmingForget = true }
-                } footer: { Text("Nothing on the board itself changes.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                } footer: {
+                    Text(app.connection.usesDeviceCredential
+                         ? "Removes this TV's saved sign-in and revokes its access. If the board is offline, revoke this TV in Account → Signed-in devices."
+                         : "Nothing on the board itself changes.")
+                        .foregroundStyle(Fiesta.Colors.mutedForeground)
+                }
             }
         case .help:
             controlList {

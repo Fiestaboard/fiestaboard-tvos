@@ -67,7 +67,7 @@ ITMS-90062.
 
 The app has no analytics or tracking. Requests and credentials go to the board
 chosen by the user, which can be local or at a typed HTTPS address. With protocol
-v1 TV sign-in enabled in the board's Account settings (default off), QR/manual
+v1 TV sign-in enabled in the board's Account settings (default on for supporting servers), QR/manual
 approval and direct password sign-in store only a revocable, 365-day TV credential
 in device-only Keychain storage. Direct password entry is sent to that board once;
 older or enrollment-disabled servers retain legacy Keychain password sign-in.

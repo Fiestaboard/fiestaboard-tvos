@@ -109,7 +109,7 @@ final class ViewerModel {
         // Raspberry Pi. Stop asking, and put someone in front of the form.
         if snapshot.connection == .unauthorized {
             stop()
-            app.route = .signIn
+            app.requestSignIn()
         }
     }
 

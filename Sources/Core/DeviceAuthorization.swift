@@ -71,7 +71,7 @@ public struct DevicePollError: Error, Equatable, Sendable {
         case "access_denied": return "This sign-in was denied. Choose New code to try again."
         case "expired_token": return "This code expired. Choose New code."
         case "invalid_grant": return "This code was cancelled or already used. Choose New code."
-        case "feature_disabled": return "TV sign-in is disabled. Enable TV sign-in (Beta) in your board's Account settings."
+        case "feature_disabled": return "TV sign-in is disabled. Enable TV sign-in in your board's Account settings."
         case "session_limit": return "The board has too many signed-in devices. Revoke one in Account settings, then try again."
         default: return "The board couldn't complete this sign-in. Try a new code."
         }

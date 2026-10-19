@@ -95,6 +95,7 @@ final class PanelsModel {
         let load = UUID()
         loadGeneration = load
         let client = app.connection.client
+        let authGeneration = app.connection.connectionGeneration
         stopPreviews()
         app.activePanelsModel = self
         isLoading = true
@@ -115,13 +116,7 @@ final class PanelsModel {
             app.rememberPanelBrowser(panels: loaded, previews: previews, client: client)
             await app.publishTopShelf(panels: loaded, previews: previews)?.value
         } catch FiestaError.unauthorized {
-            guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
-            // The stored credential could not recover the session — the only
-            // useful next step is asking for one. This attempt did not fail
-            // with something to read, so an older message must not outlive
-            // it on the screen behind the sign-in.
-            errorMessage = nil
-            app.route = .signIn
+            requestSignIn(generation: authGeneration, client: client)
         } catch let error as FiestaError {
             guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             fail(with: error.userMessage)
@@ -129,6 +124,19 @@ final class PanelsModel {
             guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             fail(with: FiestaError.transport("\(error)").userMessage)
         }
+    }
+
+    private func requestSignIn(generation: UUID, client: FiestaClient?) {
+        // A token rejection has already marked this connection signed out.
+        // Keep auth identity guards, but accept that terminal state. Another
+        // list/preview refresh can advance Home's generation independently.
+        guard !Task.isCancelled, let client, app.connection.client === client,
+              generation == app.connection.connectionGeneration || app.connection.isSignedOut,
+              app.connection.saved != nil else { return }
+        stopPreviews()
+        panels = []; previews = [:]; previewClient = nil
+        errorMessage = nil
+        app.requestSignIn()
     }
 
     /// Record the failure and say it out loud — see
@@ -167,6 +175,7 @@ final class PanelsModel {
         let connection = app.connection
         let client = connection.client
         let generation = app.topShelfGeneration
+        let authGeneration = connection.connectionGeneration
         let run = previewGeneration
         guard app.isCurrentTopShelfUpdate(generation, client: client) else { return }
         defer {
@@ -189,7 +198,7 @@ final class PanelsModel {
         }
 
         var publication: Task<Void, Never>?
-        await withTaskGroup(of: (String, PanelPreviewState).self) { group in
+        await withTaskGroup(of: (String, PanelPreviewState, Bool).self) { group in
             var pending = targets.makeIterator()
             var started = 0
             while started < Self.previewConcurrency, let panel = pending.next() {
@@ -197,6 +206,11 @@ final class PanelsModel {
                 started += 1
             }
             while let result = await group.next() {
+                if result.2, run == previewGeneration || connection.isSignedOut {
+                    requestSignIn(generation: authGeneration, client: client)
+                    group.cancelAll()
+                    break
+                }
                 if run != previewGeneration || !app.isCurrentTopShelfUpdate(generation, client: client) {
                     group.cancelAll()
                     continue
@@ -246,15 +260,17 @@ final class PanelsModel {
     /// Off the main actor: this is a network round trip per panel.
     private nonisolated static func fetchPreview(
         for panel: Panel, connection: ConnectionStore
-    ) async -> (String, PanelPreviewState) {
+    ) async -> (String, PanelPreviewState, Bool) {
         do {
             let frame = try await connection.authorized { try await $0.frame(ref: panel.id) }
             let preview = PanelPreview.make(from: frame, code62: panel.effectiveCode62)
-            return (panel.id, .ready(preview))
+            return (panel.id, .ready(preview), false)
+        } catch FiestaError.unauthorized {
+            return (panel.id, .unavailable, true)
         } catch {
             // Never surfaced as the screen's error: the panel list loaded,
             // and a card without a picture is still a usable card.
-            return (panel.id, .unavailable)
+            return (panel.id, .unavailable, false)
         }
     }
 }

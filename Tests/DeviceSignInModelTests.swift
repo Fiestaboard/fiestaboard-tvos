@@ -50,10 +50,47 @@ final class DeviceSignInModelTests: XCTestCase {
         now = now.addingTimeInterval(601)
         model.resume()
         XCTAssertEqual(model.state, .failed("This code expired. Choose New code."))
+        XCTAssertNil(model.challenge)
+        XCTAssertNil(model.completeURL)
+        XCTAssertNil(model.expiresAt)
         XCTAssertFalse(StubURLProtocol.requests.contains { $0.url.path.hasSuffix("/token") })
         model.cancel()
         await sleeper.resume()
     }
+    func testDeniedCodeDiscardsQRAndCountdownAndAnnouncesRecovery() async throws {
+        let harness = try await DeviceModelHarness()
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.challenge), for: "/auth/device/authorize")
+        StubURLProtocol.enqueue(.json(#"{"error":"access_denied"}"#, status: 400), for: "/auth/device/token")
+        let sleeper = PollSleeper()
+        let model = harness.model(sleep: { seconds in try await sleeper.sleep(seconds) })
+        model.start()
+        await settle { await sleeper.count == 1 }
+        await sleeper.resume()
+        await settle { if case .failed = model.state { return true }; return false }
+        XCTAssertEqual(model.statusMessage, DevicePollError(code: "access_denied").userMessage)
+        XCTAssertNil(model.challenge, "An unusable code must not remain on screen")
+        XCTAssertNil(model.completeURL)
+        XCTAssertNil(model.expiresAt)
+        model.cancel()
+    }
+
+    func testReadyCodeIsAnnouncedWithoutRequiringFocusToMove() async throws {
+        let original = Announce.sink
+        defer { Announce.sink = original }
+        var messages: [String] = []
+        Announce.sink = { _, message in if let message { messages.append(message) } }
+        let harness = try await DeviceModelHarness()
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.challenge), for: "/auth/device/authorize")
+        let sleeper = PollSleeper()
+        let model = harness.model(sleep: { seconds in try await sleeper.sleep(seconds) })
+        model.start()
+        await settle { model.challenge != nil }
+        XCTAssertTrue(messages.contains { $0.contains("W D J B") && $0.contains("M J H T") },
+                      "VoiceOver must hear that the public code is ready while focus stays on the action")
+        model.cancel()
+        await sleeper.resume()
+    }
+
     private func settle(_ condition: () async -> Bool) async {
         for _ in 0..<2_000 { if await condition() { return }; await Task.yield() }
         XCTFail("state machine did not reach expected state")

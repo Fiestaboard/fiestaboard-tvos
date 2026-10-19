@@ -16,6 +16,8 @@ final class FixtureHTTPServer {
     private var chatResponses: [String]
     private let holdPanelUpdates: Bool
     private let tvSignInEnabled: Bool
+    private let deviceAuthorizationError: String?
+    private let devicePollError: String
     private var heldPanelUpdates: [NWConnection] = []
     private var discoveryBody: Data?
     private var heldDiscoveryConnection: NWConnection?
@@ -32,6 +34,8 @@ final class FixtureHTTPServer {
          chatResponses: [String] = [],
          holdPanelUpdates: Bool = false,
          tvSignInEnabled: Bool = false,
+         deviceAuthorizationError: String? = nil,
+         devicePollError: String = "authorization_pending",
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -44,6 +48,8 @@ final class FixtureHTTPServer {
         self.chatResponses = chatResponses
         self.holdPanelUpdates = holdPanelUpdates
         self.tvSignInEnabled = tvSignInEnabled
+        self.deviceAuthorizationError = deviceAuthorizationError
+        self.devicePollError = devicePollError
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -135,10 +141,15 @@ final class FixtureHTTPServer {
             case "/api/auth/status":
                 body = tvSignInEnabled ? #"{"enabled":true,"setup_required":false,"authenticated":false,"username":null,"mode":"required","first_run":false,"tv_sign_in":{"supported":true,"enabled":true,"protocol_version":1}}"# : Fixtures.authStatusDisabled
             case "/api/auth/device/authorize":
-                body = #"{"device_code":"ui-private-test","user_code":"WDJB-MJHT","verification_path":"/activate","verification_path_complete":"/activate?user_code=WDJB-MJHT","expires_in":600,"interval":5}"#
+                if let deviceAuthorizationError {
+                    status = "403 Forbidden"
+                    body = "{\"error\":\"\(deviceAuthorizationError)\"}"
+                } else {
+                    body = #"{"device_code":"ui-private-test","user_code":"WDJB-MJHT","verification_path":"/activate","verification_path_complete":"/activate?user_code=WDJB-MJHT","expires_in":600,"interval":5}"#
+                }
             case "/api/auth/device/token":
                 status = "400 Bad Request"
-                body = #"{"error":"authorization_pending"}"#
+                body = "{\"error\":\"\(devicePollError)\"}"
             case "/api/auth/device/cancel": body = "{}"
             case "/api/settings/ai":
                 body = #"{"enabled":true,"tv_chat_supported":true,"providers":[{"id":"fixture"}]}"#

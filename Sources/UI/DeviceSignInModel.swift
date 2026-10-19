@@ -50,6 +50,7 @@ final class DeviceSignInModel {
                 expiresAt = now().addingTimeInterval(min(600, challenge.expiresIn))
                 interval = max(5, challenge.interval)
                 state = .waiting
+                Announce.say("Sign-in code ready: \(challenge.userCode.map(String.init).joined(separator: " ")). Waiting for approval in your browser.")
                 statusMessage = DevicePollError(code: "authorization_pending").userMessage
                 await poll(client: client, attempt: attempt, generation: generation)
             } catch { if isCurrent(attempt, generation) { fail(message(error)) } }
@@ -124,6 +125,10 @@ final class DeviceSignInModel {
         }
     }
     private func fail(_ message: String) {
+        if let challenge, let client = challengeClient {
+            Task { try? await client.cancelDeviceSignIn(deviceCode: challenge.deviceCode) }
+        }
+        challenge = nil; manualURL = nil; completeURL = nil; expiresAt = nil
         state = .failed(message); statusMessage = message; Announce.say(message)
     }
     private func message(_ error: Error) -> String {
