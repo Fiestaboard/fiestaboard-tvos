@@ -19,6 +19,62 @@ final class SettingsScreenTests: XCTestCase {
     override func setUp() { super.setUp(); StubURLProtocol.reset() }
     override func tearDown() { StubURLProtocol.reset(); super.tearDown() }
 
+    func testRevokedDeviceTokenClearsSettingsCacheAndHomeBeforeSignIn() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let shelf = TopShelfSnapshotStore(directory: directory)
+        let connection = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
+                                         credentials: InMemoryCredentialStore(),
+                                         clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://board.test")!, displayName: "Board")
+        let token = try JSONDecoder().decode(DeviceTokenResult.self, from: Data(DeviceAuthorizationTests.token.utf8))
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled.replacingOccurrences(of: "\"authenticated\":false", with: "\"authenticated\":true")), for: "/api/auth/status")
+        try await connection.adoptDeviceCredential(token, expectedGeneration: connection.connectionGeneration)
+        let app = AppModel(connection: connection, topShelfStore: shelf)
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        app.rememberPanelBrowser(panels: [panel], previews: [:], client: connection.client)
+        try shelf.replace([.init(panelID: panel.id, name: panel.name, imageData: Data([1]))])
+        app.route = .settings
+        let model = SettingsModel(app: app)
+        model.panels = [panel]
+        StubURLProtocol.enqueue(.json("{}", status: 401), for: "/api/panels")
+        await model.load()
+        XCTAssertTrue(connection.isSignedOut)
+        XCTAssertEqual(app.route, .signIn)
+        XCTAssertNil(app.panelBrowserCache)
+        XCTAssertTrue(model.panels.isEmpty)
+        XCTAssertEqual(SignInModel(app: app).errorMessage, FiestaError.unauthorized.userMessage)
+        for _ in 0..<100 {
+            if shelf.items().isEmpty { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(shelf.items().isEmpty, "Revocation must remove cached Home content")
+    }
+
+    func testLateSettingsRejectionCannotRedirectAReplacementConnection() async throws {
+        let app = await makeApp()
+        let model = SettingsModel(app: app)
+        let reached = expectation(description: "settings response held")
+        var release: (() -> Void)?
+        var response = StubURLProtocol.Stub.json("{}", status: 401)
+        response.beforeReply = { reply in release = reply; reached.fulfill() }
+        StubURLProtocol.enqueue(response, for: "/api/panels")
+        let load = Task { await model.load() }
+        await fulfillment(of: [reached], timeout: 2)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await app.connection.connect(to: URL(string: "http://replacement.test")!, displayName: "Replacement")
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        app.rememberPanelBrowser(panels: [panel], previews: [:], client: app.connection.client)
+        app.route = .panels
+        release?()
+        await load.value
+        XCTAssertEqual(app.route, .panels)
+        XCTAssertNotNil(app.panelBrowserCache)
+        XCTAssertNil(app.signInMessage)
+        XCTAssertFalse(app.connection.isSignedOut)
+    }
+
     func testMatrixTransitionStylePersistsLocallyAndReachesANewViewer() async {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let signage = SignageSettings(defaults: defaults)
