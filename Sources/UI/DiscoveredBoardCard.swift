@@ -45,8 +45,7 @@ struct DiscoveredBoardCard: View {
             // what stops a second attempt.
             .overlay(alignment: .bottomTrailing) {
                 if isConnecting {
-                    ProgressView()
-                        .tint(Fiesta.Colors.brand)
+                    TacoLoader(size: .small)
                 }
             }
             .padding(28)

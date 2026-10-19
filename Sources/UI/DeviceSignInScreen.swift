@@ -16,7 +16,7 @@ struct DeviceSignInScreen: View {
                 Group {
                     if let url = model?.completeURL { QRCodeView(url: url) }
                     else if model == nil || model?.state == .idle || model?.state == .starting {
-                        ProgressView().frame(width: 390, height: 390)
+                        TacoLoader(size: .large).frame(width: 390, height: 390)
                             .accessibilityIdentifier("device-code-loading")
                     } else {
                         Image(systemName: "qrcode")

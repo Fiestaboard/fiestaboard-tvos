@@ -27,7 +27,7 @@ final class ViewerNavigationUITests: XCTestCase {
 
         XCTAssertFalse(app.staticTexts["Panels"].exists, "The saved default panel should start on the viewer")
         wait(for: [frameLoaded], timeout: 10)
-        XCTAssertTrue(app.progressIndicators.firstMatch.waitForNonExistence(timeout: 5),
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5),
                       "The board should finish loading before pressing Menu")
         return app
     }

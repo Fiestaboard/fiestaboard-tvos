@@ -57,7 +57,7 @@ final class DeviceSignInUITests: XCTestCase {
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expected)).firstMatch.waitForExistence(timeout: 10))
         capture(screenshot, app: app)
-        XCTAssertEqual(app.progressIndicators.count, 0, "A terminal failure must not look like ongoing work")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "taco-loader").count, 0, "A terminal failure must not look like ongoing work")
         XCTAssertFalse(app.descendants(matching: .any)["device-code-loading"].exists)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "W D J B")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Code expires")).firstMatch.exists)

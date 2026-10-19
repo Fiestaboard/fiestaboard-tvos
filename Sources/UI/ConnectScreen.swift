@@ -169,8 +169,7 @@ struct ConnectScreen: View {
     private var emptyStateMessage: some View {
         VStack(spacing: 16) {
             if isLooking {
-                ProgressView()
-                    .tint(Fiesta.Colors.brand)
+                TacoLoader(size: .large)
                     .accessibilityHidden(true)
                 Text("Looking for FiestaBoards on this network…")
                     .font(Fiesta.Text.body)
@@ -232,8 +231,7 @@ struct ConnectScreen: View {
                     .focused($focusedControl, equals: .connect)
 
                 if model?.manualConnectInFlight ?? false {
-                    ProgressView()
-                        .tint(Fiesta.Colors.brand)
+                    TacoLoader(size: .small)
                         .accessibilityHidden(true)
                 }
             }

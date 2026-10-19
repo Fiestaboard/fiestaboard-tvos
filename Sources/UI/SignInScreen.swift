@@ -264,8 +264,7 @@ struct SignInScreen: View {
     private var submitFooter: some View {
         if model?.isSubmitting ?? false {
             HStack(spacing: 12) {
-                ProgressView()
-                    .tint(Fiesta.Colors.brand)
+                TacoLoader(size: .small)
                     .accessibilityHidden(true)
                 Text("Signing in…")
             }
