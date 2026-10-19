@@ -87,13 +87,12 @@ final class SettingsModel {
             guard previewGeneration == generation else { return }
             guard !Task.isCancelled else { preview = .unavailable; return }
             preview = .ready(PanelPreview.make(from: frame, code62: panel.effectiveCode62))
+        } catch FiestaError.unauthorized {
+            requestSignIn(client: client, generation: authGeneration)
         } catch {
             guard previewGeneration == generation else { return }
             preview = .unavailable
             guard !Task.isCancelled else { return }
-            if let error = error as? FiestaError, error == .unauthorized {
-                requestSignIn(client: client, generation: authGeneration)
-            }
             // A missing preview must not replace an unrelated settings-save error.
         }
     }
@@ -127,11 +126,13 @@ final class SettingsModel {
             guard loadGeneration == generation, !Task.isCancelled else { return }
             panels = loaded
             hasLoaded = true
+        } catch FiestaError.unauthorized {
+            requestSignIn(client: client, generation: authGeneration)
         } catch {
             guard loadGeneration == generation, !Task.isCancelled else { return }
+            guard !(error is CancellationError) else { return }
             if let error = error as? FiestaError {
-                if error == .unauthorized { requestSignIn(client: client, generation: authGeneration) }
-                else { report(error: error.userMessage) }
+                report(error: error.userMessage)
             } else {
                 report(error: FiestaError.transport("\(error)").userMessage)
             }
