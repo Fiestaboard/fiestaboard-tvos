@@ -58,6 +58,7 @@ final class DeviceSignInUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", expected)).firstMatch.waitForExistence(timeout: 10))
         capture(screenshot, app: app)
         XCTAssertEqual(app.progressIndicators.count, 0, "A terminal failure must not look like ongoing work")
+        XCTAssertFalse(app.descendants(matching: .any)["device-code-loading"].exists)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "W D J B")).firstMatch.exists)
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Code expires")).firstMatch.exists)
         XCTAssertTrue(app.buttons["device-new-code"].exists)

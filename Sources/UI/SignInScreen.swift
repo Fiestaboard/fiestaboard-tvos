@@ -12,7 +12,11 @@ final class SignInModel {
     private let app: AppModel
     private var submissionGeneration = UUID()
 
-    init(app: AppModel) { self.app = app }
+    init(app: AppModel) {
+        self.app = app
+        errorMessage = app.signInMessage
+        app.signInMessage = nil
+    }
 
     func useAnotherBoard() {
         submissionGeneration = UUID()

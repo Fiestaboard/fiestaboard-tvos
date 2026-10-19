@@ -42,6 +42,7 @@ public final class AppModel {
     }
 
     public var errorMessage: String?
+    var signInMessage: String?
     var offeredResizeRefs: Set<String> = []
     var lastViewedPanelRef: String?
     /// Where Settings was opened from, so leaving it goes back there.
@@ -136,6 +137,13 @@ public final class AppModel {
         }
     }
 
+    func requestSignIn() {
+        clearTopShelf()
+        signInMessage = FiestaError.unauthorized.userMessage
+        route = .signIn
+        Announce.say(FiestaError.unauthorized.userMessage)
+    }
+
     public func finishSignIn() {
         errorMessage = nil
         if let ref = connection.saved?.defaultPanelRef { route = .viewer(ref) }
@@ -179,16 +187,18 @@ public final class AppModel {
         route = .settings
     }
 
-    func showFiestaBot() {
+    @discardableResult
+    func showFiestaBot() -> Bool {
         guard !connection.usesDeviceCredential else {
-            errorMessage = "TV sign-in allows panels and display settings. FiestaBot is unavailable with this sign-in."
-            return
+            errorMessage = "FiestaBot is unavailable with this TV sign-in."
+            return false
         }
         if route != .fiestaBot { routeBeforeBot = route }
         if case .viewer(let ref) = route { botPanelRef = ref }
         else { botPanelRef = lastViewedPanelRef }
         if fiestaBot?.isCurrentConnection != true { fiestaBot = FiestaBotModel(app: self) }
         route = .fiestaBot
+        return true
     }
 
     func dismissFiestaBot() {

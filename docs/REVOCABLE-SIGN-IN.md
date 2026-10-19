@@ -1,7 +1,8 @@
-# Revocable TV sign-in (Beta)
+# Revocable TV sign-in
 
 This app implements FiestaBoard TV sign-in protocol version 1. The server's
-Account → TV sign-in (Beta) switch defaults off. When enabled, Sign in offers
+Account → TV sign-in switch defaults on for supporting servers and respects an
+administrator's explicit off setting. When enabled, Sign in offers
 **Sign in with a phone or computer** as well as username/password fields.
 Scan the QR, or open the displayed address on a phone or desktop and enter the
 same code. Both devices must reach the selected board. Explicit browser approval
@@ -36,10 +37,17 @@ renderer/navigation suites and produces an unsigned Release archive.
 Local simulator execution in the agent workspace is restricted by CoreSimulator
 permissions. CI is the simulator execution record. Physical QR scanning at 1080p
 and 4K, iPhone/Android/desktop approval against the coordinated server, real remote
-and VoiceOver checks, and the 24-hour signage soak remain beta qualification work.
+and VoiceOver checks, and the 24-hour signage soak remain release qualification work.
 No TestFlight upload or physical-device result is claimed by this change.
 
 A native macOS harness also executes the platform-independent Core contract and
 credential tests against the same production Swift sources. This checks protocol,
 Keychain abstraction failures, migration and generation races; it does not exercise
 tvOS Keychain entitlement behavior, focus, or actual device rendering.
+
+The sign-in UX regression suite covers denied/expired code cleanup, public-code
+announcements, revoked-token recovery from panel lists and previews, and rejected
+FiestaBot navigation. `DeviceSignInUITests` retains simulator screenshots for the
+ready QR/manual-code screen and terminal recovery screens. These fixtures verify
+remote navigation and layout; they do not replace a browser-to-TV approval test
+against a running server or a physical VoiceOver/QR-scanning check.

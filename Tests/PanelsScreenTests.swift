@@ -57,6 +57,24 @@ final class PanelsScreenTests: XCTestCase {
         XCTAssertEqual(SignInModel(app: app).errorMessage, FiestaError.unauthorized.userMessage)
     }
 
+    func testRevokedDeviceTokenDuringPreviewOffersSignIn() async throws {
+        let app = await makeApp()
+        let token = try JSONDecoder().decode(DeviceTokenResult.self, from: Data(DeviceAuthorizationTests.token.utf8))
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled.replacingOccurrences(of: "\"authenticated\":false", with: "\"authenticated\":true")), for: "/api/auth/status")
+        try await app.connection.adoptDeviceCredential(token, expectedGeneration: app.connection.connectionGeneration)
+        app.route = .panels
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        app.rememberPanelBrowser(panels: [panel], previews: [:], client: app.connection.client)
+        let model = PanelsModel(app: app)
+        StubURLProtocol.enqueue(.json("{}", status: 401), for: "/api/panel/\(panel.id)/frame")
+        await model.refreshPreviews(for: [panel])
+        XCTAssertTrue(app.connection.isSignedOut)
+        XCTAssertEqual(app.route, .signIn)
+        XCTAssertNil(app.panelBrowserCache)
+        XCTAssertTrue(model.panels.isEmpty)
+        XCTAssertEqual(SignInModel(app: app).errorMessage, FiestaError.unauthorized.userMessage)
+    }
+
     func testAnUnreachableBoardShowsAnError() async {
         let app = await makeApp()
         let model = PanelsModel(app: app)

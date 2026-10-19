@@ -8,17 +8,28 @@ struct DeviceSignInScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             FiestaScreenHeading(title: "Sign in with a phone or computer",
-                                subtitle: "Scan the code, or open the address below in a browser.",
+                                subtitle: model?.completeURL == nil && model?.state != .starting && model != nil
+                                    ? "Choose New code to try again, or use username and password."
+                                    : "Scan the code, or open the address below in a browser.",
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
             HStack(alignment: .top, spacing: 64) {
                 Group {
                     if let url = model?.completeURL { QRCodeView(url: url) }
-                    else { ProgressView().frame(width: 390, height: 390) }
+                    else if model == nil || model?.state == .idle || model?.state == .starting {
+                        ProgressView().frame(width: 390, height: 390)
+                            .accessibilityIdentifier("device-code-loading")
+                    } else {
+                        Image(systemName: "qrcode")
+                            .font(.system(size: 120))
+                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                            .frame(width: 390, height: 390)
+                            .accessibilityHidden(true)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 18) {
                     Text(model?.manualURL?.absoluteString ?? app.connection.saved?.host.absoluteString ?? "")
                         .font(.title3)
-                        .accessibilityLabel("Browser address: \(model?.manualURL?.absoluteString ?? "")")
+                        .accessibilityLabel("Browser address: \(model?.manualURL?.absoluteString ?? app.connection.saved?.host.absoluteString ?? "")")
                     if let challenge = model?.challenge {
                         Text(challenge.userCode).font(.system(size: 60, weight: .bold, design: .monospaced))
                             .accessibilityLabel("Sign-in code: \(challenge.userCode.map(String.init).joined(separator: " "))")
@@ -30,7 +41,7 @@ struct DeviceSignInScreen: View {
                     Text(model?.statusMessage ?? "Creating your code…")
                     Text("Your browser and TV must both reach this board. If the address won't open, connect your phone or computer to the same network.")
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
-                    Text("Allows viewing panels and adjusting their display. FiestaBot needs a separate sign-in with broader permissions and is unavailable for this TV sign-in.")
+                    Text("TV sign-in supports panels. FiestaBot is unavailable.")
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }

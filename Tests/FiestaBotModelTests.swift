@@ -165,11 +165,29 @@ final class FiestaBotModelTests: XCTestCase {
         }
     }
 
+    func testScopedTVSignInRejectsProgrammaticBotNavigation() async throws {
+        StubURLProtocol.reset()
+        defer { StubURLProtocol.reset() }
+        let connection = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
+                                         credentials: InMemoryCredentialStore(),
+                                         clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/api/auth/status")
+        _ = try await connection.connect(to: URL(string: "http://board.test")!, displayName: "Board")
+        let token = try JSONDecoder().decode(DeviceTokenResult.self, from: Data(DeviceAuthorizationTests.token.utf8))
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled.replacingOccurrences(of: "\"authenticated\":false", with: "\"authenticated\":true")), for: "/api/auth/status")
+        try await connection.adoptDeviceCredential(token, expectedGeneration: connection.connectionGeneration)
+        let app = AppModel(connection: connection)
+        app.openPanel(ref: "1")
+        XCTAssertFalse(app.showFiestaBot(), "A rejected navigation must tell the caller to keep viewing")
+        XCTAssertEqual(app.route, .viewer("1"))
+        XCTAssertNil(app.fiestaBot)
+    }
+
     func testOpeningBotAndReturningPreservesViewerOrigin() {
         let app = AppModel(connection: ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
                                                        credentials: InMemoryCredentialStore()))
         app.openPanel(ref: "1")
-        app.showFiestaBot()
+        XCTAssertTrue(app.showFiestaBot())
         XCTAssertEqual(app.route, .fiestaBot)
         app.dismissFiestaBot()
         XCTAssertEqual(app.route, .viewer("1"))

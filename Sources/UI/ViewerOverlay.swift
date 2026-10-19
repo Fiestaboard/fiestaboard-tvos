@@ -21,7 +21,7 @@ struct ViewerOverlay: View {
     let onInteraction: () -> Void
     let onPanels: () -> Void
     let onSettings: () -> Void
-    let onFiestaBot: () -> Void
+    let onFiestaBot: (() -> Void)?
 
     /// Chrome that appears with nothing focused strands the user: the board
     /// itself has given up its focus target while this is on screen, so the
@@ -58,8 +58,10 @@ struct ViewerOverlay: View {
                 .focused($focusedAction, equals: .panels)
             Button("Settings", action: onSettings)
                 .focused($focusedAction, equals: .settings)
-            Button("FiestaBot", action: onFiestaBot)
-                .focused($focusedAction, equals: .bot)
+            if let onFiestaBot {
+                Button("FiestaBot", action: onFiestaBot)
+                    .focused($focusedAction, equals: .bot)
+            }
         }
         .buttonStyle(.bordered)
         // Hug the top: a taller bar hides more of the board than it needs to.
