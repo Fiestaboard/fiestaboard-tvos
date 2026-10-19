@@ -14,6 +14,7 @@ struct PanelPreview: Equatable, Sendable {
     /// `.accessibilityHidden` — 360 flaps is not browsable.
     let message: String?
     var richCells: [[MatrixCell]]? = nil
+    var layers: [CanvasLayer] = []
 
     static func make(from frame: PanelFrame, code62: Code62Glyph) -> PanelPreview {
         let cells: [[BoardCell]]
@@ -25,7 +26,7 @@ struct PanelPreview: Equatable, Sendable {
             cells = []
         }
         return PanelPreview(rows: frame.rows, cols: frame.cols,
-                            cells: cells, message: frame.message, richCells: frame.richCells)
+                            cells: cells, message: frame.message, richCells: frame.richCells, layers: frame.layers)
     }
 }
 

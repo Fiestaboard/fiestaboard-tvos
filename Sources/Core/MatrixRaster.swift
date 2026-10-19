@@ -77,7 +77,7 @@ public struct MatrixRaster: Equatable, Sendable {
         return hex(code) ?? 0
     }
 
-    public static func make(panel: Panel, cells: [[BoardCell]], richCells: [[MatrixCell]]? = nil) -> MatrixRaster {
+    public static func make(panel: Panel, cells: [[BoardCell]], richCells: [[MatrixCell]]? = nil, layers: [CanvasLayer] = []) -> MatrixRaster {
         let display = panel.matrixDisplay
         let width = display.width, height = display.height
         let face = faces[display.font]!
@@ -87,7 +87,6 @@ public struct MatrixRaster: Equatable, Sendable {
         let cols = columns.count
         let rows = (height + face.spacingY) / pitchY
         var pixels = [UInt32](repeating: 0, count: width * height)
-        guard cols > 0, rows > 0 else { return MatrixRaster(width: width, height: height, pixels: pixels, text: "") }
         let originX = columns.origin
         let originY = (height - (rows * pitchY - face.spacingY)) / 2
         let mono = display.color?.kind == "monochrome" ? hex(display.color?.color) : nil
@@ -176,6 +175,22 @@ public struct MatrixRaster: Equatable, Sendable {
             lines.append(line)
         }
         let text = lines.joined(separator: " ").split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        for layer in layers.prefix(CanvasLayer.maxCount) {
+            // Reject offscreen origins before adding or negating them: even
+            // Int.min/Int.max coordinates cannot overflow clipping arithmetic.
+            guard layer.x < width, layer.x > -layer.width,
+                  layer.y < height, layer.y > -layer.height else { continue }
+            for sy in max(0, -layer.y)..<min(layer.height, height - layer.y) {
+                for sx in max(0, -layer.x)..<min(layer.width, width - layer.x) {
+                    let offset = (sy * layer.width + sx) * 4
+                    guard layer.rgba[offset + 3] != 0 else { continue }
+                    let r = UInt32(layer.rgba[offset]), g = UInt32(layer.rgba[offset + 1]), b = UInt32(layer.rgba[offset + 2])
+                    let color = mono.map { 299 * r + 587 * g + 114 * b >= 127_500 ? $0 : 0 }
+                        ?? (r << 16 | g << 8 | b)
+                    pixels[(layer.y + sy) * width + layer.x + sx] = color
+                }
+            }
+        }
         return MatrixRaster(width: width, height: height, pixels: pixels, text: text)
     }
 }

@@ -85,6 +85,23 @@ use square LEDs by default, or round LEDs when specified by the panel model,
 with subtle lens shading and a short glow. Increase Contrast or Reduce
 Transparency removes that decorative lighting.
 
+LED displays also render pixel-canvas layers supplied by the server's panel
+frame endpoint. This requires a FiestaBoard version that includes `layers` in
+panel frames; older servers continue rendering text and rich cells as before.
+Pixel artwork appears in the viewer, panel cards, Settings previews and Top
+Shelf. Layers paint after text in array order. Each layer uses integer `x`, `y`,
+`width`, `height` and standard base64 `rgba` containing row-major RGBA bytes.
+Alpha zero preserves the underlying pixel; any nonzero alpha replaces its RGB
+without blending. Offscreen pixels are clipped without wrapping. Monochrome
+models light their configured color when `299R + 587G + 114B >= 127500` and
+otherwise clear the pixel.
+
+The receiver processes the first 64 layer entries, with bitmap dimensions from
+1 to 256 pixels per axis and exactly four decoded bytes per pixel. Malformed
+layers are skipped individually. Missing, null or empty layers clear earlier
+artwork on the next successful frame; a connection outage retains the last
+frame. The panel's existing display dimensions still bound the visible canvas.
+
 **Settings → This Apple TV → LED matrix** sets the fallback matrix sizing.
 When a panel has **Matrix size** configured in FiestaBoard’s panel editor,
 that shared choice takes precedence and updates on the next configuration

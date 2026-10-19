@@ -34,6 +34,7 @@ public struct PanelSnapshot: Equatable, Sendable {
     /// existed.
     public let message: String?
     public let richCells: [[MatrixCell]]?
+    public let layers: [CanvasLayer]
 
     /// Spelled out rather than synthesised so `drift` can default: it is a
     /// late arrival and every existing caller predates it. `message` is a
@@ -43,7 +44,7 @@ public struct PanelSnapshot: Equatable, Sendable {
     public init(panel: Panel?, cells: [[BoardCell]], rows: Int, cols: Int,
                 connection: ConnectionState, dimmed: Bool, deleted: Bool,
                 drift: BoardOffset = .zero,
-                message: String? = nil, richCells: [[MatrixCell]]? = nil) {
+                message: String? = nil, richCells: [[MatrixCell]]? = nil, layers: [CanvasLayer] = []) {
         self.panel = panel
         self.cells = cells
         self.rows = rows
@@ -54,6 +55,7 @@ public struct PanelSnapshot: Equatable, Sendable {
         self.drift = drift
         self.message = message
         self.richCells = richCells
+        self.layers = layers
     }
 
     public static let empty = PanelSnapshot(panel: nil, cells: [], rows: 0, cols: 0,
@@ -70,7 +72,7 @@ public struct PanelSnapshot: Equatable, Sendable {
         case .live: break
         }
         if let panel, panel.renderStyle == .ledMatrix {
-            return MatrixRaster.make(panel: panel, cells: cells, richCells: richCells).spoken(message: message)
+            return MatrixRaster.make(panel: panel, cells: cells, richCells: richCells, layers: layers).spoken(message: message)
         }
         return BoardSpeech.spoken(message: message, cells: cells)
     }
@@ -204,6 +206,7 @@ public final class PanelStore: @unchecked Sendable {
         var cols = 0
         var message: String?
         var richCells: [[MatrixCell]]?
+        var layers: [CanvasLayer] = []
 
         while !Task.isCancelled {
             if sinceConfig >= configInterval {
@@ -237,6 +240,7 @@ public final class PanelStore: @unchecked Sendable {
                     }
                     message = frame.message
                     richCells = frame.richCells
+                    layers = frame.layers
                     connection = .live
                 } catch FiestaError.notFound {
                     deleted = true
@@ -266,7 +270,7 @@ public final class PanelStore: @unchecked Sendable {
             continuation.yield(PanelSnapshot(panel: panel, cells: cells, rows: rows, cols: cols,
                                              connection: connection, dimmed: dimmed, deleted: deleted,
                                              drift: signage.drift(at: now),
-                                             message: message, richCells: richCells))
+                                             message: message, richCells: richCells, layers: layers))
 
             if connection == .unauthorized { break }
 
