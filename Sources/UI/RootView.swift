@@ -51,6 +51,8 @@ public struct RootView: View {
             ConnectScreen()
         case .signIn:
             SignInScreen()
+        case .deviceSignIn:
+            DeviceSignInScreen()
         case .panels:
             PanelsScreen()
         case .viewer(let ref):

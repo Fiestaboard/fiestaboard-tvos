@@ -1,13 +1,34 @@
 import Foundation
 import Security
 
-public struct StoredCredential: Codable, Equatable, Sendable {
-    public let username: String
-    public let password: String
+public enum StoredCredential: Codable, Equatable, Sendable {
+    case legacyPassword(username: String, password: String)
+    case deviceToken(accessToken: String, sessionID: String, expiresAt: Date)
 
-    public init(username: String, password: String) {
-        self.username = username
-        self.password = password
+    public init(username: String, password: String) { self = .legacyPassword(username: username, password: password) }
+    public var username: String? { if case .legacyPassword(let value, _) = self { return value }; return nil }
+    public var password: String? { if case .legacyPassword(_, let value) = self { return value }; return nil }
+    public var accessToken: String? { if case .deviceToken(let value, _, _) = self { return value }; return nil }
+
+    private enum CodingKeys: String, CodingKey { case kind, username, password, accessToken, sessionID, expiresAt }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        switch try c.decodeIfPresent(String.self, forKey: .kind) ?? "legacyPassword" {
+        case "legacyPassword": self = .legacyPassword(username: try c.decode(String.self, forKey: .username), password: try c.decode(String.self, forKey: .password))
+        case "deviceToken": self = .deviceToken(accessToken: try c.decode(String.self, forKey: .accessToken), sessionID: try c.decode(String.self, forKey: .sessionID), expiresAt: try c.decode(Date.self, forKey: .expiresAt))
+        default: throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "Unknown credential kind")
+        }
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .legacyPassword(let username, let password):
+            try c.encode("legacyPassword", forKey: .kind)
+            try c.encode(username, forKey: .username); try c.encode(password, forKey: .password)
+        case .deviceToken(let token, let sessionID, let expiry):
+            try c.encode("deviceToken", forKey: .kind)
+            try c.encode(token, forKey: .accessToken); try c.encode(sessionID, forKey: .sessionID); try c.encode(expiry, forKey: .expiresAt)
+        }
     }
 }
 

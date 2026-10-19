@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
+    TV credentials stay in device-only Keychain and go only to the chosen board.
+    Activation QR encoding is local; no camera or third-party SDK is used.
     The app collects nothing and tracks nobody, but it does call one
     required-reason API: UserDefaults, in ConnectionStore, SignageSettings,
     ViewerModel and SettingsModel. Apple's rule covers first-party code, not

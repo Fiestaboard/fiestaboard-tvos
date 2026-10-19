@@ -66,10 +66,26 @@ the same variables. A second upload at the same build number comes back
 ITMS-90062.
 
 The app has no analytics or tracking. Requests and credentials go to the board
-chosen by the user, which can be local or at a typed HTTPS address. Passwords
-are stored in Keychain and sent to that board at sign-in; discovered HTTP
-connections send them without TLS. The board address and display preferences
-use UserDefaults. Do not claim passwords never leave the device.
+chosen by the user, which can be local or at a typed HTTPS address. With protocol
+v1 TV sign-in enabled in the board's Account settings (default off), QR/manual
+approval and direct password sign-in store only a revocable, 365-day TV credential
+in device-only Keychain storage. Direct password entry is sent to that board once;
+older or enrollment-disabled servers retain legacy Keychain password sign-in.
+HTTP connections transmit passwords and bearer credentials without TLS. The board
+address and display preferences use UserDefaults. Do not claim passwords never
+leave the device. No credential or private activation code goes to Top Shelf.
+
+Sign out/Forget remove local credentials immediately and attempt server self-revocation.
+When offline, remove the TV remotely in Account → Signed-in devices; local removal
+does not prove remote revocation. TV credentials allow panel viewing and the six
+approved display fields; FiestaBot is unavailable with this scope. Disabling new
+TV enrollment does not revoke existing credentials. Revoked/expired credentials
+never replay an old password. The QR is generated locally with Core Image.
+
+Before beta distribution, record physical iPhone/Android scanning, desktop code
+entry, direct password sign-in, restart/revocation and the 24-hour soak against the
+same server build. Simulator tests and an unsigned archive do not replace these
+checks. See `docs/REVOCABLE-SIGN-IN.md`.
 
 FiestaBot changes the data flow: the board forwards conversation and relevant
 board content to its configured AI provider. Native chat history is held in app

@@ -4,13 +4,14 @@ extension FiestaClient {
     /// Wait for headers before returning: only an initial HTTP 401 may be
     /// retried by ConnectionStore.authorized. Stream errors never replay a POST.
     public func chat(_ body: ChatRequest) async throws -> AsyncThrowingStream<ChatEvent, Error> {
+        try requireLegacyPermission()
         var request = URLRequest(url: url(for: "/pages/ai/chat"))
         request.httpMethod = "POST"
         request.timeoutInterval = 300
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONEncoder().encode(body)
-        let (bytes, response) = try await session.bytes(for: request)
+        let (bytes, response) = try await session.bytes(for: request, delegate: redirectGuard)
         guard let http = response as? HTTPURLResponse else {
             bytes.task.cancel()
             throw ChatStreamError.response("The board returned a non-HTTP response.")
@@ -85,6 +86,7 @@ extension FiestaClient {
     }
 
     private func chatJSON<T: Decodable>(path: String, method: String = "GET", body: JSONValue? = nil) async throws -> T {
+        try requireLegacyPermission()
         var request = URLRequest(url: url(for: path))
         request.httpMethod = method
         request.timeoutInterval = 120
@@ -93,7 +95,7 @@ extension FiestaClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(body)
         }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: redirectGuard)
         guard let http = response as? HTTPURLResponse else { throw ChatStreamError.response("Invalid board response.") }
         guard (200..<300).contains(http.statusCode) else { throw chatHTTPError(http.statusCode, data: data) }
         return try JSONDecoder().decode(T.self, from: data)
