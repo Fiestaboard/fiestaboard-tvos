@@ -72,7 +72,7 @@ struct PanelCard: View {
         } else {
             switch preview {
             case .loading:
-                ProgressView().tint(Fiesta.Colors.brand)
+                TacoLoader()
             case .ready(let ready):
                 if let previewImages {
                     PanelPreviewThumbnail(panel: panel, preview: ready, cache: previewImages)

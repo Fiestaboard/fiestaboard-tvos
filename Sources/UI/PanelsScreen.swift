@@ -201,7 +201,8 @@ struct PanelsScreen: View {
 
     private var loadingState: some View {
         VStack(spacing: 16) {
-            ProgressView().tint(Fiesta.Colors.brand)
+            TacoLoader(size: .large)
+                .accessibilityHidden(true)
             Text("Asking your FiestaBoard for its panels…")
                 .font(Fiesta.Text.body)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
@@ -263,8 +264,7 @@ struct PanelsScreen: View {
         } label: {
             HStack(spacing: 12) {
                 Text("Try again")
-                ProgressView()
-                    .tint(Fiesta.Colors.brand)
+                TacoLoader(size: .small, isAnimating: model?.isLoading == true)
                     .opacity(model?.isLoading == true ? 1 : 0)
                     .accessibilityHidden(true)
             }

@@ -158,7 +158,7 @@ struct ViewerScreen: View {
         } else if let layout = try? model?.layout(for: size) {
             canvas(for: layout)
         } else {
-            ProgressView().tint(Fiesta.Colors.brand)
+            TacoLoader(size: .large)
         }
     }
 

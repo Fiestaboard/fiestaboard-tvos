@@ -28,6 +28,9 @@ targets:
       - path: Resources
         excludes:
           - Matrix/LICENSE
+          - TacoLoader
+      - path: Resources/TacoLoader
+        type: folder
       - path: Resources/Matrix/LICENSE
         buildPhase: resources
     info:

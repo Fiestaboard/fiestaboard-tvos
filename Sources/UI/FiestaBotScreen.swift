@@ -70,7 +70,7 @@ struct FiestaBotScreen: View {
     private var transcript: some View {
         ScrollViewReader { scroll in
             List {
-                if model.isLoading { ProgressView("Connecting to FiestaBot…") }
+                if model.isLoading { TacoLoader("Connecting to FiestaBot…") }
                 if let message = model.availabilityMessage {
                     Section {
                         Text(message).focusable()
@@ -132,7 +132,7 @@ struct FiestaBotScreen: View {
                 }
                 if let error = model.errorMessage { Text(error).foregroundStyle(Fiesta.Colors.destructive).focusable() }
                 if model.isRunning {
-                    HStack { ProgressView(); Text(model.statusText) }
+                    HStack { TacoLoader(size: .small).accessibilityHidden(true); Text(model.statusText) }
                     Button("Stop") { model.stop() }
                 }
                 if model.canContinue { Button("Continue") { model.continueTurn() }.disabled(model.isRunning) }
@@ -200,7 +200,7 @@ struct FiestaBotScreen: View {
                     .font(.caption).foregroundStyle(.secondary)
                 switch model.pageLoadState {
                 case .idle, .loading:
-                    ProgressView("Loading saved pages…")
+                    TacoLoader("Loading saved pages…")
                 case .failed(let message):
                     Text(message).foregroundStyle(Fiesta.Colors.destructive).focusable()
                     Button("Try again") { Task { await model.loadPages() } }
