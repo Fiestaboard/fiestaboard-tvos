@@ -16,7 +16,7 @@ final class SettingsPresentationTests: XCTestCase {
         super.tearDown()
     }
 
-    private func launchSettings(includeSecondPanel: Bool = false, matrixPanel: Bool = false, localSettings: Bool = true, holdPanelUpdates: Bool = false) -> XCUIApplication {
+    private func launchSettings(includeSecondPanel: Bool = false, matrixPanel: Bool = false, localSettings: Bool = true, holdPanelUpdates: Bool = false, deviceCredential: Bool = false) -> XCUIApplication {
         let frameLoaded = expectation(description: "Viewer loaded")
         let secondPanel = Fixtures.panelJSON
             .replacingOccurrences(of: "abc123def456", with: "kitchen-panel")
@@ -43,6 +43,8 @@ final class SettingsPresentationTests: XCTestCase {
                                        panelsBody: panels,
                                        additionalPanels: includeSecondPanel ? ["kitchen-panel": secondPanel, "2": secondPanel] : [:],
                                        holdPanelUpdates: holdPanelUpdates,
+                                       tvSignInEnabled: deviceCredential,
+                                       approveDeviceSignIn: deviceCredential,
                                        onFrame: { frameLoaded.fulfill() })
         let app = XCUIApplication()
         let connection = """
@@ -52,6 +54,16 @@ final class SettingsPresentationTests: XCTestCase {
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>",
                                "-fiestaboard.signedOut", "NO"]
         app.launch()
+        if deviceCredential {
+            let phone = app.buttons["device-sign-in"]
+            XCTAssertTrue(phone.waitForExistence(timeout: 10))
+            for _ in 0..<8 {
+                if rowHasFocus("device-sign-in", in: app) { break }
+                XCUIRemote.shared.press(.up)
+            }
+            XCUIRemote.shared.press(.select)
+            XCTAssertTrue(app.buttons["Living Room"].waitForExistence(timeout: 20))
+        }
         wait(for: [frameLoaded], timeout: 10)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
         XCUIRemote.shared.press(.select)
@@ -151,6 +163,27 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(app.otherElements["settings.panelPreview"].waitForExistence(timeout: 3))
         XCUIRemote.shared.press(.menu)
         XCTAssertFalse(app.staticTexts["Settings"].exists)
+    }
+
+    func testTVSignInOffersOnlyPermittedDisplayEdits() {
+        let app = launchSettings(matrixPanel: true, localSettings: false, deviceCredential: true)
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.right)
+        openRow("settings.allDisplaySettings", in: app)
+        XCTAssertTrue(app.textFields["panelSettings.diagonal"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["panelSettings.name"].exists,
+                       "A TV credential cannot rename panels; offering Name makes Save fail with 403")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Display style")).firstMatch.exists)
+        XCTAssertTrue(app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Animations")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "board's web page")).firstMatch.exists)
+        openRow("panelSettings.save", in: app)
+        XCTAssertFalse(app.buttons["panelSettings.matrixSizing"].exists)
+        XCTAssertFalse(app.textFields["LED spacing (1–20 mm)"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Web viewer backdrop")).firstMatch.exists)
+        XCTAssertFalse(app.textFields["panelSettings.dimStart"].exists)
+        XCTAssertFalse(app.textFields["panelSettings.dimEnd"].exists)
+        XCTAssertTrue(app.textFields["panelSettings.calibration"].exists)
+        attachScreenshot("TV sign-in — permitted display settings", app: app)
     }
 
     func testSharedDisplaySaveKeepsFocusDuringFailureAndAllowsRetry() {

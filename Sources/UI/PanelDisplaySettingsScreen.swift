@@ -17,10 +17,16 @@ struct PanelDisplaySettingsScreen: View {
             Group {
                 Section {
                     Text("Changes apply to every viewer of this panel. Save after editing.")
+                    if !model.canEditAllDisplaySettings {
+                        Text("To edit the panel name, shared matrix sizing or LED spacing, web viewer backdrop, or dim schedule, open your board's web page on a phone or computer.")
+                        Text(model.boardAddress)
+                    }
                 }
                 Section {
-                    field("Name", text: $draft.name)
-                        .accessibilityIdentifier("panelSettings.name")
+                    if model.canEditAllDisplaySettings {
+                        field("Name", text: $draft.name)
+                            .accessibilityIdentifier("panelSettings.name")
+                    }
                     if draft.original.supportsRenderStyle {
                         choice("Display style", value: draft.renderStyle == .ledMatrix ? "LED matrix" : "Split flap",
                                options: [(PanelRenderStyle.splitFlap, "Split flap"), (.ledMatrix, "LED matrix")],
@@ -48,7 +54,7 @@ struct PanelDisplaySettingsScreen: View {
                     Text("Screen size and aspect reshape the shared board grid and may require page updates. Aspect sets the grid shape. True LED size uses this TV's actual pixel aspect, diagonal and calibration; the complete grid always fits.")
                         .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
-                if draft.renderStyle == .ledMatrix {
+                if model.canEditAllDisplaySettings, draft.renderStyle == .ledMatrix {
                     Section {
                         if draft.original.supportsMatrixSettings {
                             choice("Shared matrix size", value: sizingLabel,
@@ -66,19 +72,21 @@ struct PanelDisplaySettingsScreen: View {
                     } header: { Text("LED matrix").foregroundStyle(Fiesta.Colors.mutedForeground) }
                     footer: { Text("Use each viewer's preference clears shared sizing and restores the local fallback. LED spacing applies to True LED size.").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 }
-                Section {
-                    choice("Web viewer backdrop", value: draft.backdrop.capitalized,
-                           options: [("wall", "Wall"), ("dark", "Dark"), ("none", "None")], selection: $draft.backdrop)
-                } header: { Text("Backdrop").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                footer: { Text("Backdrop decorates the web viewer. Apple TV uses a black full-screen background.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                Section {
-                    Toggle("Enable nightly dimming", isOn: $draft.dimEnabled)
-                    field("Start (HH:MM)", text: $draft.dimStart)
-                        .accessibilityIdentifier("panelSettings.dimStart")
-                    field("End (HH:MM)", text: $draft.dimEnd)
-                        .accessibilityIdentifier("panelSettings.dimEnd")
-                } header: { Text("Shared dim schedule").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                footer: { Text("Use the 24-hour clock, such as 22:00 to 07:00. Overnight windows are supported; matching times leave the panel bright. Each viewer uses its own local clock. This Apple TV can override the schedule in Night dimming.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                if model.canEditAllDisplaySettings {
+                    Section {
+                        choice("Web viewer backdrop", value: draft.backdrop.capitalized,
+                               options: [("wall", "Wall"), ("dark", "Dark"), ("none", "None")], selection: $draft.backdrop)
+                    } header: { Text("Backdrop").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                    footer: { Text("Backdrop decorates the web viewer. Apple TV uses a black full-screen background.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                    Section {
+                        Toggle("Enable nightly dimming", isOn: $draft.dimEnabled)
+                        field("Start (HH:MM)", text: $draft.dimStart)
+                            .accessibilityIdentifier("panelSettings.dimStart")
+                        field("End (HH:MM)", text: $draft.dimEnd)
+                            .accessibilityIdentifier("panelSettings.dimEnd")
+                    } header: { Text("Shared dim schedule").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                    footer: { Text("Use the 24-hour clock, such as 22:00 to 07:00. Overnight windows are supported; matching times leave the panel bright. Each viewer uses its own local clock. This Apple TV can override the schedule in Night dimming.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                }
             }
             .disabled(saving)
             Section {

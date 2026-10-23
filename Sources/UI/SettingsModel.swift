@@ -65,6 +65,9 @@ final class SettingsModel {
 
     var boardAddress: String { app.connection.saved?.host.absoluteString ?? "" }
 
+    /// Protocol v1 TV credentials permit presentation edits only.
+    var canEditAllDisplaySettings: Bool { !app.connection.usesDeviceCredential }
+
     func previewState(for panel: Panel) -> PanelPreviewState {
         guard !current(panel).boardMissing else { return .unavailable }
         return previewPanelID == panel.id ? preview : .loading
@@ -356,7 +359,9 @@ final class SettingsModel {
         // Not "in the FiestaBoard app": the icon this is being read from is
         // labelled FiestaBoard. The schedule is edited on the board's own
         // web page, which is the thing that actually does the job.
-        lines.append("Change the shared schedule in Panel appearance → All display settings.")
+        lines.append(canEditAllDisplaySettings
+                     ? "Change the shared schedule in Panel appearance → All display settings."
+                     : "Change the shared schedule on your board's web page.")
         return lines.joined(separator: " ")
     }
 

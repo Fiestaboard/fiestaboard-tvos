@@ -19,7 +19,10 @@ Credentials belong to the selected server scheme/host/port/base path and live in
 device-only Keychain storage. They expire after 365 days. The TV may view panels
 and edit screen size, aspect ratio, calibration, animations and render style.
 FiestaBot is unavailable with these credentials. This limitation is deliberate in
-protocol v1. Credentials are excluded from discovery and Top Shelf. HTTP LAN
+protocol v1. Settings shows only permitted shared display edits; panel names,
+shared matrix sizing/LED spacing, web viewer backdrops and dim schedules are
+managed on the board's web page. Local Apple TV preferences remain available.
+Credentials are excluded from discovery and Top Shelf. HTTP LAN
 connections transmit credentials without encryption; use a trusted network or HTTPS.
 
 Sign out and Forget clear the local credential and attempt to revoke it on the
