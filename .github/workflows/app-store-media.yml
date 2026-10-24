@@ -47,6 +47,17 @@ jobs:
             -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -derivedDataPath build build-for-testing
       - name: Capture screenshots and walkthrough
+        # Validate the normal remote prompt before recording TV-fitted boards.
+        # This also provides quick native evidence independently of full CI.
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj -scheme FiestaBoardTV \
+            -destination 'platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}' \
+            -derivedDataPath build -resultBundlePath build/resize-remote.xcresult \
+            -parallel-testing-enabled NO -collect-test-diagnostics never \
+            -only-testing:FiestaBoardTVTests/ViewerScreenTests/testResizeOfferKeepsViewerControlsHiddenUntilDismissed \
+            -only-testing:FiestaBoardTVUITests/ViewerNavigationUITests/testResizeOfferLaterCanBeReachedAndDismissedWithRemote \
+            test-without-building
+      - name: Record screenshots and walkthrough
         run: ./scripts/capture-app-store-media.sh "${{ steps.sim.outputs.id }}"
       - name: Upload media and test evidence
         if: ${{ !cancelled() }}
@@ -56,5 +67,6 @@ jobs:
           path: |
             build/app-store-media/
             build/app-store-media.xcresult/
+            build/resize-remote.xcresult/
           if-no-files-found: error
           retention-days: 30
