@@ -64,7 +64,7 @@ struct OLEDCareScreen: View {
                 .accessibilityLabel(answerLabel(answer))
                 .accessibilityValue(app.oledCare.answer == answer ? "Selected" : "")
             }
-        } header: { Text("Will you use this with an OLED TV?") }
+        } header: { Text("Will you use this with an OLED TV?").accessibilityIdentifier("oled.question") }
         footer: { Text("Optional. Choosing Yes enables nothing. Configure only the options you want below.") }
     }
     private var brightnessAndMovement: some View {

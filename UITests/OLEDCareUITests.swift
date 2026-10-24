@@ -29,7 +29,9 @@ final class OLEDCareUITests: XCTestCase {
         select("This Apple TV", app: app)
         XCUIRemote.shared.press(.right)
         select("settings.oledCare", app: app)
-        XCTAssertTrue(app.staticTexts["Will you use this with an OLED TV?"].waitForExistence(timeout: 5))
+        let question = app.staticTexts["oled.question"]
+        XCTAssertTrue(question.waitForExistence(timeout: 5))
+        XCTAssertEqual(question.label.lowercased(), "will you use this with an oled tv?")
     }
     func testQuestionBrightnessPersistenceAndBack() throws {
         continueAfterFailure = false

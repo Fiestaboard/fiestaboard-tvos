@@ -52,3 +52,11 @@ now non-focusable heading text that points to the dedicated Settings page,
 restoring Settings as the header's only remote focus target. The OLED UI test
 continues to enter through Settings and checks dismissal of the invitation text.
 Native GREEN for this correction awaits the next CI run.
+
+The same CI run passed all 582 unit/integration tests and the Release archive.
+The OLED remote test entered the page correctly but failed its exact mixed-case
+question lookup: tvOS exposes native section headers in uppercase. The recording
+and accessibility hierarchy confirm OLED care, its preview and the focused Yes
+answer are visible. A stable `oled.question` identifier now locates the header;
+the test still verifies the full question text, normalizing only capitalization.
+The brightness-edit/relaunch portion must now run in the next CI pass.
