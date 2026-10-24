@@ -171,8 +171,11 @@ targets without committing version changes.
 Successful uploads create `app-store-builds/vVERSION/BUILD` tags recording the
 source commit. Failed delivery creates no success tag. An already-selected
 build on an editable draft requires manual resolution rather than an automatic
-overwrite. Complete the initial upload-only draft in App Store Connect, then
-enable weekly submissions after first-launch readiness is established.
+overwrite. Once the initial listing declarations are complete, use `submit`
+to verify the full upload-and-review path. An upload-only run records upload
+provenance, so finish that draft in App Store Connect rather than expecting
+an unchanged-source run to submit it. Enable the weekly schedule only after
+the first public-eligible build and submission are verified.
 
 Eight encrypted repository secrets supply API authentication, the development
 team, a distribution identity and the two App Store profiles. No secret or
@@ -183,5 +186,14 @@ Renew the distribution certificate and profiles before they expire.
 
 The **App Store media** workflow produces screenshots and a real app walkthrough
 using the existing local HTTP fixture, clearly labeled in its reviewer notes.
-Its opt-in UI test is skipped by ordinary CI. Attach the generated walkthrough
-to App Review and keep screenshots current when visible features change.
+Its opt-in UI test is skipped by ordinary CI. Each publishing run calls it
+with the exact tested source SHA and passes the resulting walkthrough to
+Fastlane as `app_review_attachment_file`. This is required: Fastlane 2.241.1
+deletes existing review attachments when that option is absent. The stable
+attachment name is `FiestaBoard-Reviewer-Walkthrough-Launch.mp4`; private review
+notes can refer to that name across versions. Keep public screenshots current
+when visible features change.
+
+Both app and Top Shelf Info.plist files declare the `arm64` required capability.
+The Release archive job and signed export validate the processed plists before
+upload, catching Apple's ITMS-90502 rejection locally in the build pipeline.

@@ -50,13 +50,21 @@ jobs:
           python3 scripts/app-store-release.py --output build/release-plan.json
           cat build/release-plan.json >> "$GITHUB_STEP_SUMMARY"
 
-  publish:
+  review-media:
     needs: plan
+    if: needs.plan.outputs.publish == 'true' && (github.event_name == 'schedule' || inputs.mode != 'plan')
+    uses: ./.github/workflows/app-store-media.yml
+    with:
+      source_sha: ${{ needs.plan.outputs.sha }}
+
+  publish:
+    needs: [plan, review-media]
     if: needs.plan.outputs.publish == 'true' && (github.event_name == 'schedule' || inputs.mode != 'plan')
     runs-on: macos-26
     timeout-minutes: 60
     permissions:
       contents: write
+      actions: read
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
@@ -71,6 +79,17 @@ jobs:
         with:
           ref: ${{ needs.plan.outputs.sha }}
           persist-credentials: false
+      - name: Prepare current reviewer walkthrough
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name app-store-media --dir "$RUNNER_TEMP/app-store-review-media"
+          REVIEW_VIDEO_PATH="$RUNNER_TEMP/FiestaBoard-Reviewer-Walkthrough-Launch.mp4"
+          cp "$RUNNER_TEMP/app-store-review-media/app-store-media/reviewer-walkthrough.mp4" "$REVIEW_VIDEO_PATH"
+          test -s "$REVIEW_VIDEO_PATH"
+          echo "REVIEW_VIDEO_PATH=$REVIEW_VIDEO_PATH" >> "$GITHUB_ENV"
       - uses: ruby/setup-ruby@7f797815d8adceb1c412e7abefdd1ab4abc47a5f # v1
         with:
           ruby-version: "3.3"
@@ -93,6 +112,9 @@ jobs:
             -configuration Release -destination 'generic/platform=tvOS' \
             -archivePath build/FiestaBoardTV.xcarchive \
             MARKETING_VERSION="$RELEASE_VERSION" CURRENT_PROJECT_VERSION="$RELEASE_BUILD_NUMBER" archive
+          python3 scripts/check-app-store-plists.py \
+            build/FiestaBoardTV.xcarchive/Products/Applications/*.app/Info.plist \
+            build/FiestaBoardTV.xcarchive/Products/Applications/*.app/PlugIns/*.appex/Info.plist
           xcodebuild -exportArchive -archivePath build/FiestaBoardTV.xcarchive \
             -exportOptionsPlist "$RUNNER_TEMP/app-store-signing/ExportOptions.plist" \
             -exportPath build/app-store

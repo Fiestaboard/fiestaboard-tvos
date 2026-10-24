@@ -17,10 +17,11 @@ class ReleaseLaneHarness
 end
 
 class ReleaseLaneTest < Minitest::Test
-  def evaluate_lane(submit)
+  def evaluate_lane(submit, review_video = "/tmp/reviewer.mp4")
     values = {"ASC_KEY_ID"=>"test", "ASC_ISSUER_ID"=>"test", "ASC_KEY_PATH"=>"/tmp/test.p8",
               "RELEASE_VERSION"=>"1.0.1", "RELEASE_BUILD_NUMBER"=>"12.1",
-              "RELEASE_IPA"=>"/tmp/build.ipa", "SUBMIT_FOR_REVIEW"=>submit}
+              "RELEASE_IPA"=>"/tmp/build.ipa", "SUBMIT_FOR_REVIEW"=>submit,
+              "REVIEW_VIDEO_PATH"=>review_video}
     previous = values.keys.to_h { |key| [key, ENV[key]] }
     values.each { |key, value| ENV[key] = value }
     harness = ReleaseLaneHarness.new
@@ -34,6 +35,7 @@ class ReleaseLaneTest < Minitest::Test
     delivery = evaluate_lane("false")
     assert_equal "/tmp/build.ipa", delivery[:ipa]
     assert_equal false, delivery[:submit_for_review]
+    assert_equal "/tmp/reviewer.mp4", delivery[:app_review_attachment_file]
   end
 
   def test_public_release_uploads_then_requests_review_and_automatic_release
@@ -41,5 +43,10 @@ class ReleaseLaneTest < Minitest::Test
     assert_equal "/tmp/build.ipa", delivery[:ipa]
     assert_equal true, delivery[:submit_for_review]
     assert_equal true, delivery[:automatic_release]
+    assert_equal "/tmp/reviewer.mp4", delivery[:app_review_attachment_file]
+  end
+
+  def test_missing_review_video_stops_before_metadata_delivery
+    assert_raises(KeyError) { evaluate_lane("true", nil) }
   end
 end
