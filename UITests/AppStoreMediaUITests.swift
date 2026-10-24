@@ -127,9 +127,12 @@ final class AppStoreMediaUITests: XCTestCase {
 
     private func focus(_ element: XCUIElement, direction: XCUIRemote.Button, app: XCUIApplication) {
         for _ in 0..<8 {
+            if element.hasFocus { return }
             let identifier = element.identifier.isEmpty ? element.label : element.identifier
-            let cell = app.cells.containing(.button, identifier: identifier).firstMatch
-            if element.hasFocus || (cell.exists && cell.hasFocus) { return }
+            // Full board speech can exceed XCTest's 128-character limit for
+            // identifier queries. A predicate also supports native List cells.
+            let cell = app.cells.containing(NSPredicate(format: "identifier == %@ OR label == %@", identifier, element.label)).firstMatch
+            if cell.exists && cell.hasFocus { return }
             XCUIRemote.shared.press(direction)
         }
         XCTFail("Could not focus \(element.label)")
@@ -148,7 +151,18 @@ final class AppStoreMediaUITests: XCTestCase {
         // A newly opened panel has no old raster to transition from. Give the
         // actual renderer two seconds before capturing the first settled view.
         Thread.sleep(forTimeInterval: 2)
-        XCTAssertFalse(app.buttons["Settings"].exists)
+        // These deliberately varied grids can trigger the app's normal size
+        // offer. Keep their authored dimensions through the real Later action.
+        let later = app.buttons["Later"]
+        if later.exists {
+            focus(later, direction: .right, app: app)
+            XCUIRemote.shared.press(.select)
+            XCTAssertTrue(later.waitForNonExistence(timeout: 5))
+            event("resize-offer-dismissed", details: name + ": chose Later to preserve its authored grid")
+            Thread.sleep(forTimeInterval: 1)
+        }
+        XCTAssertFalse(app.buttons["Resize for this TV"].exists)
+        XCTAssertTrue(app.buttons["Settings"].waitForNonExistence(timeout: 6), "Viewer controls must hide before capture")
     }
 
     private func returnToPanels(_ app: XCUIApplication) {
@@ -157,6 +171,9 @@ final class AppStoreMediaUITests: XCTestCase {
     }
 
     private func capture(_ name: String, app: XCUIApplication, hold: TimeInterval = 0) {
+        if storeShots.contains(name) {
+            XCTAssertFalse(app.buttons["Later"].exists, "Listing screenshots must not contain a resize offer")
+        }
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "AppStore-\(name)"
         attachment.lifetime = .keepAlways
