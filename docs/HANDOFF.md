@@ -12,9 +12,11 @@ viewer movement handler while the resize offer is visible.
 Follow-up run `40131427161` reproduced the defect with focused tests: the
 model exposed viewer controls during the resize offer, and native Right
 could not focus Later. `ViewerModel.showOverlay()` now leaves controls
-hidden while the offer owns focus. The regression checks Right → Later →
-Select, then ordinary viewer controls after dismissal. Hosted GREEN is
-required before merging; physical Siri Remote verification remains unavailable.
+hidden while the offer owns focus, and presenting the offer clears any
+controls shown during loading. Run `40131904587` passed the native
+Right → Later → Select and ordinary-controls-after-dismissal regression,
+while exposing the loading-order model case before its fix. Full hosted
+GREEN is required before merging; physical Siri Remote verification remains unavailable.
 
 Store examples now use distinct TV-fitted grids (24×10 weather, 28×12
 departures, 18×8 personal messages), calculated from the existing tile aspect

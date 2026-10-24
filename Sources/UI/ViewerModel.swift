@@ -212,6 +212,7 @@ final class ViewerModel {
     func considerResizeOffer(for screen: CGSize) {
         guard snapshot.panel != nil, snapshot.panel?.renderStyle != .ledMatrix, !boardMissing, !snapshot.deleted,
               !gridSuitsScreen(screen), app.offeredResizeRefs.insert(ref).inserted else { return }
+        hideOverlay()
         resizeOfferVisible = true
     }
 
