@@ -123,7 +123,11 @@ final class AppStoreMediaUITests: XCTestCase {
 
     private func focus(_ element: XCUIElement, direction: XCUIRemote.Button, app: XCUIApplication) {
         for _ in 0..<8 {
-            let cell = app.cells.containing(.button, identifier: element.identifier).firstMatch
+            // SwiftUI List gives focus to its cell. Category buttons have a
+            // label but no explicit identifier; querying an empty identifier
+            // cannot find the already-focused row.
+            let identifier = element.identifier.isEmpty ? element.label : element.identifier
+            let cell = app.cells.containing(.button, identifier: identifier).firstMatch
             if element.hasFocus || (cell.exists && cell.hasFocus) { return }
             XCUIRemote.shared.press(direction)
         }
