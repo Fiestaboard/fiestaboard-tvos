@@ -9,12 +9,18 @@ on:
       - scripts/prepare-app-store-media.py
       - .github/workflows/app-store-media.yml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact tested source commit for release review evidence
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: app-store-media-${{ github.ref }}
+  group: app-store-media-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -29,6 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-tvos
       - name: Install media encoder

@@ -193,6 +193,9 @@ jobs:
             -derivedDataPath build \
             archive -archivePath build/FiestaBoardTV.xcarchive \
             CODE_SIGNING_ALLOWED=NO
+          python3 scripts/check-app-store-plists.py \
+            build/FiestaBoardTV.xcarchive/Products/Applications/*.app/Info.plist \
+            build/FiestaBoardTV.xcarchive/Products/Applications/*.app/PlugIns/*.appex/Info.plist
 
       # Preserve executable permissions for local distribution signing/export.
       - name: Package Release archive

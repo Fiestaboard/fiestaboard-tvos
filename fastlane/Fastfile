@@ -16,6 +16,8 @@ platform :tvos do
       app_version: ENV.fetch("RELEASE_VERSION"),
       ipa: ENV.fetch("RELEASE_IPA"),
       metadata_path: "./fastlane/metadata",
+      # Deliver deletes existing review attachments when this is absent.
+      app_review_attachment_file: ENV.fetch("REVIEW_VIDEO_PATH"),
       skip_screenshots: true,
       submit_for_review: ENV.fetch("SUBMIT_FOR_REVIEW", "false") == "true",
       automatic_release: true,

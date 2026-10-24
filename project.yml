@@ -48,6 +48,7 @@ targets:
         # plist processing regardless of GENERATE_INFOPLIST_FILE.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UIRequiredDeviceCapabilities: [arm64]
         # The only cryptography is Apple's own: CryptoKit SHA-256 for cache
         # filenames and the Keychain. Both are exempt; without this key every
         # build sits in App Store Connect flagged "Missing Compliance".
@@ -107,6 +108,7 @@ targets:
         # version bump ever reaches.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UIRequiredDeviceCapabilities: [arm64]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.tv-top-shelf
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ContentProvider"
