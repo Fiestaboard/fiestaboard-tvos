@@ -55,7 +55,7 @@ final class OLEDCareUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Settings"].waitForExistence(timeout: 5))
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["OLED care"].exists, "Answer dismisses the optional invitation")
+        XCTAssertFalse(app.staticTexts["Choose a panel. OLED TV? Optional setup in Settings → OLED care."].exists, "Answer dismisses the optional invitation")
         app.terminate(); app.launch()
         openCare(app)
         XCTAssertEqual(app.buttons["Yes"].value as? String, "Selected")

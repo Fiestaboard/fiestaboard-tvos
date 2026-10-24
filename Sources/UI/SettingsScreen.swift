@@ -72,9 +72,6 @@ struct SettingsScreen: View {
             await model?.load()
             reconcilePanelSelection()
         }
-        .onAppear {
-            if app.oledSetupRequested { path = [.oledCare]; app.oledSetupRequested = false }
-        }
         .onChange(of: model?.panels.map(\.id)) { reconcilePanelSelection() }
     }
 

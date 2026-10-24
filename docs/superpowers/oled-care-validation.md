@@ -34,7 +34,21 @@ Implementation rulings:
   without restarting the break interval.
 - Configuration loads fields independently, preserving valid fields when another
   field is malformed or contains an unknown future enum case.
-- The optional invitation lives beside the panel browser toolbar; it does not
-  request focus or alter the card grid's default focus.
+- The optional invitation is non-focusable explanatory text in the panel-browser
+  heading, pointing to Settings → OLED care. Settings remains the single vertical
+  gateway out of the card grid.
 
 Physical OLED effectiveness is unmeasured; no burn-in prevention is claimed.
+
+## Native focus regression follow-up
+
+CI run 40123178497 successfully archived the app but reproduced a focus regression
+in `PanelsPresentationTests.testTwoColumnsFitAndRemoteCanBrowseEveryRow` at line
+88. Grid traversal and returning to Office succeeded. Its failure hierarchy and
+screenshot show that repeated Up commands leave focus on the added OLED toolbar
+button, whose center overlaps the right-column cards; Settings is farther right.
+The existing regression test is retained unchanged. The optional invitation is
+now non-focusable heading text that points to the dedicated Settings page,
+restoring Settings as the header's only remote focus target. The OLED UI test
+continues to enter through Settings and checks dismissal of the invitation text.
+Native GREEN for this correction awaits the next CI run.

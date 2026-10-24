@@ -135,14 +135,11 @@ struct PanelsScreen: View {
     private var header: some View {
         HStack {
             FiestaScreenHeading(title: "Panels",
-                                subtitle: "Choose a panel to show on this TV.",
+                                subtitle: app.oledCare.invitationDismissed
+                                    ? "Choose a panel to show on this TV."
+                                    : "Choose a panel. OLED TV? Optional setup in Settings → OLED care.",
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
             Spacer(minLength: 32)
-            if !app.oledCare.invitationDismissed {
-                Button("OLED care") { app.oledSetupRequested = true; app.showSettings() }
-                    .font(Fiesta.Text.body)
-                    .accessibilityHint("Optional TV setup")
-            }
             Button { app.showSettings() } label: {
                 Label("Settings", systemImage: "gearshape")
             }

@@ -44,7 +44,6 @@ public final class AppModel {
     var oledCare: OLEDCareConfiguration
     var oledOutput = OLEDCareOutput()
     var oledTime = ProcessInfo.processInfo.systemUptime
-    var oledSetupRequested = false
     @ObservationIgnored private let oledStore: OLEDCareStore
     @ObservationIgnored private var oledSession = OLEDCareSession()
     @ObservationIgnored private var oledForeground = true
