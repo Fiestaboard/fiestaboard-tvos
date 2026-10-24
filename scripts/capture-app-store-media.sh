@@ -7,6 +7,9 @@ mkdir -p "$MEDIA_DIR"
 # xcodebuild forwards TEST_RUNNER_ values to its UI test runner after removing
 # the prefix. No production app launch path or external server is added.
 export TEST_RUNNER_FIESTA_APP_STORE_MEDIA=1
+# Native 1080p reduces dropped capture samples during the 80 ms flap steps.
+# Exporting at 60 fps does not establish physical-device rendering performance.
+xcrun simctl io "$1" screenConfig geometry 1920x1080@1
 xcrun simctl io "$1" recordVideo --codec=h264 --force "$MEDIA_DIR/capture.mov" > "$MEDIA_DIR/recording.log" 2>&1 &
 RECORDING_PID=$!
 stop_recording() {

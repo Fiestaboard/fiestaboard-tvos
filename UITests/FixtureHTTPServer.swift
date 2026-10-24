@@ -12,6 +12,7 @@ final class FixtureHTTPServer {
     private var panelsBody: String
     private let additionalPanels: [String: String]
     private let additionalFrames: [String: String]
+    private let additionalFrameProvider: ((String) -> String?)?
     private let lock = NSLock()
     private var chatResponses: [String]
     private let holdPanelUpdates: Bool
@@ -32,6 +33,7 @@ final class FixtureHTTPServer {
          panelsBody: String = Fixtures.panelsList,
          additionalPanels: [String: String] = [:],
          additionalFrames: [String: String] = [:],
+         additionalFrameProvider: ((String) -> String?)? = nil,
          chatResponses: [String] = [],
          holdPanelUpdates: Bool = false,
          tvSignInEnabled: Bool = false,
@@ -47,6 +49,7 @@ final class FixtureHTTPServer {
         self.panelsBody = panelsBody
         self.additionalPanels = additionalPanels
         self.additionalFrames = additionalFrames
+        self.additionalFrameProvider = additionalFrameProvider
         self.chatResponses = chatResponses
         self.holdPanelUpdates = holdPanelUpdates
         self.tvSignInEnabled = tvSignInEnabled
@@ -195,7 +198,7 @@ final class FixtureHTTPServer {
                 if parts.count >= 3, parts[0] == "api", parts[1] == "panel",
                    let panelBody = additionalPanels[String(parts[2])] {
                     body = parts.count == 4 && parts[3] == "frame"
-                        ? (additionalFrames[String(parts[2])] ?? frameProvider?() ?? frameBody) : panelBody
+                        ? (additionalFrameProvider?(String(parts[2])) ?? additionalFrames[String(parts[2])] ?? frameProvider?() ?? frameBody) : panelBody
                 } else {
                     body = #"{"detail":"Not found"}"#
                 }
