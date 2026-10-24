@@ -41,6 +41,43 @@ public final class AppModel {
         }
     }
 
+    var oledCare: OLEDCareConfiguration
+    var oledOutput = OLEDCareOutput()
+    var oledTime = ProcessInfo.processInfo.systemUptime
+    @ObservationIgnored private let oledStore: OLEDCareStore
+    @ObservationIgnored private var oledSession = OLEDCareSession()
+    @ObservationIgnored private var oledForeground = true
+    @ObservationIgnored private var oledUnavailable = true
+    @ObservationIgnored private var oledPanelDimmed = false
+
+    func saveOLEDCare(_ value: OLEDCareConfiguration) {
+        oledStore.save(value)
+        oledCare = oledStore.load()
+        applyScreenAwake()
+    }
+
+    func updateOLEDViewer(unavailable: Bool, panelDimmed: Bool) {
+        oledUnavailable = unavailable
+        oledPanelDimmed = panelDimmed
+        applyScreenAwake()
+    }
+
+    func updateOLEDCare(now: Double = ProcessInfo.processInfo.systemUptime, date: Date = Date()) {
+        oledTime = now
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        let viewing: Bool
+        if case .viewer = route { viewing = true } else { viewing = false }
+        oledOutput = oledSession.update(oledCare, now: now, minute: (parts.hour ?? 0) * 60 + (parts.minute ?? 0),
+            foreground: oledForeground, viewing: viewing, unavailable: oledUnavailable, panelDimmed: oledPanelDimmed)
+        screenAwake.hold(oledOutput.keepAwake)
+    }
+
+    @discardableResult func interactWithOLED() -> Bool {
+        let consumed = oledSession.interact(now: ProcessInfo.processInfo.systemUptime)
+        applyScreenAwake()
+        return consumed
+    }
+
     public var errorMessage: String?
     var signInMessage: String?
     var offeredResizeRefs: Set<String> = []
@@ -64,7 +101,9 @@ public final class AppModel {
     /// Holds the display awake while a board is up. Tests replace its sink.
     @ObservationIgnored let screenAwake: ScreenAwake
 
-    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil) {
+    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil, oledStore: OLEDCareStore = OLEDCareStore()) {
+        self.oledStore = oledStore
+        self.oledCare = oledStore.load()
         self.connection = connection
         self.topShelfStore = topShelfStore
         self.screenAwake = ScreenAwake()
@@ -77,8 +116,13 @@ public final class AppModel {
         // moment the app is certainly running and certainly able to say what
         // Home should be showing.
         screenAwake.onForeground = { [weak self] in
+            self?.oledForeground = true
             self?.applyScreenAwake()
             self?.refreshTopShelf()
+        }
+        screenAwake.onBackground = { [weak self] in
+            self?.oledForeground = false
+            self?.applyScreenAwake()
         }
     }
 
@@ -86,14 +130,14 @@ public final class AppModel {
     /// awake is that a panel is being shown; anywhere else, the TV's own
     /// sleep settings are none of this app's business.
     var wantsScreenAwake: Bool {
-        if case .viewer = route { return true }
+        if case .viewer = route { return oledForeground && !oledCare.allowScreensaver && !oledOutput.resting }
         return false
     }
 
     /// Restate the wake request. Cheap, idempotent, and safe to call from
     /// anywhere — which is the point.
     func applyScreenAwake() {
-        screenAwake.hold(wantsScreenAwake)
+        updateOLEDCare()
     }
 
     /// Decide the opening screen. A configured TV should power on into its

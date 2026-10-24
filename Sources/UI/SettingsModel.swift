@@ -28,7 +28,7 @@ final class SettingsModel {
     var defaultPanelRef: String?
     /// This TV's say in the panel's nightly dim window.
     var autoDimOverride: AutoDimOverride = .followPanel
-    /// Whether the board drifts to keep the TV's panel protection off it.
+    /// Whether this device opted into gentle image movement.
     var driftEnabled = false
     private var calibrations: [String: Double] = [:]
     /// Switches the user has flipped but the board has not confirmed yet.

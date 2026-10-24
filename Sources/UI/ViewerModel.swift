@@ -90,6 +90,8 @@ final class ViewerModel {
     /// Internal rather than private so a test can drive it: both branches are
     /// about what the *next* launch does, which no render can show.
     func apply(_ snapshot: PanelSnapshot) {
+        app.updateOLEDViewer(unavailable: snapshot.connection != .live || snapshot.deleted || snapshot.panel?.boardMissing == true,
+                             panelDimmed: snapshot.dimmed)
         // The server routinely repeats the same frame. Observation otherwise
         // invalidates the entire viewer, including its canvases, every poll.
         if self.snapshot != snapshot { self.snapshot = snapshot }

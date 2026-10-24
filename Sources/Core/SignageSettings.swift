@@ -26,18 +26,10 @@ public struct BoardOffset: Equatable, Sendable {
     public static let zero = BoardOffset(x: 0, y: 0)
 }
 
-/// Burn-in protection: a drift so slow it reads as a still image.
-///
-/// A TV cannot be told to stop protecting its own panel. Every modern set,
-/// and every OLED without exception, watches for content that does not
-/// change and progressively pulls brightness down on it; some also shift the
-/// image themselves. None of that is reachable from an app. What *is*
-/// reachable is the other side of the trigger: content that moves is not
-/// static content. A split-flap board between flips is as still as an image
-/// gets, so this walks it around a closed path a few points wide.
-///
-/// Pure, and a function of the clock alone, so two TVs showing the same
-/// board stay in step and a test can ask where the board will be.
+/// A slow image movement path that varies where board content is drawn.
+/// Movement may reduce concentrated OLED wear; it cannot guarantee prevention
+/// or override the television's own screen protection.
+/// Pure and clock-driven so tests can inspect every part of the path.
 public enum BoardDrift {
 
     /// Points of travel either side of centre, per axis.
@@ -115,9 +107,7 @@ public final class SignageSettings: @unchecked Sendable {
         set { defaults.set(newValue.rawValue, forKey: Key.autoDimOverride) }
     }
 
-    /// Whether the board drifts to keep the TV's panel protection off its
-    /// back. Off unless asked for: it moves the picture, and a board that is
-    /// only up for a few minutes at a time has nothing to protect.
+    /// Whether this device opted into gentle image movement. Off by default.
     public var driftEnabled: Bool {
         get { defaults.bool(forKey: Key.drift) }
         set { defaults.set(newValue, forKey: Key.drift) }

@@ -218,3 +218,25 @@ TVServices. `scripts/check-layering.sh` enforces this in CI and in the build
 script.
 
 The approved [design](docs/superpowers/specs/2026-09-19-fiestaboard-tvos-design.md) and [implementation plan](docs/superpowers/plans/2026-09-19-fiestaboard-tvos.md) describe the app's scope and architecture.
+
+### OLED care
+
+Settings → This Apple TV → OLED care offers device-local output brightness,
+gentle movement, custom night dimming, scheduled black-output rest, periodic
+breaks, board position rotation, unavailable-board dim/rest, and an opt-in system
+screensaver. The optional OLED question never enables protection. Existing
+movement and panel night-dimming preferences migrate unchanged.
+
+Brightness percentages scale app output, not TV hardware brightness. Movement
+reserves a safe inset; rotation uses 80% of the available width and height for the
+same live board. Reduce Motion pauses continuous movement. Schedules use TV local
+time, start inclusively and end exclusively; equal endpoints disable the window.
+A remote press resumes scheduled/outage rest for five minutes, or ends a periodic
+break and restarts its interval. Rest releases idle inhibition; it is black output,
+not standby, and automatic wake is not promised. Device preferences survive sign-out.
+These options may reduce OLED wear; physical effectiveness and burn-in prevention
+are not established by software tests.
+
+Run the portable Foundation policy suite with `./scripts/test-oled-core.sh` when a
+tvOS simulator is unavailable. Native UI and renderer tests remain part of
+`./build-and-run.sh --test`.

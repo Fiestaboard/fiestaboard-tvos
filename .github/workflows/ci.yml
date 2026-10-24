@@ -60,6 +60,29 @@ jobs:
             -derivedDataPath build \
             build-for-testing
 
+      - name: OLED care regression
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj \
+            -scheme FiestaBoardTV \
+            -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build \
+            -resultBundlePath build/oled.xcresult \
+            -parallel-testing-enabled NO \
+            -collect-test-diagnostics never \
+            -only-testing:FiestaBoardTVTests/OLEDCareTests \
+            -only-testing:FiestaBoardTVTests/OLEDCareIntegrationTests \
+            -only-testing:FiestaBoardTVUITests/OLEDCareUITests \
+            test-without-building
+
+      - name: Upload OLED care results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oled-xcresult
+          path: build/oled.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Matrix transition regression
         run: |
           xcodebuild -project FiestaBoardTV.xcodeproj \
@@ -134,6 +157,9 @@ jobs:
             -collect-test-diagnostics never \
             -skip-testing:FiestaBoardTVUITests/HomeTopShelfUITests \
             -skip-testing:FiestaBoardTVUITests/PanelsPresentationTests \
+            -skip-testing:FiestaBoardTVUITests/OLEDCareUITests \
+            -skip-testing:FiestaBoardTVTests/OLEDCareTests \
+            -skip-testing:FiestaBoardTVTests/OLEDCareIntegrationTests \
             test-without-building
 
       # XCTest failure details/screenshots remain in xcresult even when the
