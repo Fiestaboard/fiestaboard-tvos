@@ -143,6 +143,16 @@ final class ViewerScreenTests: XCTestCase {
         XCTAssertTrue(model.overlayVisible, "Normal viewer controls must work after Later")
     }
 
+    func testResizeOfferReplacesControlsShownWhileLoading() {
+        let model = ViewerModel(app: makeApp(), ref: "1")
+        model.showOverlay()
+        XCTAssertTrue(model.overlayVisible)
+        model.snapshot = snapshot(rows: 21, cols: 15)
+        model.considerResizeOffer(for: screen)
+        XCTAssertTrue(model.resizeOfferVisible)
+        XCTAssertFalse(model.overlayVisible, "A newly opened resize prompt must remove already visible controls")
+    }
+
     // MARK: Rendering
 
     func testRendersALiveBoard() {
