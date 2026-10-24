@@ -47,8 +47,12 @@ def prepare(root: Path) -> None:
     destination = root / "reviewer-walkthrough.mp4"
     subprocess.run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-fflags", "+igndts",
-        "-ss", f"{start:.3f}", "-i", str(root / "capture.mov"), "-t", f"{end - start:.3f}",
-        "-vf", "scale=1920:1080,fps=60", "-an", "-c:v", "libx264", "-preset", "fast",
+        "-i", str(root / "capture.mov"),
+        # simctl stores sparse frames. Fill the real presentation timeline
+        # before trimming so an input seek cannot discard the current still
+        # and jump to the next UI change. Always start the exported PTS at zero.
+        "-vf", f"scale=1920:1080,fps=60,trim=start={start:.3f}:end={end:.3f},setpts=PTS-STARTPTS",
+        "-an", "-c:v", "libx264", "-preset", "fast",
         "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(destination)
     ], check=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(destination),
