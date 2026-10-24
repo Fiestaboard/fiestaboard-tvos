@@ -1,12 +1,21 @@
 #!/bin/bash
+# Compile the production Foundation policy and its actual XCTest cases on macOS.
+# No simulator, generated production stubs, or package/plugin sandbox changes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PACKAGE=$(mktemp -d /tmp/fiestaboard-oled.XXXXXX)
-trap 'rm -rf "$PACKAGE"' EXIT
-mkdir -p "$PACKAGE/Sources/OLEDCore" "$PACKAGE/Tests/OLEDCoreTests"
-printf '%s\n' '// swift-tools-version: 5.9' 'import PackageDescription' 'let package = Package(name: "OLEDCore", products: [.library(name: "OLEDCore", targets: ["OLEDCore"])], targets: [.target(name: "OLEDCore"), .testTarget(name: "OLEDCoreTests", dependencies: ["OLEDCore"])])' > "$PACKAGE/Package.swift"
-if [[ -f Sources/Core/OLEDCare.swift ]]; then cp Sources/Core/OLEDCare.swift "$PACKAGE/Sources/OLEDCore/"; else touch "$PACKAGE/Sources/OLEDCore/Empty.swift"; fi
-cp Tests/OLEDCareTests.swift "$PACKAGE/Tests/OLEDCoreTests/"
-export CLANG_MODULE_CACHE_PATH="$PACKAGE/module-cache"
-export SWIFTPM_MODULECACHE_OVERRIDE="$PACKAGE/module-cache"
-swift test --package-path "$PACKAGE" --scratch-path "$PACKAGE/build" --disable-sandbox
+TEST_BUILD=$(mktemp -d /tmp/fiestaboard-oled.XXXXXX)
+trap 'rm -rf "$TEST_BUILD"' EXIT
+SDK=$(xcrun --sdk macosx --show-sdk-path)
+DEVELOPER=$(xcode-select -p)
+FRAMEWORKS="$DEVELOPER/Platforms/MacOSX.platform/Developer/Library/Frameworks"
+swiftc -sdk "$SDK" -module-cache-path "$TEST_BUILD/cache" -emit-module -emit-library -enable-testing -module-name OLEDCore Sources/Core/OLEDCare.swift -o "$TEST_BUILD/libOLEDCore.dylib" -emit-module-path "$TEST_BUILD/OLEDCore.swiftmodule"
+cat > "$TEST_BUILD/main.swift" <<'SWIFT'
+import Foundation
+import XCTest
+let suite = OLEDCareTests.defaultTestSuite
+suite.run()
+exit(suite.testRun?.hasSucceeded == true ? 0 : 1)
+SWIFT
+
+swiftc -sdk "$SDK" -module-cache-path "$TEST_BUILD/cache" -F "$FRAMEWORKS" -I "$DEVELOPER/Platforms/MacOSX.platform/Developer/usr/lib" -L "$DEVELOPER/Platforms/MacOSX.platform/Developer/usr/lib" -I "$TEST_BUILD" -L "$TEST_BUILD" -lOLEDCore -Xlinker -rpath -Xlinker "$TEST_BUILD" -Xlinker -rpath -Xlinker "$FRAMEWORKS" -Xlinker -rpath -Xlinker "$DEVELOPER/Platforms/MacOSX.platform/Developer/usr/lib" Tests/OLEDCareTests.swift "$TEST_BUILD/main.swift" -o "$TEST_BUILD/tests"
+"$TEST_BUILD/tests"

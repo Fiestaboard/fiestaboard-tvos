@@ -88,6 +88,7 @@ public struct OLEDCareOutput: Equatable {
     public var keepAwake = true
     public var placement: OLEDPlacement = .center
     public var rotating = false
+    public var outageDimmed = false
 }
 
 public enum OLEDCarePolicy {
@@ -106,7 +107,8 @@ public enum OLEDCarePolicy {
         let index = Int(max(0, elapsed) / Double(max(1, c.rotationInterval) * 60))
         return OLEDCareOutput(brightness: rest ? 0 : Double(c.brightness) / 100 * (dim ? Double(c.nightLevel) / 100 : 1),
                               resting: rest, keepAwake: foreground && viewing && !rest && !c.allowScreensaver,
-                              placement: rotating ? c.placements[index % c.placements.count] : .center, rotating: rotating)
+                              placement: rotating ? c.placements[index % c.placements.count] : .center, rotating: rotating,
+                              outageDimmed: !wakeOverride && outage && c.disconnected == .dim)
     }
 }
 
@@ -141,8 +143,8 @@ public struct OLEDCareSession {
     /// Returns whether this press was consumed waking rest, so it cannot activate a hidden control.
     @discardableResult public mutating func interact(now: Double) -> Bool {
         let consumed = output.resting
-        wakeUntil = now + 300
-        breakElapsed = 0
+        if consumed || output.outageDimmed { wakeUntil = now + 300 }
+        if consumed { breakElapsed = 0 }
         return consumed
     }
 }

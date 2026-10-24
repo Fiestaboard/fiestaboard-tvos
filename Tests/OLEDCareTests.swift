@@ -144,4 +144,22 @@ final class OLEDCareTests: XCTestCase {
         XCTAssertFalse(s.update(c, now: 20001, minute: 720, foreground: true, viewing: true, unavailable: false).resting)
     }
 
+    func testOrdinaryRemoteInputDoesNotPostponeBreak() {
+        var c = OLEDCareConfiguration(); c.breaksEnabled = true; c.breakInterval = 30
+        var s = OLEDCareSession()
+        _ = s.update(c, now: 0, minute: 720, foreground: true, viewing: true, unavailable: false)
+        _ = s.update(c, now: 1740, minute: 720, foreground: true, viewing: true, unavailable: false)
+        XCTAssertFalse(s.interact(now: 1740))
+        XCTAssertTrue(s.update(c, now: 1800, minute: 720, foreground: true, viewing: true, unavailable: false).resting)
+    }
+    func testRemoteTemporarilyResumesOutageDimming() {
+        var c = OLEDCareConfiguration(); c.disconnected = .dim; c.disconnectDelay = 1
+        var s = OLEDCareSession()
+        _ = s.update(c, now: 0, minute: 720, foreground: true, viewing: true, unavailable: true)
+        XCTAssertEqual(s.update(c, now: 60, minute: 720, foreground: true, viewing: true, unavailable: true).brightness, 0.35)
+        XCTAssertFalse(s.interact(now: 60))
+        XCTAssertEqual(s.update(c, now: 359, minute: 720, foreground: true, viewing: true, unavailable: true).brightness, 1)
+        XCTAssertEqual(s.update(c, now: 360, minute: 720, foreground: true, viewing: true, unavailable: true).brightness, 0.35)
+    }
+
 }

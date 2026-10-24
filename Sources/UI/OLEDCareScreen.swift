@@ -29,7 +29,7 @@ struct OLEDCareScreen: View {
             .font(.body)
             .frame(width: 450)
             .padding(.top, 30)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
             List {
                 question
                 brightnessAndMovement
