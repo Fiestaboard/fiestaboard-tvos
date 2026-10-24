@@ -15,7 +15,9 @@ def prepare(root: Path) -> None:
     for test in manifest:
         for item in test.get("attachments", []):
             name = item.get("suggestedHumanReadableName", "")
-            if name.startswith("AppStore-media-index.json"):
+            # xcresult removes an attachment's extension before appending its
+            # export index/UUID, e.g. AppStore-media-index_0_UUID.json.
+            if name.startswith("AppStore-media-index"):
                 if index is not None:
                     raise ValueError("Expected one media index attachment")
                 index = json.loads((root / "attachments" / item["exportedFileName"]).read_text())
