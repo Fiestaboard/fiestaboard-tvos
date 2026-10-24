@@ -47,9 +47,8 @@ manifest of panel names and static board snapshots from `Library/Caches/TopShelf
 inside the group container; it does not receive the board address, the
 board's contents, or the sign-in credential.
 
-Use **FiestaBoard for Apple TV** as the App Store name and **Your panels, on
-your TV** as the subtitle. App Review may reject the platform wording under
-guideline 5.2.5. If it does, use **FiestaBoard** and keep the subtitle. That
+The existing App Store record uses **FiestaBoard** as the name and **Your panels,
+on your TV** as the subtitle. Keep this name. That
 listing name is a separate string from the bundle's `CFBundleDisplayName`,
 which is **FiestaBoard** and stays that way: it is what sits under the
 Home-screen icon, where 24 characters truncate, and Apple's guidelines keep
@@ -119,16 +118,15 @@ cache filenames, and the Keychain — and both are exempt. Without the key every
 build sits in App Store Connect flagged “Missing Compliance” and cannot be
 submitted until someone answers the questionnaire by hand.
 
-Before submitting, App Store Connect also wants three things that have
-nothing to do with the build. A **Privacy Policy URL** is mandatory even
-though every App Privacy answer is “No” — the URL is a separate requirement
-from the answers, and the submission cannot be sent without one; the page it
-points at is also what the app's Settings screen tells people to look for.
-Complete the **age-rating questionnaire** (everything is “None” for this app;
-it has no user-generated content, no web browsing — tvOS has no browser — and
-no links out). Answer **Content Rights**: the app displays no third-party
-content, and the only vendored asset is the Spline Sans Mono font, shipped
-under the OFL.
+Before submitting, publish the [privacy policy](PRIVACY.md), set its URL and
+complete App Privacy in App Store Connect. Do not infer those answers solely
+from the native privacy manifest: the server's configured AI provider and
+retention need consideration. Complete the current **age-rating questionnaire**
+against all available features, including FiestaBot and server-supplied content.
+Do not automatically answer every content-frequency question “None.” Complete
+**Content Rights** based on the actual content and permissions; plugin-supplied
+third-party content cannot be dismissed just because the native code is open
+source. These declarations require an informed account-holder decision.
 
 A reviewer cannot connect to a board. The only ATS exception is
 `NSAllowsLocalNetworking`, and every address discovery builds — along with
@@ -138,8 +136,9 @@ device; the reviewer sees “Couldn't reach…”, which is indistinguishable fr
 a board that is switched off. A typed `https://` address is the one form ATS
 would let through, and there is no public board behind one to point at.
 Either way, do not put a demo address in the review notes. Say plainly that
-the app is a companion to a physical FiestaBoard, normally one on the same
-local network, and carry the demonstration in the submission itself: a
+the app is a companion to a FiestaBoard server, commonly a Pi on the same
+local network. Virtual panels do not require physical display hardware. Carry
+the demonstration in the submission itself: a
 **screen recording** of connect → sign-in → panels → viewer → settings. Also
 provide current screenshots from a tvOS simulator and verify the layered app
 icon and Top Shelf assets in the signed archive before upload.
@@ -154,3 +153,35 @@ installing one, before they mount the TV.
 
 After local testing, measure the 45 × 18 animated board on real Apple TV
 hardware. The simulator cannot establish the 60 fps performance checkpoint.
+
+## Automated releases
+
+The **App Store release** workflow runs Mondays at 16:00 UTC when repository
+variable `APP_STORE_RELEASE_ENABLED` is `true`. It also supports manual `plan`,
+`upload`, and `submit` modes. `upload` produces a public-eligible build without
+submitting it; it does not use the internal-only TestFlight export options.
+
+The planner checks successful `build-and-test` and `Release archive` jobs for
+the exact `main` commit. The Home screenshot job remains informational. Runs
+are serialized and skip active Apple review/release or unchanged app sources.
+Rejected releases stop for attention. The initial draft uses 1.0; later
+releases increment the patch component. CI supplies build numbers to both
+targets without committing version changes.
+
+Successful uploads create `app-store-builds/vVERSION/BUILD` tags recording the
+source commit. Failed delivery creates no success tag. An already-selected
+build on an editable draft requires manual resolution rather than an automatic
+overwrite. Complete the initial upload-only draft in App Store Connect, then
+enable weekly submissions after first-launch readiness is established.
+
+Eight encrypted repository secrets supply API authentication, the development
+team, a distribution identity and the two App Store profiles. No secret or
+review contact data belongs in metadata files. The runner installs an isolated
+temporary keychain, validates both profiles' bundle/team/App Group entitlements,
+exports a public build and removes signing materials even if delivery fails.
+Renew the distribution certificate and profiles before they expire.
+
+The **App Store media** workflow produces screenshots and a real app walkthrough
+using the existing local HTTP fixture, clearly labeled in its reviewer notes.
+Its opt-in UI test is skipped by ordinary CI. Attach the generated walkthrough
+to App Review and keep screenshots current when visible features change.

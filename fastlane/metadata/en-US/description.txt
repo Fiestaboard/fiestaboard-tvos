@@ -1,0 +1,23 @@
+Bring your FiestaBoard panels to the big screen.
+
+FiestaBoard for Apple TV connects to your own FiestaBoard server and turns your TV into a live display for your messages, dashboards, and pixel artwork.
+
+YOUR PANELS, ON YOUR TV
+Browse your available panels and open one as a full-screen display. See updates from your board in an animated split-flap layout or an LED matrix with square or round pixels. Compatible servers can also supply pixel-canvas artwork.
+
+MADE FOR THE REMOTE
+Switch panels, return to the panel browser, and adjust display settings with your Apple TV remote. Supported panel settings are shared with your board; TV sizing, calibration, and local display preferences stay with this Apple TV.
+
+EASY CONNECTION
+Find compatible boards on your network or enter your server address. On supported servers, approve TV sign-in with a QR code or an activation code, or sign in with your board password. Manage and revoke TV access from your board.
+
+HOME SCREEN PREVIEWS
+Move FiestaBoard to the top row of your Apple TV Home screen to see snapshots of your available panels and open a panel directly.
+
+OPTIONAL FIESTABOT
+Compatible servers with an AI provider configured can offer FiestaBot to eligible password-based connections. FiestaBot is not available with scoped TV sign-in. AI requests pass through your server to the provider you configure.
+
+REQUIRES FIESTABOARD
+This is a companion to a running FiestaBoard server, not a standalone content service. Set up your server and create panels using FiestaBoard's web interface. Virtual panels do not require a physical split-flap display. Network access to your server is required.
+
+Learn more at fiestaboard.app.

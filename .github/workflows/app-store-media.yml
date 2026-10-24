@@ -1,0 +1,60 @@
+name: App Store media
+
+on:
+  pull_request:
+    paths:
+      - UITests/AppStoreMediaUITests.swift
+      - UITests/FixtureHTTPServer.swift
+      - scripts/capture-app-store-media.sh
+      - scripts/prepare-app-store-media.py
+      - .github/workflows/app-store-media.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-media-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+jobs:
+  capture:
+    name: App Store screenshots and reviewer video
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-tvos
+      - name: Install media encoder
+        run: command -v ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+      - name: Resolve and boot a tvOS simulator
+        id: sim
+        timeout-minutes: 3
+        run: |
+          ID=$(xcrun simctl list devices available | ./scripts/select-tvos-simulator.sh)
+          if [ -z "$ID" ]; then echo "No Apple TV simulator on this runner." >&2; exit 1; fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          xcrun simctl bootstatus "$ID" -b
+      - name: Build media UI test
+        run: |
+          xcodebuild -project FiestaBoardTV.xcodeproj -scheme FiestaBoardTV \
+            -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -derivedDataPath build build-for-testing
+      - name: Capture screenshots and walkthrough
+        run: ./scripts/capture-app-store-media.sh "${{ steps.sim.outputs.id }}"
+      - name: Upload media and test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-store-media
+          path: |
+            build/app-store-media/
+            build/app-store-media.xcresult/
+          if-no-files-found: error
+          retention-days: 30
