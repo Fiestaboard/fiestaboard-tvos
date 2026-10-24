@@ -44,8 +44,6 @@ def plan_release(versions, source_changed, jobs):
             raise ReleaseError("Existing App Store version needs attention: " + state)
         if state not in RELEASED | {"PREPARE_FOR_SUBMISSION"}:
             raise ReleaseError("Unsupported Apple version state: " + state)
-    if not source_changed:
-        return {"publish": False, "reason": "No app-source changes since the last successful upload"}
     drafts = [v for v in versions if v["attributes"]["appStoreState"] == "PREPARE_FOR_SUBMISSION"]
     if len(drafts) > 1:
         raise ReleaseError("Multiple editable tvOS drafts need attention")
@@ -53,6 +51,9 @@ def plan_release(versions, source_changed, jobs):
         draft = drafts[0]
         if draft.get("relationships", {}).get("build", {}).get("data"):
             raise ReleaseError("Editable draft already has a build; finish or resolve that release manually")
+    if not source_changed:
+        return {"publish": False, "reason": "No app-source changes since the last successful upload"}
+    if drafts:
         number = draft["attributes"]["versionString"]
         version_parts(number)
     elif versions:

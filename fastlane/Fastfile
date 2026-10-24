@@ -14,7 +14,6 @@ platform :tvos do
       app_identifier: "com.fiestaboard.tv",
       platform: "appletvos",
       app_version: ENV.fetch("RELEASE_VERSION"),
-      build_number: ENV.fetch("RELEASE_BUILD_NUMBER"),
       ipa: ENV.fetch("RELEASE_IPA"),
       metadata_path: "./fastlane/metadata",
       skip_screenshots: true,

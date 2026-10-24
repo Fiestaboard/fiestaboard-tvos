@@ -64,6 +64,10 @@ class ReleasePolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(release.ReleaseError, "already has a build"):
             self.plan([version("1.0", "PREPARE_FOR_SUBMISSION", {"type": "builds", "id": "123"})])
 
+    def test_selected_draft_needs_attention_even_if_sources_unchanged(self):
+        with self.assertRaisesRegex(release.ReleaseError, "already has a build"):
+            self.plan([version("1.0", "PREPARE_FOR_SUBMISSION", {"type": "builds", "id": "123"})], changed=False)
+
     def test_other_platform_versions_do_not_affect_tv_release(self):
         ios = version("9.0", "IN_REVIEW")
         ios["attributes"]["platform"] = "IOS"
