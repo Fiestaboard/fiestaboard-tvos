@@ -39,6 +39,7 @@ jobs:
           ./scripts/check-layering.sh
           ./scripts/check-brand-assets.swift
           ./scripts/test-simulator-selection.sh
+          python3 scripts/test-app-store-release.py
 
       - name: Resolve and boot a tvOS simulator
         id: sim

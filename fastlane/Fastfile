@@ -1,0 +1,32 @@
+default_platform(:tvos)
+
+platform :tvos do
+  desc "Upload a public-eligible tvOS build; optionally submit for review"
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH"),
+      in_house: false
+    )
+    options = {
+      api_key: api_key,
+      app_identifier: "com.fiestaboard.tv",
+      platform: "appletvos",
+      app_version: ENV.fetch("RELEASE_VERSION"),
+      build_number: ENV.fetch("RELEASE_BUILD_NUMBER"),
+      ipa: ENV.fetch("RELEASE_IPA"),
+      metadata_path: "./fastlane/metadata",
+      skip_screenshots: true,
+      submit_for_review: ENV.fetch("SUBMIT_FOR_REVIEW", "false") == "true",
+      automatic_release: true,
+      force: true,
+      run_precheck_before_submit: false,
+      reject_if_possible: false
+    }
+    if ENV.fetch("RELEASE_VERSION") != "1.0"
+      options[:release_notes] = { "en-US" => "Improvements and fixes for your FiestaBoard displays." }
+    end
+    deliver(**options)
+  end
+end
