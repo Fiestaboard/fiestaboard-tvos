@@ -32,6 +32,12 @@ public struct RootView: View {
                 .transition(.opacity)
                 .animation(routeChange, value: model.route)
         }
+        .task {
+            while !Task.isCancelled {
+                model.updateOLEDCare()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
         .preferredColorScheme(.dark)
         .onOpenURL { model.openTopShelfURL($0) }
     }

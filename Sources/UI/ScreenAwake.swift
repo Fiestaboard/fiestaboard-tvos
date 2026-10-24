@@ -26,12 +26,18 @@ final class ScreenAwake {
     var onForeground: (@MainActor () -> Void)?
 
     private(set) var isHeld = false
+    var onBackground: (@MainActor () -> Void)?
+    private var backgroundObserver: NSObjectProtocol?
     private var observer: NSObjectProtocol?
     private let center: NotificationCenter
 
     init(sink: Sink? = nil, center: NotificationCenter = .default) {
         self.sink = sink ?? { held in UIApplication.shared.isIdleTimerDisabled = held }
         self.center = center
+        backgroundObserver = center.addObserver(forName: UIApplication.willResignActiveNotification,
+                                                 object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onBackground?() }
+        }
         observer = center.addObserver(forName: UIApplication.didBecomeActiveNotification,
                                       object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.onForeground?() }
@@ -40,6 +46,7 @@ final class ScreenAwake {
 
     deinit {
         if let observer { center.removeObserver(observer) }
+        if let backgroundObserver { center.removeObserver(backgroundObserver) }
     }
 
     /// Restate the request. Always sent through, never short-circuited on
