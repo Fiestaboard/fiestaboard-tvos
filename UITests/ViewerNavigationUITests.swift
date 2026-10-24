@@ -39,6 +39,39 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5))
     }
 
+    func testResizeOfferLaterCanBeReachedAndDismissedWithRemote() throws {
+        continueAfterFailure = false
+        var panel = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
+        panel["id"] = "portrait"; panel["name"] = "Portrait"; panel["rows"] = 21; panel["cols"] = 15
+        let body = String(decoding: try JSONSerialization.data(withJSONObject: panel), as: UTF8.self)
+        server = try FixtureHTTPServer(additionalPanels: ["portrait": body],
+                                      additionalFrames: ["portrait": #"{"characters":null,"message":null,"rows":21,"cols":15,"updated_at":null}"#])
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Test Board\",\"defaultPanelRef\":\"portrait\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        let resize = app.buttons["Resize for this TV"]
+        let later = app.buttons["Later"]
+        XCTAssertTrue(resize.waitForExistence(timeout: 10))
+        XCTAssertTrue(resize.hasFocus)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(later.hasFocus, "Right should focus Later without revealing viewer controls")
+        XCTAssertFalse(app.buttons["Panels"].exists)
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(later.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(resize.exists)
+        XCTAssertFalse(app.buttons["Panels"].exists)
+
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        XCTAssertFalse(later.exists, "The once-per-session resize offer must remain dismissed")
+    }
+
     func testSelectRevealsControlsAndPanelsButtonReturnsToList() {
         let app = launchLoadedViewer()
         XCUIRemote.shared.press(.select)

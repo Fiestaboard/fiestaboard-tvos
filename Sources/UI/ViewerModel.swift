@@ -132,6 +132,9 @@ final class ViewerModel {
     /// tvOS has focus, not a pointer, so the way "move the cursor to get
     /// back" translates is: any button wakes transient chrome, which fades.
     func showOverlay() {
+        // The resize card owns remote focus until it is dismissed. Revealing
+        // the toolbar here would compete with its secondary Later action.
+        guard !resizeOfferVisible else { return }
         overlayVisible = true
         restartOverlayTimer()
     }
@@ -209,6 +212,7 @@ final class ViewerModel {
     func considerResizeOffer(for screen: CGSize) {
         guard snapshot.panel != nil, snapshot.panel?.renderStyle != .ledMatrix, !boardMissing, !snapshot.deleted,
               !gridSuitsScreen(screen), app.offeredResizeRefs.insert(ref).inserted else { return }
+        hideOverlay()
         resizeOfferVisible = true
     }
 
