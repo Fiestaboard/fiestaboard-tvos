@@ -46,7 +46,7 @@ jobs:
           xcodebuild -project FiestaBoardTV.xcodeproj -scheme FiestaBoardTV \
             -destination "platform=tvOS Simulator,id=${{ steps.sim.outputs.id }}" \
             -derivedDataPath build build-for-testing
-      - name: Capture screenshots and walkthrough
+      - name: Verify resize prompt remote navigation
         # Validate the normal remote prompt before recording TV-fitted boards.
         # This also provides quick native evidence independently of full CI.
         run: |

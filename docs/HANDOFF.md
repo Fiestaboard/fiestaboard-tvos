@@ -7,8 +7,14 @@ whose proportions differ substantially from a TV. The remote automation did
 not successfully activate **Later**: the recording retained primary-button
 focus and showed viewer controls after a directional press. Reproduce this
 interaction with a physical Siri Remote before public launch; check the
-viewer movement handler while the resize offer is visible. The production
-root cause is not established by this capture.
+viewer movement handler while the resize offer is visible.
+
+Follow-up run `40131427161` reproduced the defect with focused tests: the
+model exposed viewer controls during the resize offer, and native Right
+could not focus Later. `ViewerModel.showOverlay()` now leaves controls
+hidden while the offer owns focus. The regression checks Right → Later →
+Select, then ordinary viewer controls after dismissal. Hosted GREEN is
+required before merging; physical Siri Remote verification remains unavailable.
 
 Store examples now use distinct TV-fitted grids (24×10 weather, 28×12
 departures, 18×8 personal messages), calculated from the existing tile aspect
