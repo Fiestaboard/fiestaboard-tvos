@@ -1,5 +1,20 @@
 # Orientation
 
+## Store media capture follow-up (2026-10-24)
+
+Media run `40123717805` opened the normal resize offer for authored flap grids
+whose proportions differ substantially from a TV. The remote automation did
+not successfully activate **Later**: the recording retained primary-button
+focus and showed viewer controls after a directional press. Reproduce this
+interaction with a physical Siri Remote before public launch; check the
+viewer movement handler while the resize offer is visible. The production
+root cause is not established by this capture.
+
+Store examples now use distinct TV-fitted grids (24×10 weather, 28×12
+departures, 18×8 personal messages), calculated from the existing tile aspect
+ratio. This avoids a resizing decision during the showcase and preserves the
+different compositions. No production focus behavior was changed.
+
 ## Whole-app UX pass (2026-10-18)
 
 Reviewed Connect and sign-in, panel browsing and focus restoration, the viewer

@@ -151,16 +151,8 @@ final class AppStoreMediaUITests: XCTestCase {
         // A newly opened panel has no old raster to transition from. Give the
         // actual renderer two seconds before capturing the first settled view.
         Thread.sleep(forTimeInterval: 2)
-        // These deliberately varied grids can trigger the app's normal size
-        // offer. Keep their authored dimensions through the real Later action.
-        let later = app.buttons["Later"]
-        if later.exists {
-            focus(later, direction: .right, app: app)
-            XCUIRemote.shared.press(.select)
-            XCTAssertTrue(later.waitForNonExistence(timeout: 5))
-            event("resize-offer-dismissed", details: name + ": chose Later to preserve its authored grid")
-            Thread.sleep(forTimeInterval: 1)
-        }
+        // Each authored grid has a different size but fits this TV's aspect.
+        XCTAssertFalse(app.buttons["Later"].exists, "Authored media grids must fit the TV without a resize offer")
         XCTAssertFalse(app.buttons["Resize for this TV"].exists)
         XCTAssertTrue(app.buttons["Settings"].waitForNonExistence(timeout: 6), "Viewer controls must hide before capture")
     }
@@ -207,9 +199,9 @@ private enum MediaBoards {
 
     static func catalog() throws -> Catalog {
         let definitions: [(String, String, Int, Int, String, String?, Int, Int)] = [
-            ("media-weather", "Weather", 8, 24, "black", nil, 0, 0),
-            ("media-transit", "Departures", 8, 28, "black", nil, 0, 0),
-            ("media-notes", "Home Notes", 6, 18, "white", nil, 0, 0),
+            ("media-weather", "Weather", 10, 24, "black", nil, 0, 0),
+            ("media-transit", "Departures", 12, 28, "black", nil, 0, 0),
+            ("media-notes", "Home Notes", 8, 18, "white", nil, 0, 0),
             ("media-clock", "Pixel Clock", 9, 21, "black", "square", 128, 72),
             ("media-landscape", "Pixel Landscape", 7, 16, "black", "round", 96, 54)
         ]
@@ -248,32 +240,32 @@ private enum MediaBoards {
         try json(["characters": cells, "rows": cells.count, "cols": cells[0].count, "message": message])
     }
     static func weather() throws -> String {
-        var grid = Array(repeating: Array(repeating: 0, count: 24), count: 8)
-        text("SAN FRANCISCO", row: 0, grid: &grid)
+        var grid = Array(repeating: Array(repeating: 0, count: 24), count: 10)
+        text("SAN FRANCISCO", row: 1, grid: &grid)
         for (r, line) in ["..#..", ".###.", "#####", ".###.", "..#.."].enumerated() {
-            for (c, p) in line.enumerated() where p == "#" { grid[r + 2][c + 2] = r == 2 ? 64 : 65 }
+            for (c, p) in line.enumerated() where p == "#" { grid[r + 3][c + 2] = r == 2 ? 64 : 65 }
         }
-        text("68°F", row: 2, col: 11, grid: &grid); text("SUNNY", row: 4, col: 10, grid: &grid)
-        text("H 70°  L 55°", row: 6, col: 10, grid: &grid)
-        text("WIND W 8 MPH", row: 7, grid: &grid)
+        text("68°F", row: 3, col: 11, grid: &grid); text("SUNNY", row: 5, col: 10, grid: &grid)
+        text("H 70°  L 55°", row: 7, col: 10, grid: &grid)
+        text("WIND W 8 MPH", row: 8, grid: &grid)
         return try payload(grid, message: "San Francisco. Sunny, 68 degrees. High 70, low 55. Example weather.")
     }
     static func departures() throws -> String {
-        var grid = Array(repeating: Array(repeating: 0, count: 28), count: 8)
-        text("NEXT DEPARTURES", row: 0, grid: &grid)
-        for col in 2..<26 { grid[1][col] = 64 }
-        text("COAST LINE       2 MIN", row: 3, col: 4, grid: &grid)
-        text("HARBOR LOCAL     8 MIN", row: 5, col: 4, grid: &grid)
-        text("AIRPORT         25 MIN", row: 7, col: 4, grid: &grid)
-        grid[3][1] = 66; grid[5][1] = 67; grid[7][1] = 65
+        var grid = Array(repeating: Array(repeating: 0, count: 28), count: 12)
+        text("NEXT DEPARTURES", row: 1, grid: &grid)
+        for col in 2..<26 { grid[2][col] = 64 }
+        text("COAST LINE       2 MIN", row: 4, col: 4, grid: &grid)
+        text("HARBOR LOCAL     8 MIN", row: 7, col: 4, grid: &grid)
+        text("AIRPORT         25 MIN", row: 10, col: 4, grid: &grid)
+        grid[4][1] = 66; grid[7][1] = 67; grid[10][1] = 65
         return try payload(grid, message: "Coast Line 2 minutes. Harbor Local 8 minutes. Airport 25 minutes. Example departures.")
     }
     static func personal(dinner: Bool) throws -> String {
-        var grid = Array(repeating: Array(repeating: 0, count: 18), count: 6)
-        let lines = dinner ? ["", "DINNER", "TOGETHER", "AT 7:00", "♥ ♥ ♥", ""]
-                           : ["", "YOU MAKE", "THIS PLACE", "FEEL LIKE", "HOME ♥", ""]
+        var grid = Array(repeating: Array(repeating: 0, count: 18), count: 8)
+        let lines = dinner ? ["", "", "DINNER", "TOGETHER", "AT 7:00", "♥ ♥ ♥", "", ""]
+                           : ["", "", "YOU MAKE", "THIS PLACE", "FEEL LIKE", "HOME ♥", "", ""]
         for (row, line) in lines.enumerated() { text(line, row: row, grid: &grid) }
-        for row in 1..<5 { grid[row][1] = dinner ? 64 : 68; grid[row][16] = dinner ? 64 : 68 }
+        for row in 2..<6 { grid[row][1] = dinner ? 64 : 68; grid[row][16] = dinner ? 64 : 68 }
         return try payload(grid, message: dinner ? "Dinner together at 7:00. Hearts." : "You make this place feel like home. Heart.")
     }
     static func clock() throws -> String {
