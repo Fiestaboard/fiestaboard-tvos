@@ -77,6 +77,21 @@ class ReleasePolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(release.ReleaseError, "Unsupported"):
             self.plan([version("1.0", "NEW_APPLE_STATE")])
 
+    def test_processed_public_eligible_build_is_ready(self):
+        self.assertTrue(release.build_ready({"processingState": "VALID", "buildAudienceType": "APP_STORE_ELIGIBLE"}))
+
+    def test_processing_build_is_not_marked_successful(self):
+        self.assertFalse(release.build_ready({"processingState": "PROCESSING"}))
+
+    def test_invalid_build_cannot_get_success_provenance(self):
+        for state in ("FAILED", "INVALID"):
+            with self.subTest(state=state), self.assertRaisesRegex(release.ReleaseError, "processing"):
+                release.build_ready({"processingState": state})
+
+    def test_internal_only_build_cannot_get_public_success_provenance(self):
+        with self.assertRaisesRegex(release.ReleaseError, "public"):
+            release.build_ready({"processingState": "VALID", "buildAudienceType": "INTERNAL_ONLY"})
+
 
 if __name__ == "__main__":
     unittest.main()

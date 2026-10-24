@@ -95,10 +95,46 @@ def apple_get(path, token):
         return json.load(response)
 
 
+def build_ready(attributes):
+    state = attributes.get("processingState")
+    if state in {"FAILED", "INVALID"}:
+        raise ReleaseError("Apple build processing failed: " + state)
+    if state != "VALID":
+        return False
+    if attributes.get("buildAudienceType") != "APP_STORE_ELIGIBLE":
+        raise ReleaseError("Processed build is not eligible for public App Store release")
+    return True
+
+
+def wait_for_build(number, version):
+    app = os.environ["ASC_APP_ID"]
+    for _ in range(60):
+        result = apple_get(f"/v1/builds?filter%5Bapp%5D={app}&filter%5Bversion%5D={number}&include=preReleaseVersion&limit=10", apple_token())
+        for build in result["data"]:
+            if build_ready(build["attributes"]):
+                prerelease_id = build["relationships"]["preReleaseVersion"]["data"]["id"]
+                prerelease = next(v for v in result.get("included", []) if v["id"] == prerelease_id and v["type"] == "preReleaseVersions")
+                if prerelease["attributes"]["version"] != version:
+                    raise ReleaseError("Uploaded build marketing version does not match the release plan")
+                print(f"Apple processed public-eligible tvOS build {version} ({number}), ID {build['id']}")
+                return
+        print("Waiting for Apple to process the uploaded build...", flush=True)
+        time.sleep(30)
+    raise ReleaseError("Apple build processing did not finish within 30 minutes; inspect App Store Connect")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--wait-for-build")
+    parser.add_argument("--version")
     args = parser.parse_args()
+    if args.wait_for_build:
+        if not args.version:
+            parser.error("--wait-for-build requires --version")
+        return wait_for_build(args.wait_for_build, args.version)
+    if not args.output:
+        parser.error("release planning requires --output")
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     repo = os.environ["GITHUB_REPOSITORY"]
     runs = run_json(["gh", "api", f"repos/{repo}/actions/workflows/ci.yml/runs?branch=main&event=push&head_sha={sha}&per_page=10"])["workflow_runs"]

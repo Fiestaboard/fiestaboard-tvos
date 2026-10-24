@@ -105,6 +105,13 @@ jobs:
           set -euo pipefail
           export RELEASE_IPA="$PWD/build/app-store/FiestaBoardTV.ipa"
           fastlane tvos release
+      - name: Verify Apple processed a public-eligible build
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_PATH: ${{ runner.temp }}/app-store-signing/AuthKey.p8
+          ASC_APP_ID: "6826639070"
+        run: python3 scripts/app-store-release.py --wait-for-build "$RELEASE_BUILD_NUMBER" --version "$RELEASE_VERSION"
       - name: Record successful upload provenance
         env:
           GH_TOKEN: ${{ github.token }}
