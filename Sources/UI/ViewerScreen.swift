@@ -4,6 +4,7 @@ struct ViewerScreen: View {
     let ref: String
     @Environment(AppModel.self) private var app
     @State private var model: ViewerModel?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Test seam: the screen builds its own model, and a harness has no other
     /// way to see which panel the model it built is bound to — which is
@@ -29,25 +30,22 @@ struct ViewerScreen: View {
                 // grey band on the one screen contracted to be true black.
                 Color.black.ignoresSafeArea()
 
-                boardLayer(in: proxy.size)
+                if !app.oledOutput.resting {
+                    if model?.snapshot.deleted == true {
+                        deletedState.opacity(app.oledOutput.brightness)
+                    } else if model?.boardMissing == true {
+                        missingBoardState.opacity(app.oledOutput.brightness)
+                    } else {
+                        boardLayer(in: proxy.size)
+                    }
+                    if model?.snapshot.connection == .stale {
+                        offlineIndicator.opacity(app.oledOutput.brightness)
+                    }
+                    if model?.resizeOfferVisible == true { resizeOffer }
+                    if model?.overlayVisible == true { overlay }
+                }
+                if app.oledOutput.resting || boardIsTheOnlyTarget { wakeTarget }
 
-                // Chrome is a sibling of the dimmed board, never inside it.
-                // The controls you summon to escape the night dim were
-                // themselves at a third brightness, and so was the indicator
-                // saying the board had stopped answering.
-                //
-                // `.stale` is the only connection state that gets a pill, and
-                // `.unauthorized` deliberately does not. `ViewerModel.apply`
-                // stores the snapshot and sets `app.route = .signIn` in the
-                // same synchronous block; SwiftUI coalesces both mutations
-                // into one update, so RootView has already swapped this
-                // screen for SignInScreen by the time anything re-renders.
-                // The pill that used to live here drew for no frames at all
-                // and its announcement fired `onChange` on a removed view.
-                // The screen it lands on explains the same thing and stays.
-                if model?.snapshot.connection == .stale { offlineIndicator }
-                if model?.resizeOfferVisible == true { resizeOffer }
-                if model?.overlayVisible == true { overlay }
             }
             // Scoped to one value each. A blanket animation here would take
             // the 810-tile Canvas and the focus layout with it; these fire
@@ -81,9 +79,9 @@ struct ViewerScreen: View {
             bind(ViewerModel(app: app, ref: new))
         }
         .onDisappear { model?.stop() }
-        .onMoveCommand { _ in model?.showOverlay() }
-        .onPlayPauseCommand { model?.showOverlay() }
-        .onExitCommand { model?.stop(); app.showPanels() }
+        .onMoveCommand { _ in remoteInteraction() }
+        .onPlayPauseCommand { remoteInteraction() }
+        .onExitCommand { if app.interactWithOLED() { model?.showOverlay() } else { model?.stop(); app.showPanels() } }
         // The indicators are the only sign the board stopped answering, and a
         // sign is no use to VoiceOver: nothing about them takes focus.
         .onChange(of: model?.snapshot.connection) { old, new in announce(from: old, to: new) }
@@ -91,6 +89,8 @@ struct ViewerScreen: View {
 
     private func bind(_ fresh: ViewerModel) {
         model = fresh
+        app.updateOLEDViewer(unavailable: fresh.snapshot.connection != .live || fresh.snapshot.deleted || fresh.boardMissing,
+                             panelDimmed: fresh.snapshot.dimmed)
         fresh.start()
         onModel?(fresh)
     }
@@ -123,21 +123,19 @@ struct ViewerScreen: View {
 
     /// The board itself, and nothing else: this is the only thing the night
     /// dim and the burn-in drift are allowed to touch.
+    private func remoteInteraction() {
+        app.interactWithOLED()
+        model?.showOverlay()
+    }
+
     private func boardLayer(in size: CGSize) -> some View {
-        ZStack {
-            board(in: size)
-            wakeTarget
-        }
-        // Burn-in drift, off unless this TV opted in. A couple of points
-        // a minute: the panel stops seeing a still image, the room
-        // cannot see it move.
-        .offset(x: isMatrix ? 0 : model?.snapshot.drift.x ?? 0,
-                y: isMatrix ? 0 : model?.snapshot.drift.y ?? 0)
-        // Auto-dim uses the TV's own clock, matching the web viewer. 0.35 is
-        // the web viewer's 0.65 black scrim by another arithmetic: two
-        // clients showing one panel must not dim to different depths.
-        .opacity(model?.snapshot.dimmed == true ? 0.35 : 1.0)
-        .animation(.easeInOut(duration: 1.0), value: model?.snapshot.dimmed)
+        let g = OLEDCareGeometry(width: size.width, height: size.height, config: app.oledCare,
+                                 rotating: app.oledOutput.rotating, placement: app.oledOutput.placement,
+                                 elapsed: app.oledTime, reduceMotion: reduceMotion)
+        return board(in: CGSize(width: g.width, height: g.height), fullSize: size)
+            .frame(width: g.width, height: g.height)
+            .position(x: g.x, y: g.y)
+            .opacity(app.oledOutput.brightness)
     }
 
     private var isMatrix: Bool {
@@ -145,21 +143,30 @@ struct ViewerScreen: View {
     }
 
     @ViewBuilder
-    private func board(in size: CGSize) -> some View {
+    private func board(in size: CGSize, fullSize: CGSize) -> some View {
         if model?.snapshot.deleted == true {
             deletedState
         } else if model?.boardMissing == true {
             missingBoardState
         } else if let snapshot = model?.snapshot, let panel = snapshot.panel, panel.renderStyle == .ledMatrix {
             MatrixCanvas(raster: MatrixRaster.make(panel: panel, cells: snapshot.cells, richCells: snapshot.richCells, layers: snapshot.layers),
-                         display: panel.matrixDisplay, presentation: model?.matrixPresentation ?? .init(),
-                         drift: snapshot.drift, animated: panel.animationsEnabled,
+                         display: panel.matrixDisplay, presentation: matrixPresentation(in: size, fullSize: fullSize),
+                         drift: .zero, animated: panel.animationsEnabled,
                          transitionStyle: model?.matrixTransitionStyle ?? .characterWipe)
-        } else if let layout = try? model?.layout(for: size) {
+        } else if let layout = try? model?.layout(for: model?.sizing == .trueScale ? fullSize : size) {
             canvas(for: layout)
+                .scaleEffect(min(1, min(size.width / layout.width, size.height / layout.height)))
         } else {
             TacoLoader(size: .large)
         }
+    }
+
+    private func matrixPresentation(in size: CGSize, fullSize: CGSize) -> MatrixPresentation {
+        let presentation = model?.matrixPresentation ?? .init()
+        guard presentation.sizing == .trueSize else { return presentation }
+        let ratio = hypot(size.width, size.height) / hypot(fullSize.width, fullSize.height)
+        return MatrixPresentation(sizing: .trueSize, diagonalInches: presentation.diagonalInches * ratio,
+                                  pitchMillimeters: presentation.pitchMillimeters, calibrationScale: presentation.calibrationScale)
     }
 
     private func canvas(for layout: BoardLayout) -> some View {
@@ -188,9 +195,9 @@ struct ViewerScreen: View {
     private var wakeTarget: some View {
         Color.clear
             .contentShape(Rectangle())
-            .focusable(boardIsTheOnlyTarget, interactions: .activate)
+            .focusable(app.oledOutput.resting || boardIsTheOnlyTarget, interactions: .activate)
             .focusEffectDisabled()
-            .onTapGesture { model?.showOverlay() }
+            .onTapGesture { remoteInteraction() }
             .accessibilityElement()
             .accessibilityAddTraits([.isButton, .updatesFrequently])
             .accessibilityLabel(model?.snapshot.panel?.name ?? "FiestaBoard")

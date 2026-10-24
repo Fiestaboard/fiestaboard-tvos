@@ -138,6 +138,11 @@ struct PanelsScreen: View {
                                 subtitle: "Choose a panel to show on this TV.",
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
             Spacer(minLength: 32)
+            if !app.oledCare.invitationDismissed {
+                Button("OLED care") { app.oledSetupRequested = true; app.showSettings() }
+                    .font(Fiesta.Text.body)
+                    .accessibilityHint("Optional TV setup")
+            }
             Button { app.showSettings() } label: {
                 Label("Settings", systemImage: "gearshape")
             }

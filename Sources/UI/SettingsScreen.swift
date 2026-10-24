@@ -28,7 +28,7 @@ struct SettingsScreen: View {
     }
 
     private enum Destination: Hashable {
-        case panelSelection, launchPanel, flapSizing, matrixSizing, matrixTransition
+        case oledCare, panelSelection, launchPanel, flapSizing, matrixSizing, matrixTransition
         case matrixDiagonal, matrixPitch, autoDim, screenDiagonal, displayStyle(String)
         case displaySettings(String), resize(String), calibration(String), topShelf, privacy, screenProtection
     }
@@ -71,6 +71,9 @@ struct SettingsScreen: View {
             }
             await model?.load()
             reconcilePanelSelection()
+        }
+        .onAppear {
+            if app.oledSetupRequested { path = [.oledCare]; app.oledSetupRequested = false }
         }
         .onChange(of: model?.panels.map(\.id)) { reconcilePanelSelection() }
     }
@@ -134,12 +137,11 @@ struct SettingsScreen: View {
                     .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
                 Section {
-                    choiceLink("Night dimming", value: autoDimBinding.wrappedValue == .followPanel ? "Follow panel schedule" : "Never dim",
-                               destination: .autoDim)
-                    Toggle("Slowly shift the board", isOn: driftBinding)
-                    NavigationLink("Screen protection & dimming", value: Destination.screenProtection)
+                    NavigationLink("OLED care", value: Destination.oledCare)
+                        .accessibilityIdentifier("settings.oledCare")
                 } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                footer: { Text("Shifting moves the board a few pixels to vary the image.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                footer: { Text("Optional device-local brightness, movement and rest controls.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+
             }
         case .appearance:
             appearanceContent
@@ -421,6 +423,8 @@ struct SettingsScreen: View {
                 Section { Text(Self.privacyBody) } footer: { Text(Self.privacyFooter).foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
             .navigationTitle("Privacy")
+        case .oledCare:
+            OLEDCareScreen()
         case .screenProtection:
             controlList {
                 Section { Text(model?.autoDimSummary ?? "") } header: { Text("Night dimming").foregroundStyle(Fiesta.Colors.mutedForeground) }
@@ -505,8 +509,8 @@ struct SettingsScreen: View {
     }
 
     private static let burnInBody = """
-        FiestaBoard keeps Apple TV awake while a board is showing, so its \
-        screen saver won't start. Slowly shifting the board moves it a few \
+        By default FiestaBoard requests that Apple TV stay awake while a board is showing. \
+        OLED care can allow the system screensaver or schedule black-output rest. Slowly shifting the board moves it a few \
         pixels over twenty minutes to vary where the image is drawn. \
         Your TV may still reduce brightness to protect its screen; the app \
         cannot turn off those protections.
