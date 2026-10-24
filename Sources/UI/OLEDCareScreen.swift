@@ -42,7 +42,7 @@ struct OLEDCareScreen: View {
                     Toggle("Allow system screensaver", isOn: binding(\.allowScreensaver))
                         .accessibilityIdentifier("oled.screensaver")
                 } footer: {
-                    Text("Device settings control screensaver timing. Rest releases the keep-awake request. System sleep may return to Home; automatic wake is not promised.")
+                    Text("Device settings control screensaver timing. Rest releases the keep-awake request. System sleep may return to Home; automatic wake is not promised.").foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }
             .listStyle(.grouped)
@@ -64,17 +64,20 @@ struct OLEDCareScreen: View {
                 .accessibilityLabel(answerLabel(answer))
                 .accessibilityValue(app.oledCare.answer == answer ? "Selected" : "")
             }
-        } header: { Text("Will you use this with an OLED TV?").accessibilityIdentifier("oled.question") }
-        footer: { Text("Optional. Choosing Yes enables nothing. Configure only the options you want below.") }
+        } header: { Text("Will you use this with an OLED TV?").accessibilityIdentifier("oled.question").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Optional. Choosing Yes enables nothing. Configure only the options you want below.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private var brightnessAndMovement: some View {
         Section {
             numberChoice("How bright should the board be?", key: \.brightness, values: [25, 50, 75, 100], suffix: "%")
                 .accessibilityIdentifier("oled.brightness")
             Toggle("Gently move the image?", isOn: binding(\.movement))
-            numberChoice("Movement range", key: \.movementRange, values: [8, 24], suffix: " points")
-        } header: { Text("Brightness & movement") }
-        footer: { Text("Brightness scales app output, not TV hardware brightness. Gentle: 8 points; Wider: 24 points. Movement reserves a small inset and can reduce usable area. Reduce Motion pauses continuous movement.") }
+            Picker("Movement range", selection: binding(\.movementRange)) {
+                Text("Gentle").tag(8)
+                Text("Wider").tag(24)
+            }
+        } header: { Text("Brightness & movement").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Brightness scales app output, not TV hardware brightness. Wider movement leaves more space around the board. Reduce Motion pauses continuous movement.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private var night: some View {
         Section {
@@ -88,24 +91,24 @@ struct OLEDCareScreen: View {
                 timeChoice("Night ends", key: \.nightEnd)
             }
             numberChoice("Night output level", key: \.nightLevel, values: [10, 25, 35, 50], suffix: "%")
-        } header: { Text("Night dimming") }
-        footer: { Text("Uses this TV's local time. Equal start and end disables a window. Night level multiplies board brightness. The panel's shared schedule is never edited here.") }
+        } header: { Text("Night dimming").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Uses this TV's local time. Equal start and end disables a window. Night level multiplies board brightness. The panel's shared schedule is never edited here.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private var scheduledRest: some View {
         Section {
             Toggle("Rest on a daily schedule?", isOn: binding(\.restEnabled))
             timeChoice("Rest starts", key: \.restStart)
             timeChoice("Rest ends", key: \.restEnd)
-        } header: { Text("Scheduled rest") }
-        footer: { Text("Shows full black, not standby. Normal system sleep may follow. A remote press resumes viewing for 5 minutes. Equal times disable rest.") }
+        } header: { Text("Scheduled rest").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Shows full black, not standby. Normal system sleep may follow. A remote press resumes viewing for 5 minutes. Equal times disable rest.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private var breaks: some View {
         Section {
             Toggle("Take periodic viewing breaks?", isOn: binding(\.breaksEnabled))
             numberChoice("Break every", key: \.breakInterval, values: [30, 60, 120], suffix: " minutes")
             numberChoice("Break duration", key: \.breakDuration, values: [1, 5, 10], suffix: " minutes")
-        } header: { Text("Periodic breaks") }
-        footer: { Text("Counts active foreground viewing. A remote press ends a break and starts a new interval. Leaving the app pauses the interval and ends an active break.") }
+        } header: { Text("Periodic breaks").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Counts active foreground viewing. A remote press ends a break and starts a new interval. Leaving the app pauses the interval and ends an active break.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private var rotation: some View {
         Section {
@@ -120,8 +123,8 @@ struct OLEDCareScreen: View {
             }
             numberChoice("Change position every", key: \.rotationInterval, values: [1, 5, 15], suffix: " minutes")
             if app.oledCare.placements.count < 2 { Text("Select at least two positions to rotate.") }
-        } header: { Text("Board layout / position rotation") }
-        footer: { Text("Compacts the same live board to 80% of available width and height, then changes its placement. Shared panel contents stay the same. Positions change without animated travel.") }
+        } header: { Text("Board layout / position rotation").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Compacts the same live board to 80% of available width and height, then changes its placement. Shared panel contents stay the same. Positions change without animated travel.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private var disconnect: some View {
         Section {
@@ -131,8 +134,8 @@ struct OLEDCareScreen: View {
                 Text("Rest after delay").tag(OLEDDisconnect.rest)
             }
             numberChoice("Unavailable for", key: \.disconnectDelay, values: [1, 5, 15], suffix: " minutes")
-        } header: { Text("Unavailable boards") }
-        footer: { Text("Also applies while connecting or showing missing/deleted boards. Dimming uses the night level. Recovery resumes automatically; a remote press temporarily resumes for 5 minutes.") }
+        } header: { Text("Unavailable boards").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        footer: { Text("Also applies while connecting or showing missing/deleted boards. Dimming uses the night level. Recovery resumes automatically; a remote press temporarily resumes for 5 minutes.").foregroundStyle(Fiesta.Colors.mutedForeground) }
     }
     private func binding<T>(_ key: WritableKeyPath<OLEDCareConfiguration, T>) -> Binding<T> {
         Binding(get: { app.oledCare[keyPath: key] }, set: { value in
