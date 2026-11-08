@@ -13,9 +13,16 @@ import XCTest
 /// board's `Canvas`); swift-snapshot-testing owns the comparison, the
 /// recording and the failure diff.
 ///
-/// `drawHierarchy` does not run the window server's compositor, so glass and
-/// the focus platter are NOT captured faithfully here. Those states are shot
-/// by XCUITest (`ParityShotsUITests`) through `XCUIScreen`.
+/// Glass is not guaranteed by the API here: `drawHierarchy` is documented as
+/// a view-hierarchy render, not a window-server capture. Measured, not
+/// asserted: on tvOS 26.2 and 27.2 it rendered `.glassEffect` exactly as
+/// `XCUIScreen` did (see `testGlassUnderDrawHierarchyIsMeasuredNotAsserted`).
+/// The focus platter is never captured here — an offscreen window takes no
+/// focus — so glass and focus states are gated by XCUITest
+/// (`ParityShotsUITests`) through `XCUIScreen`.
+///
+/// Shots are 8-bit standard range: the P3 4K simulator otherwise renders
+/// 16 bits per channel, which nothing reads and which doubles each golden.
 ///
 /// Goldens live in `Tests/__Snapshots__/tvOS<major>/<TestClass>/`. They are
 /// split by simulator OS major because system fonts and controls re-render
@@ -53,6 +60,7 @@ enum TVSnapshot {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
+        format.preferredRange = .standard
         let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
             host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
         }
@@ -89,6 +97,22 @@ enum ParityOutput {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try XCTUnwrap(image.pngData(), "PNG encoding failed for \(name)")
         try data.write(to: directory.appendingPathComponent("\(name).png"), options: .atomic)
+    }
+
+    /// `runtime.json`: the exact simulator runtime and device behind the
+    /// shots. Goldens are split only by OS major, so a runner image moving
+    /// to another minor shows up here.
+    static func writeRuntime() throws {
+        let env = ProcessInfo.processInfo.environment
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        try write(json: [
+            "osVersion": env["SIMULATOR_RUNTIME_VERSION"]
+                ?? "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
+            "runtimeBuild": env["SIMULATOR_RUNTIME_BUILD_VERSION"] ?? "unknown",
+            "deviceModel": env["SIMULATOR_DEVICE_NAME"] ?? UIDevice.current.model,
+            "goldenDirectory": "tvOS\(TVSnapshot.osMajor)",
+            "scale": Double(UIScreen.main.scale),
+        ], as: "runtime.json")
     }
 
     static func write(json object: Any, as name: String) throws {

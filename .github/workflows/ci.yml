@@ -58,6 +58,11 @@ jobs:
           if [ -z "$ID" ]; then echo "No Apple TV simulator on this runner." >&2; exit 1; fi
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           xcrun simctl bootstatus "$ID" -b
+          # Goldens are split only by OS major; record the exact runtime the
+          # parity shots ran on (also written as build/parity/runtime.json).
+          mkdir -p build/parity
+          xcrun simctl list devices "$ID" > build/parity/simctl-device.txt
+          xcrun simctl list runtimes tvOS > build/parity/simctl-runtimes.txt
 
       - name: Build for testing
         id: test-build

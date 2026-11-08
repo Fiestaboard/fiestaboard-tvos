@@ -14,8 +14,9 @@ import XCTest
 ///   `onGeometryChange`, in global points;
 /// - the Connect screen produces parity inputs for the A1 ref.
 ///
-/// What `drawHierarchy` makes of glass is measured and written down, not
-/// asserted: the glass proof is the XCUITest in `ParityShotsUITests`.
+/// What `drawHierarchy` makes of glass is measured, not asserted: it matched
+/// `XCUIScreen` on tvOS 26.2 and 27.2, but the API does not promise it, so
+/// the gating glass proof is the XCUITest in `ParityShotsUITests`.
 @MainActor
 final class ParitySnapshotTests: XCTestCase {
 
@@ -168,6 +169,7 @@ final class ParitySnapshotTests: XCTestCase {
         XCTAssertEqual(nodes.first { $0.figma == slot }?.rect.size, TVSnapshot.size)
         XCTAssertTrue(nodes.contains { $0.figma.hasSuffix("166:147351") }, "the Connect button is probed")
 
+        try ParityOutput.writeRuntime()
         try ParityOutput.write(png: image, as: "a1-connect")
         try ParityOutput.write(json: ParityProbe.json(ref: "a1-connect", root: slot, scale: TVSnapshot.scale),
                                as: "a1-connect.probes.json")

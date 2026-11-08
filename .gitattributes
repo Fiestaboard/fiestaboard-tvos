@@ -1,0 +1,2 @@
+# Snapshot goldens are images: never diff, merge or EOL-convert them as text.
+Tests/__Snapshots__/**/*.png binary
