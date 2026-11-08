@@ -41,6 +41,10 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     private let rawMatrixSizing: String?
     public let matrixPitchMillimeters: Double?
     public let supportsMatrixSettings: Bool
+    /// What the panel's board is doing, for the viewer's status chip (A6a).
+    /// Nil on an old hub (no key), for a removed display (`status: null`), and
+    /// for a status that does not decode: the chip is never worth the panel.
+    public internal(set) var status: PanelStatus?
     public var matrixSizing: MatrixSizing? { MatrixSizing(serverValue: rawMatrixSizing) }
     public var matrixPresentation: MatrixPresentation? {
         guard renderStyle == .ledMatrix, let mode = MatrixSizing(serverValue: rawMatrixSizing) else { return nil }
@@ -79,6 +83,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         case deviceModelSpec = "device_model_spec"
         case rawMatrixSizing = "matrix_sizing"
         case matrixPitchMillimeters = "matrix_pitch_mm"
+        case status
     }
 
     public init(from decoder: Decoder) throws {
@@ -112,6 +117,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         supportsMatrixSettings = c.contains(.rawMatrixSizing) && c.contains(.matrixPitchMillimeters)
         rawMatrixSizing = try c.decodeIfPresent(String.self, forKey: .rawMatrixSizing)
         matrixPitchMillimeters = try c.decodeIfPresent(Double.self, forKey: .matrixPitchMillimeters)
+        status = (try? c.decodeIfPresent(PanelStatus.self, forKey: .status)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -136,6 +142,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         try c.encodeIfPresent(rawRenderStyle, forKey: .rawRenderStyle)
         try c.encodeIfPresent(deviceModelSpec, forKey: .deviceModelSpec)
         try c.encodeIfPresent(matrixPitchMillimeters, forKey: .matrixPitchMillimeters)
+        try c.encodeIfPresent(status, forKey: .status)
         if supportsMatrixSettings {
             try c.encode(rawMatrixSizing, forKey: .rawMatrixSizing)
         } else {
@@ -151,6 +158,129 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     /// Board pigment behind the flaps. Anything unrecognised is black.
     public var backgroundColor: BoardColor {
         boardColor.flatMap { BoardColor(rawValue: $0) } ?? .black
+    }
+}
+
+/// What drives the panel's board (hub `PanelStatus.mode`). Unknown → manual.
+public enum PanelMode: String, Codable, Equatable, Sendable {
+    case override, schedule, manual
+}
+
+/// How a silenced board behaves (hub `silence_mode`): `freeze` keeps the last
+/// frame, `indicator` shows a message, `page` shows the silence page.
+public enum SilenceMode: String, Codable, Equatable, Sendable {
+    case freeze, indicator, page
+}
+
+/// `GET /panel/{id}` → `status` (hub H13 + H1 + H2b): the facts behind the
+/// TV's read-only status chip. The copy is the TV's (`PanelStatusChip`).
+///
+/// Instants are `Date`s, never strings: the hub sends whole-second UTC
+/// (`YYYY-MM-DDTHH:MM:SS+00:00`), but any ISO 8601 offset or fraction reads,
+/// and an instant that does not parse is nil rather than an error. Every
+/// field is decode-tolerant, so a hub that learns a new mode or reason does
+/// not cost the TV its panel.
+public struct PanelStatus: Codable, Equatable, Sendable {
+    public var mode: PanelMode
+    public var scheduleEnabled: Bool
+    public var overrideActive: Bool
+    /// Nil while no override runs, and for one that holds until canceled.
+    public var overrideExpiresAt: Date?
+    /// Identifies one override run (H1).
+    public var overrideStartedAt: Date?
+    public var silenced: Bool
+    public var silencedUntil: Date?
+    /// Nil unless silenced, and for a mode this TV does not know.
+    public var silenceMode: SilenceMode?
+    public var paused: Bool
+    /// When the board next changes by the hub's own rules (H2b); nil while
+    /// paused or when nothing changes within 8 days.
+    public var nextChangeAt: Date?
+    /// `override_ends`, `schedule`, `silence_starts`, `silence_ends`,
+    /// `collection`, or a reason a newer hub adds: kept raw.
+    public var nextChangeReason: String?
+
+    public init(mode: PanelMode, scheduleEnabled: Bool, overrideActive: Bool,
+                overrideExpiresAt: Date?, overrideStartedAt: Date?,
+                silenced: Bool, silencedUntil: Date?, silenceMode: SilenceMode?,
+                paused: Bool, nextChangeAt: Date? = nil, nextChangeReason: String? = nil) {
+        self.mode = mode
+        self.scheduleEnabled = scheduleEnabled
+        self.overrideActive = overrideActive
+        self.overrideExpiresAt = overrideExpiresAt
+        self.overrideStartedAt = overrideStartedAt
+        self.silenced = silenced
+        self.silencedUntil = silencedUntil
+        self.silenceMode = silenceMode
+        self.paused = paused
+        self.nextChangeAt = nextChangeAt
+        self.nextChangeReason = nextChangeReason
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case mode
+        case scheduleEnabled = "schedule_enabled"
+        case overrideActive = "override_active"
+        case overrideExpiresAt = "override_expires_at"
+        case overrideStartedAt = "override_started_at"
+        case silenced
+        case silencedUntil = "silenced_until"
+        case silenceMode = "silence_mode"
+        case paused
+        case nextChangeAt = "next_change_at"
+        case nextChangeReason = "next_change_reason"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func flag(_ key: CodingKeys) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: key)) ?? nil) ?? false }
+        func text(_ key: CodingKeys) -> String? { (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil }
+        func instant(_ key: CodingKeys) -> Date? { text(key).flatMap(Self.parseInstant) }
+        mode = text(.mode).flatMap(PanelMode.init(rawValue:)) ?? .manual
+        scheduleEnabled = flag(.scheduleEnabled)
+        overrideActive = flag(.overrideActive)
+        overrideExpiresAt = instant(.overrideExpiresAt)
+        overrideStartedAt = instant(.overrideStartedAt)
+        silenced = flag(.silenced)
+        silencedUntil = instant(.silencedUntil)
+        silenceMode = text(.silenceMode).flatMap(SilenceMode.init(rawValue:))
+        paused = flag(.paused)
+        nextChangeAt = instant(.nextChangeAt)
+        nextChangeReason = text(.nextChangeReason)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        func instant(_ date: Date?, _ key: CodingKeys) throws {
+            try c.encode(date.map { Self.wholeSeconds.string(from: $0) }, forKey: key)
+        }
+        try c.encode(mode, forKey: .mode)
+        try c.encode(scheduleEnabled, forKey: .scheduleEnabled)
+        try c.encode(overrideActive, forKey: .overrideActive)
+        try instant(overrideExpiresAt, .overrideExpiresAt)
+        try instant(overrideStartedAt, .overrideStartedAt)
+        try c.encode(silenced, forKey: .silenced)
+        try instant(silencedUntil, .silencedUntil)
+        try c.encode(silenceMode, forKey: .silenceMode)
+        try c.encode(paused, forKey: .paused)
+        try instant(nextChangeAt, .nextChangeAt)
+        try c.encode(nextChangeReason, forKey: .nextChangeReason)
+    }
+
+    // ISO8601DateFormatter is documented thread-safe.
+    nonisolated(unsafe) private static let wholeSeconds: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    nonisolated(unsafe) private static let fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    static func parseInstant(_ text: String) -> Date? {
+        wholeSeconds.date(from: text) ?? fractional.date(from: text)
     }
 }
 

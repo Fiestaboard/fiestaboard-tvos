@@ -77,6 +77,8 @@ public enum Fiesta {
         public static let heading = Font.system(size: 38, weight: .semibold)
         public static let body = Font.system(size: 29, weight: .regular)
         public static let caption = Font.system(size: 24, weight: .regular)
+        /// 07b tvOS/Caption 1 (25 medium): the viewer overlay's subtitle.
+        public static let caption1 = Font.system(size: 25, weight: .medium)
     }
 }
 

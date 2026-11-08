@@ -1,0 +1,10 @@
+{
+  "$comment": "Where the vendored test fixtures come from. Checked by PanelStatusTests.testVendoredFixturesMatchTheirSource: re-vendor byte for byte and update the sha256, never edit the file.",
+  "panel-status-v1.json": {
+    "repo": "Fiestaboard/FiestaBoard",
+    "path": "tests/fixtures/panels/panel-status-v1.json",
+    "ref": "origin/feat/panel-next-change-h2b (H2b #2454, v11 stack #2447, unmerged)",
+    "commit": "a53903c2ffd507d0645524ca7bab2afbfa19729c",
+    "sha256": "6a4a9fa47165944be312dd39eb48d926a7d44b9c8cb795157d54fe375103601e"
+  }
+}

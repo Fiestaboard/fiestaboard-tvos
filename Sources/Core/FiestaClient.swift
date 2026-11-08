@@ -83,6 +83,31 @@ public final class FiestaClient: @unchecked Sendable {
         try await get("/panel/\(ref)")
     }
 
+    /// The panel plus the hub's clock from the same response (A6a).
+    ///
+    /// `GET /panel/{id}` is sent `Cache-Control: no-store`, so its `Date`
+    /// header is the hub's own: the status chip counts an override down on
+    /// that clock, not on a TV whose clock may be minutes out. Nil when the
+    /// header is missing or does not parse.
+    public func panelReading(ref: String) async throws -> PanelReading {
+        let (data, response) = try await exchange(method: "GET", path: "/panel/\(ref)", body: nil)
+        do {
+            return PanelReading(panel: try decoder.decode(Panel.self, from: data),
+                                hubDate: response.value(forHTTPHeaderField: "Date").flatMap(Self.httpDate))
+        } catch {
+            throw FiestaError.decoding("\(error)")
+        }
+    }
+
+    /// An HTTP `Date` (RFC 9110 IMF-fixdate, e.g. "Sun, 08 Nov 2026 02:18:00 GMT").
+    static func httpDate(_ value: String) -> Date? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f.date(from: value.trimmingCharacters(in: .whitespaces))
+    }
+
     public func frame(ref: String) async throws -> PanelFrame {
         try await get("/panel/\(ref)/frame")
     }
@@ -161,6 +186,12 @@ public final class FiestaClient: @unchecked Sendable {
 
     @discardableResult
     func send(method: String, path: String, body: [String: Any]?, deviceEndpoint: Bool = false) async throws -> Data {
+        try await exchange(method: method, path: path, body: body, deviceEndpoint: deviceEndpoint).data
+    }
+
+    /// `send`, keeping the response for its headers.
+    func exchange(method: String, path: String, body: [String: Any]?,
+                  deviceEndpoint: Bool = false) async throws -> (data: Data, response: HTTPURLResponse) {
         var request = URLRequest(url: url(for: path))
         request.httpMethod = method
         if let token = deviceToken {
@@ -206,7 +237,7 @@ public final class FiestaClient: @unchecked Sendable {
         }
         switch http.statusCode {
         case 200..<300:
-            return data
+            return (data, http)
         case 401:
             throw FiestaError.unauthorized
         case 404:

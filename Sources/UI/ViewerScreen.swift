@@ -81,10 +81,20 @@ struct ViewerScreen: View {
         .onDisappear { model?.stop() }
         .onMoveCommand { _ in remoteInteraction() }
         .onPlayPauseCommand { remoteInteraction() }
-        .onExitCommand { if app.interactWithOLED() { model?.showOverlay() } else { model?.stop(); app.showPanels() } }
+        .onExitCommand { back() }
         // The indicators are the only sign the board stopped answering, and a
         // sign is no use to VoiceOver: nothing about them takes focus.
         .onChange(of: model?.snapshot.connection) { old, new in announce(from: old, to: new) }
+    }
+
+    /// A4b: Back wakes a resting screen, then takes the overlay down, and
+    /// only then leaves the viewer.
+    private func back() {
+        switch ViewerBack.action(oledConsumed: app.interactWithOLED(), overlayVisible: model?.overlayVisible == true) {
+        case .wake: model?.showOverlay()
+        case .dismissOverlay: model?.hideOverlay()
+        case .leave: model?.stop(); app.showPanels()
+        }
     }
 
     private func bind(_ fresh: ViewerModel) {
@@ -215,12 +225,21 @@ struct ViewerScreen: View {
 
     private var overlay: some View {
         ViewerOverlay(panelName: model?.snapshot.panel?.name ?? "Panel",
+                      subtitle: overlaySubtitle,
                       onInteraction: { model?.keepOverlayAlive() },
                       onPanels: { model?.stop(); app.showPanels() },
                       onSettings: { model?.stop(); app.showSettings() },
                       onFiestaBot: app.connection.usesDeviceCredential ? nil : {
                           if app.showFiestaBot() { model?.stop() }
                       })
+    }
+
+    /// 07b `154:8173`: what the panel is, and which hub it is on.
+    private var overlaySubtitle: String? {
+        guard let panel = model?.snapshot.panel else { return nil }
+        let kind = panel.renderStyle == .ledMatrix ? "LED matrix" : "Split-flap"
+        guard let hub = app.connection.saved?.displayName, !hub.isEmpty else { return kind }
+        return "\(kind) · \(hub)"
     }
 
     /// Amber, and the words say the app is still trying: the frame on the
@@ -282,5 +301,20 @@ struct ViewerScreen: View {
         model?.dismissResizeOffer()
         model?.stop()
         app.showSettings()
+    }
+}
+
+/// What Back does in the viewer (A4b).
+enum ViewerBack: Equatable {
+    /// A resting (OLED-care) screen wakes, showing the overlay.
+    case wake
+    /// The overlay goes before the viewer does.
+    case dismissOverlay
+    /// Back to Panels.
+    case leave
+
+    static func action(oledConsumed: Bool, overlayVisible: Bool) -> ViewerBack {
+        if oledConsumed { return .wake }
+        return overlayVisible ? .dismissOverlay : .leave
     }
 }
