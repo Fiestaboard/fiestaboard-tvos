@@ -11,7 +11,10 @@ enum RenderHarness {
 
     nonisolated static let tvSize = CGSize(width: 1920, height: 1080)
 
-    static func render<V: View>(_ view: V, size: CGSize = tvSize) {
+    /// `settle` is how long the run loop turns between the two layout
+    /// passes: long enough for a `.task` and the updates it causes, such as
+    /// a `scrollTo` and the scroll geometry it reports, when a test needs them.
+    static func render<V: View>(_ view: V, size: CGSize = tvSize, settle: TimeInterval = 0.03) {
         let host = UIHostingController(rootView: view.ignoresSafeArea())
         host.view.frame = CGRect(origin: .zero, size: size)
         let window = UIWindow(frame: host.view.frame)
@@ -19,7 +22,7 @@ enum RenderHarness {
         window.isHidden = false
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.03))
+        RunLoop.current.run(until: Date().addingTimeInterval(settle))
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
         window.isHidden = true

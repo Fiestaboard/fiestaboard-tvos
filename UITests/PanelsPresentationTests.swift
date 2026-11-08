@@ -193,6 +193,72 @@ final class PanelsPresentationTests: XCTestCase {
         waitForFocus(card(0), "Up past the removed boards should reach the first row")
     }
 
+    /// Launch `count` plain split-flap panels named "<prefix> <index>".
+    private func launchPlainFixture(prefix: String, count: Int) throws -> (XCUIApplication, FixtureHTTPServer, [String]) {
+        var panels: [String] = []
+        var byID: [String: String] = [:]
+        for index in 0..<count {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+            let id = "\(prefix.lowercased())-\(index)"
+            object["id"] = id
+            object["name"] = "\(prefix) \(index)"
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            panels.append(json)
+            byID[id] = json
+        }
+        let server = try FixtureHTTPServer(frameBody: Fixtures.frameJSON,
+            panelsBody: "{\"panels\":[\(panels.joined(separator: ","))],\"total\":\(count)}", additionalPanels: byID)
+        self.server = server
+        let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"\(prefix) fixture\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
+        app.launch()
+        return (app, server, panels)
+    }
+
+    /// Down from the right column into a lone last card, with nothing
+    /// directly beneath: the row's focus section takes it. Seven panels.
+    func testRemoteCrossesFromTheRightColumnIntoALoneLastCard() throws {
+        continueAfterFailure = false
+        let (app, _, _) = try launchPlainFixture(prefix: "Lone", count: 7)
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Lone \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        XCUIRemote.shared.press(.right)
+        waitForFocus(card(1))
+        for index in [3, 5] {
+            XCUIRemote.shared.press(.down)
+            waitForFocus(card(index))
+        }
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(6), "Down from the right column should reach the lone last card")
+    }
+
+    /// A foreground refresh that moves the focused card into another row
+    /// keeps focus on that card. The card is rebuilt in its new row, and the
+    /// focus engine had moved focus to the neighbour that took its place.
+    func testARefreshThatMovesTheFocusedCardKeepsItsFocus() throws {
+        continueAfterFailure = false
+        let (app, server, panels) = try launchPlainFixture(prefix: "Shift", count: 6)
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Shift \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(2))
+        // Removing Shift 0 moves Shift 2 from row 1 (left) to row 0 (right).
+        server.updatePanels("{\"panels\":[\(panels.dropFirst().joined(separator: ","))],\"total\":5}")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: card(0))
+        XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 10), .completed, "The refresh should drop Shift 0")
+        waitForFocus(card(2), "A refresh that moves the focused card must keep the user's place")
+    }
+
     /// More panels than the thumbnail working set, mixing dense matrices and
     /// split-flap boards. Revisit evicted rows using the real remote focus engine.
     func testRemoteCanRevisitRowsBeyondThePreviewCacheCapacity() throws {

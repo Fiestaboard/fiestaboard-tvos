@@ -246,6 +246,45 @@ extension PanelsScreenTests {
         XCTAssertEqual(model.panels.count, count)
     }
 
+    /// The window follows the scroll: returning to the last panel scrolls the
+    /// grid to the bottom row, and that row's pictures are drawn while the
+    /// first row's are not. Without the scroll-geometry update the window
+    /// stays on the first rows and the last boards are blank, which every
+    /// other test missed ("Board reads:" comes from the model, not from what
+    /// is drawn).
+    func testThePreviewWindowFollowsTheScroll() async {
+        let count = 14
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(panelsList(count: count)), for: "/api/panels")
+        for _ in 0..<count { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
+        let model = PanelsModel(app: app)
+        await model.load()
+        for panel in model.panels {
+            guard case .ready = await settledPreview(model, for: panel) else {
+                return XCTFail("\(panel.id) never got a preview")
+            }
+        }
+        app.lastViewedPanelRef = "panel-13"
+        let cache = PanelPreviewImageCache()
+
+        RenderHarness.render(PanelsScreen(model: model, previewImages: cache).environment(app), settle: 0.5)
+
+        let drawn = cache.panelIDs
+        XCTAssertTrue(drawn.isSuperset(of: ["panel-12", "panel-13"]),
+                      "the row scrolled to drew \(drawn.sorted())")
+        XCTAssertFalse(drawn.contains("panel-0"), "the first row, now far above, drew: \(drawn.sorted())")
+    }
+
+    /// `PanelsScreen.cardHeight(width:)` is what the preview window counts
+    /// rows by: it must be the card's real height.
+    func testTheCardIsAsTallAsCardHeightSays() throws {
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        let host = UIHostingController(rootView: PanelCard(panel: panel, preview: .loading, action: {},
+                                                           cardWidth: PanelsScreen.maxCardWidth))
+        let size = host.sizeThatFits(in: CGSize(width: 1920, height: 4000))
+        XCTAssertEqual(size.height, PanelsScreen.cardHeight(width: PanelsScreen.maxCardWidth), accuracy: 0.5)
+    }
+
     /// The rows the viewport touches, and one more each side.
     func testPreviewRowsAreTheViewportAndOneRowEitherSide() {
         let card: CGFloat = 616, pitch = card + PanelsScreen.gridSpacing, inset: CGFloat = 44
