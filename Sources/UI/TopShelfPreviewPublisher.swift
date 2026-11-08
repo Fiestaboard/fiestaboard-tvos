@@ -15,6 +15,8 @@ enum TopShelfPreviewPublisher {
             let panel: Panel
             let state: PanelPreviewState
             let image: Data
+            /// A7: the @2x hero.
+            let image2x: Data
         }
         var images: [String: Entry] = [:]
         private var pending: Request?
@@ -88,31 +90,40 @@ enum TopShelfPreviewPublisher {
                    case .ready = entry.state {
                     state = entry.state
                 }
-                let image: Data?
+                let encoded: (Data, Data)?
                 if let entry = images[panel.id], entry.panel == panel, entry.state == state {
-                    image = entry.image
+                    encoded = (entry.image, entry.image2x)
                 } else {
-                    let rendered: CGImage?
+                    let rendered: TopShelfPreviewRenderer.Hero?
                     let unavailable: Bool
                     if case .ready(let preview) = state {
                         unavailable = preview.rows <= 0 || preview.cols <= 0
-                        rendered = TopShelfPreviewRenderer.image(panel: panel, preview: preview)
+                        rendered = TopShelfPreviewRenderer.hero(panel: panel, preview: preview)
                     } else {
                         unavailable = true
-                        rendered = TopShelfPreviewRenderer.unavailable
+                        rendered = TopShelfPreviewRenderer.unavailableHero
                     }
                     guard let rendered else {
                         log.error("Could not render a Top Shelf preview.")
                         continue
                     }
-                    image = await writer.encode(rendered, unavailable: unavailable)
+                    encoded = await writer.encode(rendered.oneX, rendered.twoX, unavailable: unavailable)
                     guard self.generation == generation, request.isAuthorized else { return }
                     // Reuse completed encoding if the pending request still
                     // wants it, but never resurrect a cleared connection.
-                    if let image { images[panel.id] = .init(panel: panel, state: state, image: image) }
+                    if let encoded {
+                        images[panel.id] = .init(panel: panel, state: state, image: encoded.0, image2x: encoded.1)
+                    }
                 }
                 guard self.revision == revision else { return }
-                if let image { snapshots.append(.init(panelID: panel.id, name: panel.name, imageData: image)) }
+                if let encoded {
+                    // A7: the status line is formatted here, on the app side;
+                    // the extension only reads the string and its timestamp.
+                    let line = TopShelfStatusLine.make(request.statuses[panel.id])
+                    snapshots.append(.init(panelID: panel.id, name: panel.name, imageData: encoded.0,
+                                           imageData2x: encoded.1, statusLine: line,
+                                           statusAt: line == nil ? nil : request.now))
+                }
             }
             guard self.revision == revision, request.isAuthorized else { return }
             guard let changed = await writer.replace(snapshots, directory: request.directory) else { return }
@@ -132,6 +143,10 @@ enum TopShelfPreviewPublisher {
     fileprivate struct Request {
         let panels: [Panel]
         let previews: [String: PanelPreviewState]
+        /// A7: per-panel status for the carousel's contextTitle. Empty until
+        /// A6a's status decoding lands (see `TopShelfStatus`).
+        let statuses: [String: TopShelfStatus]
+        let now: Date
         let connection: ConnectionStore
         let client: FiestaClient?
         let directory: URL
@@ -145,10 +160,12 @@ enum TopShelfPreviewPublisher {
 
     @discardableResult
     static func publish(panels: [Panel], previews: [String: PanelPreviewState] = [:],
+                        statuses: [String: TopShelfStatus] = [:], now: Date = Date(),
                         connection: ConnectionStore, store: TopShelfSnapshotStore,
                         cache: Cache? = nil) -> Task<Void, Never>? {
         guard connection.saved != nil, !connection.isSignedOut else { return nil }
-        return (cache ?? Cache()).enqueue(Request(panels: panels, previews: previews, connection: connection,
+        return (cache ?? Cache()).enqueue(Request(panels: panels, previews: previews, statuses: statuses, now: now,
+                                     connection: connection,
                                      client: connection.client, directory: store.directory))
     }
 
@@ -165,16 +182,23 @@ enum TopShelfPreviewPublisher {
             let panelID: String
             let name: String
             let imageData: Data
+            let imageData2x: Data
+            let statusLine: String?
+            let statusAt: Date?
         }
         private let encoder: @Sendable (CGImage) -> Data?
         init(encode: @escaping @Sendable (CGImage) -> Data?) { encoder = encode }
-        private var unavailableImage: Data?
-        func encode(_ image: CGImage, unavailable: Bool) -> Data? {
-            if unavailable, let unavailableImage { return unavailableImage }
-            let data = encoder(image)
-            if data == nil { log.error("Could not encode a Top Shelf preview.") }
-            if unavailable { unavailableImage = data }
-            return data
+        private var unavailableImages: (Data, Data)?
+        /// Both scales, or nil if either fails: a carousel item with a
+        /// missing scale would show Home's placeholder on some TVs.
+        func encode(_ oneX: CGImage, _ twoX: CGImage, unavailable: Bool) -> (Data, Data)? {
+            if unavailable, let unavailableImages { return unavailableImages }
+            guard let one = encoder(oneX), let two = encoder(twoX) else {
+                log.error("Could not encode a Top Shelf preview.")
+                return nil
+            }
+            if unavailable { unavailableImages = (one, two) }
+            return (one, two)
         }
 
         nonisolated static func png(_ image: CGImage) -> Data? {
@@ -189,7 +213,8 @@ enum TopShelfPreviewPublisher {
         func replace(_ previews: [Preview], directory: URL) -> Bool? {
             do {
                 return try TopShelfSnapshotStore(directory: directory).replace(previews.map {
-                    .init(panelID: $0.panelID, name: $0.name, imageData: $0.imageData)
+                    .init(panelID: $0.panelID, name: $0.name, imageData: $0.imageData,
+                          imageData2x: $0.imageData2x, statusLine: $0.statusLine, statusAt: $0.statusAt)
                 })
             } catch {
                 log.error("Publishing Top Shelf items failed: \(error.localizedDescription, privacy: .public)")

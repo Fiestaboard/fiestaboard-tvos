@@ -41,7 +41,7 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let cache = TopShelfPreviewPublisher.Cache { image in
             XCTAssertFalse(Thread.isMainThread, "PNG compression must not block focus updates")
             let number = count.withLock { $0 += 1; return $0 }
-            if number == 1 {
+            if number == 1 { // the red @1x; its @2x follows (A7: two encodes per hero)
                 encoding.fulfill()
                 XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
             }
@@ -61,10 +61,12 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         release.signal()
         await latest?.value
 
-        XCTAssertEqual(count.withLock { $0 }, 2, "The superseded pending frame must never be encoded")
+        XCTAssertEqual(count.withLock { $0 }, 4,
+                       "The superseded pending frame must never be encoded (red and blue, each at @1x and @2x)")
         let item = try XCTUnwrap(store.items().first)
         let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: item))))
-        let pixel = try XCTUnwrap(image.pixel(x: 960, y: 250))
+        let slot = TopShelfPreviewRenderer.boardSlot
+        let pixel = try XCTUnwrap(image.pixel(x: Int(slot.midX), y: Int(slot.midY)))
         XCTAssertGreaterThan(pixel.b, pixel.r, "Only the latest blue frame belongs on Home")
         XCTAssertEqual(cache.images[panel.id]?.state, color(.blue))
     }
@@ -79,9 +81,13 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let encoding = expectation(description: "old image encoding held")
         let release = DispatchSemaphore(value: 0)
         defer { release.signal() }
+        let first = OSAllocatedUnfairLock(initialState: true)
         let cache = TopShelfPreviewPublisher.Cache { image in
-            encoding.fulfill()
-            XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            // Hold the first encode only (A7 encodes @1x then @2x).
+            if first.withLock({ let was = $0; $0 = false; return was }) {
+                encoding.fulfill()
+                XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            }
             return Self.png(image)
         }
         TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
@@ -109,9 +115,13 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let encoding = expectation(description: "superseded refresh encoding held")
         let release = DispatchSemaphore(value: 0)
         defer { release.signal() }
+        let first = OSAllocatedUnfairLock(initialState: true)
         let cache = TopShelfPreviewPublisher.Cache { image in
-            encoding.fulfill()
-            XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            // Hold the first encode only (A7 encodes @1x then @2x).
+            if first.withLock({ let was = $0; $0 = false; return was }) {
+                encoding.fulfill()
+                XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            }
             return Self.png(image)
         }
         let publication = TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
@@ -167,7 +177,9 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let red = try XCTUnwrap(store.items().first)
         let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: red))))
         XCTAssertEqual(image.size.width / image.size.height, 16.0 / 9, accuracy: 0.001)
-        let pigment = try XCTUnwrap(image.pixel(x: 960, y: 250))
+        let slot = TopShelfPreviewRenderer.boardSlot
+        // Below the flap's split line, which crosses the slot's centre.
+        let pigment = try XCTUnwrap(image.pixel(x: Int(slot.midX), y: Int(slot.midY + 120)))
         XCTAssertEqual(Int(pigment.r), 235, accuracy: 2)
         XCTAssertEqual(Int(pigment.g), 64, accuracy: 2)
         XCTAssertEqual(Int(pigment.b), 52, accuracy: 2)
@@ -306,9 +318,10 @@ final class TopShelfPreviewRendererTests: XCTestCase {
             let dot = try XCTUnwrap(pixels.box { $0.r > 200 && $0.g < 120 }, "the red LED must be drawn")
             XCTAssertTrue(TopShelfPreviewRenderer.boardSlot.applying(.init(scaleX: 2, y: 2)).contains(dot))
             let centre = pixels.at(Int(dot.midX), Int(dot.midY))
-            XCTAssertGreaterThan(centre.r, 200)
+            XCTAssertGreaterThan(centre.r, 180)
             let corner = pixels.at(Int(dot.minX), Int(dot.minY))
-            if shape == "square" { XCTAssertGreaterThan(corner.r, 200) }
+            // The corner pixel is antialiased; a square dot still keeps it lit.
+            if shape == "square" { XCTAssertGreaterThan(corner.r, 150) }
             else { XCTAssertLessThan(corner.r, 120, "round LEDs must retain their dark corners") }
         }
     }

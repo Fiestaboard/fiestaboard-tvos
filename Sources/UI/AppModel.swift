@@ -235,12 +235,18 @@ public final class AppModel {
     /// Exactly one path component, and only for a board this TV is still
     /// signed in to: the carousel can outlive the connection it was built
     /// from, and Home will happily send a stale link.
+    /// A7: the carousel's More Info sends `fiestaboard://panels`, under the
+    /// same guard.
     public func openTopShelfURL(_ url: URL) {
         let components = url.path.split(separator: "/")
-        guard url.scheme == "fiestaboard", url.host == "panel",
-              components.count == 1,
+        guard url.scheme == "fiestaboard",
               connection.saved != nil, connection.client != nil,
               !connection.isSignedOut else { return }
+        if url.host == "panels" {
+            if components.isEmpty { showPanels() }
+            return
+        }
+        guard url.host == "panel", components.count == 1 else { return }
         // No republish here. Opening a Top Shelf card brings the app to the
         // foreground, and the foreground hook above already refreshes — doing
         // it again on a cold launch into a default panel fired two panel
