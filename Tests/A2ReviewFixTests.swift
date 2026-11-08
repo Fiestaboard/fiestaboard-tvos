@@ -84,3 +84,26 @@ final class A2ReviewFixTests: XCTestCase {
                        "This code was canceled or already used. Choose New code.")
     }
 }
+
+/// DD13: the activation address keeps a non-default port (A2 `166:147391`
+/// and its fallback `249:110254` show `fiestapi.local:4420/activate`) and
+/// drops only what a browser fills in itself: `http://`, `:80`, `:443`.
+/// Separate from DD12, which hides 4420 only on the hub card.
+final class ActivationAddressTests: XCTestCase {
+    func testTheHubPortIsShown() {
+        XCTAssertEqual(TVCopy.DeviceSignIn.activationAddress(URL(string: "http://fiestapi.local:4420/activate")!),
+                       "fiestapi.local:4420/activate")
+    }
+
+    func testPort80ReadsHostSlashActivate() {
+        XCTAssertEqual(TVCopy.DeviceSignIn.activationAddress(URL(string: "http://fiestapi.local:80/activate")!),
+                       "fiestapi.local/activate")
+        XCTAssertEqual(TVCopy.DeviceSignIn.activationAddress(URL(string: "http://fiestapi.local/activate")!),
+                       "fiestapi.local/activate")
+    }
+
+    func testHTTPSKeepsItsSchemeAndDropsOnly443() {
+        XCTAssertEqual(TVCopy.DeviceSignIn.activationAddress(URL(string: "https://hub.example.com:443/activate")!),
+                       "https://hub.example.com/activate")
+    }
+}
