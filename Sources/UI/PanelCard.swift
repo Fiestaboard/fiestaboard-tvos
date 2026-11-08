@@ -22,12 +22,20 @@ struct PanelCard: View {
     /// the expensive part of a card, so the browser builds every card but
     /// draws only the pictures near the screen (`PanelsScreen.grid`).
     var showsPreview = true
+    /// Shared by the browser's cards, so a summary isn't rebuilt on every
+    /// body run (`PanelBoardMessageCache`).
+    var boardMessages: PanelBoardMessageCache? = nil
 
     var body: some View {
+        #if DEBUG
+        let _ = PanelNavigationProbe.shared.event("card.body")
+        #endif
+        // Once per body: the subtitle and the label both read it.
+        let message = boardMessage
         Button(action: action) {
             VStack(alignment: .leading, spacing: 0) {
                 previewArea
-                details
+                details(subtitle: subtitle(message: message))
             }
             .frame(width: cardWidth)
             .background(Fiesta.Colors.surface)
@@ -49,7 +57,7 @@ struct PanelCard: View {
         .buttonStyle(PanelCardButtonStyle())
         .focusEffectDisabled()
         .disabled(panel.boardMissing)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel(message: message))
         .accessibilityHint("Shows this panel full-screen.")
     }
 
@@ -102,7 +110,7 @@ struct PanelCard: View {
 
     // MARK: Words
 
-    private var details: some View {
+    private func details(subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(displayKind, systemImage: panel.renderStyle == .ledMatrix ? "circle.grid.3x3.fill" : "rectangle.split.3x3.fill")
                 .font(Fiesta.Text.caption)
@@ -125,7 +133,11 @@ struct PanelCard: View {
         return panel.matrixDisplay.appearance?.pixelShape == "round" ? "LED matrix · Round" : "LED matrix · Square"
     }
 
-    var subtitle: String {
+    var subtitle: String { subtitle(message: boardMessage) }
+
+    var accessibilityLabel: String { accessibilityLabel(message: boardMessage) }
+
+    private func subtitle(message boardMessage: String?) -> String {
         if panel.boardMissing { return panel.gridDescription }
         switch preview {
         case .loading: return "Loading preview…"
@@ -134,7 +146,7 @@ struct PanelCard: View {
         }
     }
 
-    var accessibilityLabel: String {
+    private func accessibilityLabel(message boardMessage: String?) -> String {
         var parts: [String] = [panel.name]
         if panel.boardMissing {
             parts.append("Board removed. This panel can't be shown.")
@@ -151,11 +163,19 @@ struct PanelCard: View {
     /// exposing server colour tokens such as `{63}` in the source message.
     private var boardMessage: String? {
         guard case .ready(let ready) = preview else { return nil }
+        guard let boardMessages else { return Self.boardMessage(panel: panel, ready: ready) }
+        return boardMessages.message(for: panel, preview: ready) { Self.boardMessage(panel: panel, ready: ready) }
+    }
+
+    private static func boardMessage(panel: Panel, ready: PanelPreview) -> String? {
         let message = ready.message?.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") ?? ""
         if panel.renderStyle == .ledMatrix {
             // Server text already has priority in MatrixRaster.spoken.
             // Avoid rebuilding all pixels just to read that same message.
             if !message.isEmpty { return message }
+            #if DEBUG
+            PanelNavigationProbe.shared.event("card.raster")
+            #endif
             let raster = MatrixRaster.make(panel: panel, cells: ready.cells, richCells: ready.richCells, layers: ready.layers)
             guard !message.isEmpty || !raster.text.isEmpty || raster.pixels.contains(where: { $0 != 0 }) else { return nil }
             return raster.spoken(message: ready.message)
@@ -196,5 +216,20 @@ private struct PanelCardButtonStyle: ButtonStyle {
                 .opacity(isPressed ? 0.9 : 1)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isFocused)
         }
+    }
+}
+
+/// Lets the browser skip a card whose inputs haven't changed.
+///
+/// Every card is in the view tree (`PanelsScreen.grid`), and a focus change
+/// re-runs the screen's body. SwiftUI can't compare the `action` closure, so
+/// without this every card body re-ran on every remote press. The action
+/// opens `panel`, so comparing the panel covers it; the caches are compared
+/// by identity.
+extension PanelCard: @MainActor Equatable {
+    static func == (lhs: PanelCard, rhs: PanelCard) -> Bool {
+        lhs.panel == rhs.panel && lhs.preview == rhs.preview && lhs.cardWidth == rhs.cardWidth
+            && lhs.showsPreview == rhs.showsPreview
+            && lhs.previewImages === rhs.previewImages && lhs.boardMessages === rhs.boardMessages
     }
 }

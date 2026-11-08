@@ -5,13 +5,16 @@ struct PanelsScreen: View {
     @State private var model: PanelsModel?
     @State private var restoredInitialFocus = false
     @State private var previewImages: PanelPreviewImageCache
+    @State private var boardMessages = PanelBoardMessageCache()
     /// Grid rows whose board pictures are drawn; nil until the scroll view
     /// first reports its geometry (see `previewRows`).
     @State private var previewWindow: Range<Int>?
+    /// The focused card a refresh moved into another row, while focus is
+    /// owed back to it (see `onChange(of: panelIDs)`).
+    @State private var refocusPanel: String?
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
-    @FocusState private var settingsFocused: Bool
     /// The scope `prefersDefaultFocus` is answered in.
     @Namespace private var gridScope
 
@@ -52,11 +55,29 @@ struct PanelsScreen: View {
             PanelNavigationProbe.shared.start()
             #endif
         }
-        .onChange(of: focusedPanel) { _, id in
-            #if DEBUG
-            PanelNavigationProbe.shared.event("focus.changed", index: panelIDs.firstIndex(of: id ?? "") ?? -1)
-            #endif
+        .onChange(of: panelIDs) { old, new in
+            // A card that changes row is rebuilt there (the rows carry the
+            // focus sections), so the focus engine hands its focus to the
+            // neighbour that took its place. Owe focus back to it. Only when
+            // a card had focus: a refresh never takes it from Settings.
+            guard let id = focusedPanel, let from = old.firstIndex(of: id), let to = new.firstIndex(of: id),
+                  from / 2 != to / 2,
+                  model?.panels.first(where: { $0.id == id })?.boardMissing == false else { return }
+            refocusPanel = id
         }
+        .onChange(of: focusedPanel) { _, id in
+            // The engine moves focus off the rebuilt card, through nothing,
+            // to its neighbour. At the first card it lands on, give focus
+            // back, once.
+            guard let owed = refocusPanel, let id else { return }
+            refocusPanel = nil
+            if id != owed { focusedPanel = owed }
+        }
+        #if DEBUG
+        // In a child, so that reading focus doesn't make this whole screen,
+        // and with it every card body, re-run on each remote press.
+        .background { FocusChangeProbe(focus: $focusedPanel, ids: panelIDs) }
+        #endif
         .task {
             // Only the screen's own model is loaded here. Reloading an
             // injected one overwrote the state a render test had set up
@@ -73,6 +94,8 @@ struct PanelsScreen: View {
             #endif
             model?.stopPreviews()
             previewImages.removeAll()
+            boardMessages.removeAll()
+            refocusPanel = nil
         }
     }
 
@@ -110,7 +133,6 @@ struct PanelsScreen: View {
                 Label(TVCopy.Panels.settings, systemImage: "gearshape")
             }
             .font(Fiesta.Text.body)
-            .focused($settingsFocused)
 
         }
     }
@@ -250,8 +272,9 @@ struct PanelsScreen: View {
     ///
     /// This was a `LazyVGrid`, whose rows below the viewport aren't views
     /// until they scroll in. Down at that boundary, under CPU load, found no
-    /// card beneath: focus fell to nothing, and tvOS then ignored focus
-    /// requests for seconds (`program/status/tv-panels-flake.md`). A card
+    /// card beneath: focus fell to nothing (in the native move, or in the
+    /// app's fallback racing it), and tvOS then ignored focus requests for
+    /// seconds (`program/status/tv-panels-flake.md`). A card
     /// without its picture costs a few text views, so all of them are here
     /// for the focus engine to find. The picture is what is expensive, so
     /// only rows within `previewLookahead` of the viewport draw one, which
@@ -314,6 +337,11 @@ struct PanelsScreen: View {
     }
 
     /// A card's height at `width`: its 16:9 picture and the words under it.
+    ///
+    /// `previewRows` derives the row pitch from this, so it must follow
+    /// `PanelCard`'s real height. When A5 changes the card (07b's 640 pt
+    /// height, the `.card` lift), change this with it, or the preview window
+    /// drifts by a row. `testTheCardIsAsTallAsCardHeightSays` pins the two.
     static func cardHeight(width: CGFloat) -> CGFloat {
         width * 9 / 16 + PanelCard.detailHeight
     }
@@ -336,7 +364,9 @@ struct PanelsScreen: View {
         PanelCard(panel: panel,
                   preview: model?.previewState(for: panel) ?? .loading,
                   action: { app.openPanel(ref: panel.id) }, cardWidth: width,
-                  previewImages: previewImages, showsPreview: showsPreview)
+                  previewImages: previewImages, showsPreview: showsPreview,
+                  boardMessages: boardMessages)
+        .equatable()
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
     }
@@ -398,3 +428,18 @@ struct PanelGridRow: Layout {
         subviews.prefix(2).map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
     }
 }
+
+#if DEBUG
+/// Records each card focus change for `PanelNavigationProbe`.
+private struct FocusChangeProbe: View {
+    let focus: FocusState<String?>.Binding
+    let ids: [String]
+
+    var body: some View {
+        Color.clear
+            .onChange(of: focus.wrappedValue) { _, id in
+                PanelNavigationProbe.shared.event("focus.changed", index: ids.firstIndex(of: id ?? "") ?? -1)
+            }
+    }
+}
+#endif
