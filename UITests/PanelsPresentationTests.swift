@@ -96,10 +96,9 @@ final class PanelsPresentationTests: XCTestCase {
                       "A refreshed panel order must not steal intentional focus from Settings")
     }
 
-    /// More panels than the thumbnail working set, mixing dense matrices and
-    /// split-flap boards. Revisit evicted rows using the real remote focus engine.
-    func testRemoteCanRevisitRowsBeyondThePreviewCacheCapacity() throws {
-        continueAfterFailure = false
+    /// Fourteen panels, mixing dense matrices and split-flap boards: more
+    /// than the thumbnail working set (`PanelPreviewImageCache`, 12).
+    private func launchStressFixture() throws -> XCUIApplication {
         var panels: [String] = []
         var byID: [String: String] = [:]
         for index in 0..<14 {
@@ -127,6 +126,78 @@ final class PanelsPresentationTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
         app.launch()
+        return app
+    }
+
+    /// Every card is a view, and so a focus target, before its row is ever
+    /// scrolled to. In a `LazyVGrid` the rows below the viewport didn't exist
+    /// yet: under CPU load, Down at that boundary found nothing, focus fell
+    /// to nothing, and tvOS then ignored focus requests for seconds
+    /// (`program/status/tv-panels-flake.md`). Deterministic: at launch the
+    /// last row is several screens below the viewport.
+    func testEveryCardIsAFocusTargetBeforeItsRowIsScrolledTo() throws {
+        continueAfterFailure = false
+        let app = try launchStressFixture()
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Stress \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        for index in 0..<14 {
+            XCTAssertTrue(card(index).exists, "Stress \(index) must exist before its row is scrolled to")
+        }
+        XCTAssertGreaterThan(card(13).frame.minY, app.frame.maxY,
+                             "The last row should start below the screen, or this proves nothing")
+    }
+
+    /// The native focus engine, with no fallback of the app's, crosses the
+    /// grid where nothing sits directly beneath: past a column of removed
+    /// boards, and from the right column into an odd last row. Rows:
+    /// [0, 1], [2 removed, 3 removed], [4, 5 removed], [6].
+    func testRemoteCrossesRemovedBoardsAndReachesAnOddLastRow() throws {
+        continueAfterFailure = false
+        var panels: [String] = []
+        var byID: [String: String] = [:]
+        for index in 0..<7 {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+            let id = "odd-\(index)"
+            object["id"] = id
+            object["name"] = "Odd \(index)"
+            object["board_missing"] = [2, 3, 5].contains(index)
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            panels.append(json)
+            byID[id] = json
+        }
+        let server = try FixtureHTTPServer(frameBody: Fixtures.frameJSON,
+            panelsBody: "{\"panels\":[\(panels.joined(separator: ","))],\"total\":7}", additionalPanels: byID)
+        self.server = server
+        let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Odd fixture\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
+        app.launch()
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Odd \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        XCUIRemote.shared.press(.right)
+        waitForFocus(card(1))
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(4), "Down past two removed boards should reach the next card")
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(6), "Down should reach the odd last row")
+        XCUIRemote.shared.press(.up)
+        waitForFocus(card(4))
+        XCUIRemote.shared.press(.up)
+        waitForFocus(card(0), "Up past the removed boards should reach the first row")
+    }
+
+    /// More panels than the thumbnail working set, mixing dense matrices and
+    /// split-flap boards. Revisit evicted rows using the real remote focus engine.
+    func testRemoteCanRevisitRowsBeyondThePreviewCacheCapacity() throws {
+        continueAfterFailure = false
+        let app = try launchStressFixture()
         func card(_ index: Int) -> XCUIElement {
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Stress \(index),")).firstMatch
         }
@@ -230,7 +301,7 @@ final class PanelsPresentationTests: XCTestCase {
     }
 
     /// Remote presses can return while tvOS is still transferring focus and
-    /// scrolling a lazy row into view. Assert the eventual target, without
+    /// scrolling the next row into view. Assert the eventual target, without
     /// issuing extra presses that could hide a navigation regression.
     private func waitForFocus(_ element: XCUIElement, _ message: String = "Expected remote focus",
                               file: StaticString = #filePath, line: UInt = #line) {
