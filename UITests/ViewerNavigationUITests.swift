@@ -10,7 +10,7 @@ final class ViewerNavigationUITests: XCTestCase {
         super.tearDown()
     }
 
-    private func launchLoadedViewer() -> XCUIApplication {
+    private func launchLoadedViewer(extraArguments: [String] = []) -> XCUIApplication {
         let frameLoaded = expectation(description: "The viewer requested its frame")
         let server = try! FixtureHTTPServer(onFrame: { frameLoaded.fulfill() })
         self.server = server
@@ -22,7 +22,7 @@ final class ViewerNavigationUITests: XCTestCase {
             .map { String(format: "%02x", $0) }
             .joined()
         app.launchArguments = ["-fiestaboard.connection", "<\(encodedConnection)>",
-                               "-fiestaboard.signedOut", "NO"]
+                               "-fiestaboard.signedOut", "NO"] + extraArguments
         app.launch()
 
         XCTAssertFalse(app.staticTexts["Panels"].exists, "The saved default panel should start on the viewer")
@@ -120,5 +120,77 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertLessThan(Int(pixel[0]), 20, "the empty board should remain OLED black when focused")
         XCTAssertLessThan(Int(pixel[1]), 20)
         XCTAssertLessThan(Int(pixel[2]), 20)
+    }
+
+    // MARK: A4b — the glass overlay
+
+    /// Back takes the overlay down first; only a second Back leaves.
+    func testBackDismissesTheOverlayBeforeLeavingTheViewer() {
+        let app = launchLoadedViewer()
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.buttons["Panels"].waitForNonExistence(timeout: 3), "Back should dismiss the overlay")
+        XCTAssertFalse(app.staticTexts["Panels"].exists, "…and stay on the viewer")
+        XCTAssertEqual(app.state, .runningForeground)
+
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5), "a second Back leaves for Panels")
+    }
+
+    private struct ProbeExport: Decodable {
+        struct Node: Decodable { let id: String; let frame: CGRect }
+        let nodes: [Node]
+    }
+
+    /// XCUIScreen shots of the overlay up, per 07b material (DD4), with the
+    /// bar's registry frame checked against A4 (80, 60, 1760).
+    private func overlayShot(material: String, variant: String, name: String) throws {
+        let probeURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("viewer-probes-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: probeURL) }
+        let app = launchLoadedViewer(extraArguments: ["-fiestaboard.viewerMaterial", material,
+                                                      "-fiestaboard.figmaProbeOut", probeURL.path])
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        Thread.sleep(forTimeInterval: 0.6) // the fade-in and the material settle
+
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        var nodes: [String: CGRect] = [:]
+        for _ in 0..<50 {
+            if let data = try? Data(contentsOf: probeURL),
+               let export = try? JSONDecoder().decode(ProbeExport.self, from: data) {
+                nodes = Dictionary(export.nodes.map { ($0.id, $0.frame) }, uniquingKeysWith: { $1 })
+                if nodes[variant] != nil { break }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        let bar = try XCTUnwrap(nodes["I166:191865;149:182603;166:193875"], "the overlay bar registered")
+        XCTAssertEqual(bar.minX, 80, accuracy: 1)
+        XCTAssertEqual(bar.minY, 60, accuracy: 1)
+        XCTAssertEqual(bar.width, 1760, accuracy: 1)
+        XCTAssertEqual(nodes[variant], bar, "drawn as 07b \(variant)")
+    }
+
+    func testOverlayShotLiquidGlass() throws {
+        try overlayShot(material: "glass", variant: "154:8170", name: "Viewer overlay — Liquid Glass (154:8170)")
+    }
+
+    /// Reduce Transparency on (forced: the simulator setting can't be
+    /// toggled from XCUITest). Off is the glass shot above.
+    func testOverlayShotReduceTransparency() throws {
+        try overlayShot(material: "opaque", variant: "250:110540", name: "Viewer overlay — Reduce Transparency (250:110540)")
+    }
+
+    func testOverlayShotRegularMaterialFallback() throws {
+        try overlayShot(material: "regular", variant: "250:110532", name: "Viewer overlay — pre-tvOS 26 fallback (250:110532)")
     }
 }
