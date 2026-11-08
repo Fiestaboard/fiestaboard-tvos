@@ -32,10 +32,20 @@ public enum DeviceName {
     }
 
     /// A name counts as user-assigned only when it is non-empty after
-    /// sanitising and isn't the model name.
+    /// sanitising and isn't a model name: the model ("Apple TV") or a
+    /// generic hardware name such as "Apple TV 4K (4th generation)", which
+    /// the simulator reports and which DD3 must not promise.
     public static func choose(system: String?, model: String) -> DeviceNameChoice {
         let name = sanitize(system ?? "")
-        guard !name.isEmpty, name.caseInsensitiveCompare(model) != .orderedSame else { return .fallback }
+        guard !name.isEmpty, !isModelName(name, model: model) else { return .fallback }
         return .assigned(name)
+    }
+
+    /// "Apple TV", "Apple TV 4K", "Apple TV HD", optionally followed by
+    /// parenthesised details ("(4th generation)", "(at 1080p)").
+    static func isModelName(_ name: String, model: String) -> Bool {
+        if name.caseInsensitiveCompare(model) == .orderedSame { return true }
+        let generic = #"^apple tv( 4k| hd)?( \([^)]*\))*$"#
+        return name.lowercased().range(of: generic, options: .regularExpression) != nil
     }
 }
