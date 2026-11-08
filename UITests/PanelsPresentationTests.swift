@@ -273,6 +273,13 @@ final class PanelsPresentationTests: XCTestCase {
                     predicate: NSPredicate(format: "label CONTAINS %@", "Board reads:"), object: card(item))
                 XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
                                "Navigation must exercise loaded previews, not placeholders")
+                // "Board reads:" comes from the model; this is the picture
+                // itself, which only rows near the viewport draw. A preview
+                // window that stopped following the scroll leaves it unset.
+                let drawn = XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "value == %@", "Preview drawn"), object: card(item))
+                XCTAssertEqual(XCTWaiter.wait(for: [drawn], timeout: 5), .completed,
+                               "Stress \(item)'s board picture should be drawn once its row is on screen")
             }
         }
         XCTAssertTrue(card(0).waitForExistence(timeout: 15))

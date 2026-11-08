@@ -59,6 +59,9 @@ struct PanelCard: View {
         .disabled(panel.boardMissing)
         .accessibilityLabel(accessibilityLabel(message: message))
         .accessibilityHint("Shows this panel full-screen.")
+        #if DEBUG
+        .modifier(DrawnPreviewMarker(drawn: showsPreview && !panel.boardMissing && preview.isReady))
+        #endif
     }
 
     // MARK: Picture
@@ -193,6 +196,24 @@ struct PanelCard: View {
         return BoardSpeech.spoken(message: hasContent ? nil : ready.message, cells: ready.cells)
     }
 }
+
+#if DEBUG
+/// See `PanelNavigationProbe.marksDrawnPreviews`.
+private struct DrawnPreviewMarker: ViewModifier {
+    let drawn: Bool
+
+    // One structure whatever `drawn` is: an `if` here rebuilt the card,
+    // and dropped its focus, whenever its row entered or left the window.
+    func body(content: Content) -> some View {
+        content.accessibilityValue(PanelNavigationProbe.marksDrawnPreviews && drawn
+                                   ? PanelNavigationProbe.drawnPreviewValue : "")
+    }
+}
+
+private extension PanelPreviewState {
+    var isReady: Bool { if case .ready = self { true } else { false } }
+}
+#endif
 
 private struct PanelCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

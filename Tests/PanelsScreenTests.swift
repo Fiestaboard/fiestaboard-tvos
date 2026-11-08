@@ -246,38 +246,6 @@ extension PanelsScreenTests {
         XCTAssertEqual(model.panels.count, count)
     }
 
-    /// The window follows the scroll: returning to the last panel scrolls the
-    /// grid to the bottom row, and that row's pictures are drawn. (Whether
-    /// the first row drew before the scroll landed depends on the machine's
-    /// speed, so it isn't asserted.) Without the scroll-geometry update the window
-    /// stays on the first rows and the last boards are blank, which every
-    /// other test missed ("Board reads:" comes from the model, not from what
-    /// is drawn).
-    func testThePreviewWindowFollowsTheScroll() async {
-        let count = 14
-        let app = await makeApp()
-        StubURLProtocol.enqueue(.json(panelsList(count: count)), for: "/api/panels")
-        for _ in 0..<count { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
-        let model = PanelsModel(app: app)
-        await model.load()
-        for panel in model.panels {
-            guard case .ready = await settledPreview(model, for: panel) else {
-                return XCTFail("\(panel.id) never got a preview")
-            }
-        }
-        app.lastViewedPanelRef = "panel-13"
-        let cache = PanelPreviewImageCache()
-
-        // Until the last row has drawn, or 10 s: the mutant never draws it.
-        RenderHarness.render(PanelsScreen(model: model, previewImages: cache).environment(app), timeout: 10) {
-            cache.panelIDs.isSuperset(of: ["panel-12", "panel-13"])
-        }
-
-        let drawn = cache.panelIDs
-        XCTAssertTrue(drawn.isSuperset(of: ["panel-12", "panel-13"]),
-                      "the row scrolled to drew \(drawn.sorted())")
-    }
-
     /// `PanelsScreen.cardHeight(width:)` is what the preview window counts
     /// rows by: it must be the card's real height.
     func testTheCardIsAsTallAsCardHeightSays() throws {

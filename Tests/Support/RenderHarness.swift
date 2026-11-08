@@ -26,28 +26,6 @@ enum RenderHarness {
         window.rootViewController = nil
     }
 
-    /// Host `view` and turn the run loop, laying out each turn, until
-    /// `done()` holds or `timeout` passes. For effects that arrive over
-    /// several updates (a `.task`, a `scrollTo`, the scroll geometry it
-    /// reports): waiting on the outcome, not a guessed duration, keeps the
-    /// test independent of the machine's speed.
-    static func render<V: View>(_ view: V, size: CGSize = tvSize, timeout: TimeInterval,
-                                until done: () -> Bool) {
-        let host = UIHostingController(rootView: view.ignoresSafeArea())
-        host.view.frame = CGRect(origin: .zero, size: size)
-        let window = UIWindow(frame: host.view.frame)
-        window.rootViewController = host
-        window.isHidden = false
-        let deadline = Date().addingTimeInterval(timeout)
-        repeat {
-            host.view.setNeedsLayout()
-            host.view.layoutIfNeeded()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-        } while !done() && Date() < deadline
-        window.isHidden = true
-        window.rootViewController = nil
-    }
-
     /// Draw `view` into an image so a test can sample what was painted.
     static func image<V: View>(_ view: V, size: CGSize = tvSize) -> UIImage {
         let host = UIHostingController(rootView: view.ignoresSafeArea())
