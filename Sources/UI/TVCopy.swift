@@ -8,6 +8,20 @@ import Foundation
 /// Bonjour instance name until H13 PR 3 (DD8). The TV shows **panels**, which
 /// are "your FiestaPanel displays". "Board" means only the picture.
 enum TVCopy {
+    /// DD13: a hub address as a person reads or types it. Drops only what a
+    /// browser fills in itself (`http://`, :80, :443) and keeps any other
+    /// port (Android TV `hubDisplayAddress`). DD12, which hides 4420 on the
+    /// hub card, is a different rule for a label.
+    static func displayAddress(_ url: URL) -> String {
+        guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+        if parts.port == 80 || parts.port == 443 { parts.port = nil }
+        var text = parts.string ?? url.absoluteString
+        if text.hasPrefix("http://") { text.removeFirst("http://".count) }
+        return text
+    }
+
 
     /// A1 Connect, slot `I166:147296;149:182603`.
     enum Connect {
@@ -65,15 +79,7 @@ enum TVCopy {
         /// fills in itself — `http://`, `:80`, `:443` — and keeps any
         /// other port, which the person has to type. (DD12, which hides
         /// 4420 on the hub card, is a different rule for a label.)
-        static func activationAddress(_ url: URL) -> String {
-            guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-                return url.absoluteString
-            }
-            if parts.port == 80 || parts.port == 443 { parts.port = nil }
-            var text = parts.string ?? url.absoluteString
-            if text.hasPrefix("http://") { text.removeFirst("http://".count) }
-            return text
-        }
+        static func activationAddress(_ url: URL) -> String { TVCopy.displayAddress(url) }
 
         static let newCode = "New code"
         static let usePassword = "Use username and password"

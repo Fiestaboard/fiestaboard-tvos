@@ -9,7 +9,8 @@ enum SettingsCopy {
     /// A8e `269:131926`.
     static let aboutFooter = "Change what’s showing from the FiestaBoard app on your phone, or on your hub’s web page."
     /// DD17 / DD19: tvOS has no rows of its own here; it follows the system.
-    static let accessibilityNote = "Follows Reduce Motion and Increase Contrast in Apple TV Settings › Accessibility."
+    /// 07b `290:139071`.
+    static let accessibilityNote = "Follows your Apple TV’s Reduce Motion and Increase Contrast settings (Settings › Accessibility)."
 
     /// A8c `269:129632`: what the shared rows change, and the panel's night window.
     static func appearanceFooter(panelName: String, autoDim: AutoDim) -> String {

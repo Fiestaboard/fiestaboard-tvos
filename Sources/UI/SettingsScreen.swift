@@ -20,6 +20,9 @@ struct SettingsScreen: View {
     init(initialCategory: Category = .tv, signage: SignageSettings = .shared, model: SettingsModel? = nil) {
         _category = State(initialValue: initialCategory)
         _model = State(initialValue: model)
+        // A loaded model's selection is known now; waiting for the task left
+        // the first frame on "No panels yet" (seen on tvOS 26).
+        _selectedPanelID = State(initialValue: model?.panels.first?.id)
         self.signage = signage
         preloaded = model != nil
     }
