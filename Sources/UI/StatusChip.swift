@@ -220,9 +220,13 @@ struct StatusChipPresenter: Equatable {
         return shownUntil
     }
 
-    /// The chip minus its ticking countdown: "2h 43m left · Holds until 9:00 PM"
-    /// and "2h 42m left · Holds until 9:00 PM" are the same override.
+    /// The chip minus what moves on its own: "2h 43m left · Holds until 9:00 PM"
+    /// and "2h 42m left · Holds until 9:00 PM" are the same override, and a
+    /// schedule is one schedule whatever its next change says. A hand-off
+    /// ("· next change 9:00 PM", then "Schedule" as it passes, then the next
+    /// read's new time) is the board on its schedule, not news (#25 review N2).
     static func identity(_ chip: StatusChipContent) -> String {
+        if chip.kind == .schedule { return chip.kind.rawValue }
         var text = chip.text
         if chip.kind == .override, let range = text.range(of: " left · ") { text = String(text[range.upperBound...]) }
         return "\(chip.kind.rawValue)|\(text)"
@@ -233,8 +237,19 @@ struct StatusChipPresenter: Equatable {
         chip.badge.map { "\($0), \(chip.text)" } ?? chip.text
     }
 
-    /// The one announcement per change (strip `166:206938`: "Living room TV: …").
+    /// The one announcement per change, in the strip's phrasing (`166:206938`:
+    /// "Living room TV: override until 9:00 PM"): no countdown, which is stale
+    /// by the time it is heard, and a comma where the chip has a middle dot.
     static func spoken(_ chip: StatusChipContent, panelName: String) -> String {
-        "\(panelName): \(label(chip))"
+        "\(panelName): \(phrase(chip))"
+    }
+
+    static func phrase(_ chip: StatusChipContent) -> String {
+        if chip.kind == .override {
+            guard let until = chip.text.range(of: "Holds until ") else { return "override" }
+            return "override until " + chip.text[until.upperBound...]
+        }
+        let text = chip.text.replacingOccurrences(of: " · ", with: ", ")
+        return text.prefix(1).lowercased() + text.dropFirst()
     }
 }

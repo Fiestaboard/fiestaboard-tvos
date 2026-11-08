@@ -59,7 +59,7 @@ struct ViewerScreen: View {
             .animation(.easeInOut(duration: 0.22), value: model?.overlayVisible)
             .animation(.easeOut(duration: 0.28), value: model?.resizeOfferVisible)
             // Strip `166:206938`: the chip fades over 0.3 s, instantly under Reduce Motion.
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: model?.chipStandaloneVisible)
+            .animation(Self.chipFade(reduceMotion: reduceMotion), value: model?.chipStandaloneVisible)
             .onChange(of: [model?.snapshot.rows ?? 0, model?.snapshot.cols ?? 0]) { _, _ in
                 model?.considerResizeOffer(for: proxy.size)
             }
@@ -89,6 +89,11 @@ struct ViewerScreen: View {
         .onMoveCommand { _ in remoteInteraction() }
         .onPlayPauseCommand { remoteInteraction() }
         .onExitCommand { back() }
+    }
+
+    /// Strip `166:206938`: the chip fades over 0.3 s, instantly under Reduce Motion.
+    static func chipFade(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.3)
     }
 
     /// A4b: Back wakes a resting screen, then takes the overlay down, and

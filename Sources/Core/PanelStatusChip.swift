@@ -193,10 +193,12 @@ extension PanelSnapshot {
     /// The chip for this snapshot at `localNow` (the TV's clock), counted on
     /// the hub's clock. A stale connection reads "Hub unreachable"; the
     /// viewer passes `reconnected` for the moment after it comes back.
+    /// `includingStatus: false` keeps only the connection chips (hub
+    /// unreachable, reconnected), for a panel whose status means nothing.
     public func statusChip(localNow: Date, reconnected: Bool = false,
-                           timeZone: TimeZone = .current) -> StatusChipContent? {
+                           timeZone: TimeZone = .current, includingStatus: Bool = true) -> StatusChipContent? {
         let connection: HubConnection = connection == .stale ? .unreachable : (reconnected ? .reconnected : .reachable)
-        return PanelStatusChip.chip(status: panel?.status, hubNow: hubClock.now(at: localNow), connection: connection)
+        return PanelStatusChip.chip(status: includingStatus ? panel?.status : nil, hubNow: hubClock.now(at: localNow), connection: connection)
             .map { PanelStatusChip.content($0, timeZone: timeZone) }
     }
 }

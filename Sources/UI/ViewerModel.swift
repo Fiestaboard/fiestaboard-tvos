@@ -153,8 +153,10 @@ final class ViewerModel {
     func refreshChip() {
         let at = now()
         let reconnected = reconnectedUntil.map { at < $0 } ?? false
-        let content = snapshot.deleted || boardMissing
-            ? nil : snapshot.statusChip(localNow: at, reconnected: reconnected, timeZone: .current)
+        // A deleted panel or a removed board has no hub status worth naming,
+        // but an outage still shows and is said (#25 review must-fix).
+        let content = snapshot.statusChip(localNow: at, reconnected: reconnected, timeZone: .current,
+                                          includingStatus: !(snapshot.deleted || boardMissing))
         if chipPresenter.update(content, at: at), let content {
             Announce.say(StatusChipPresenter.spoken(content, panelName: snapshot.panel?.name ?? "Panel"))
         }
