@@ -320,10 +320,14 @@ struct PanelsScreen: View {
                 .task(id: pendingFocusTarget) {
                     guard let target = pendingFocusTarget else { return }
                     scroll.scrollTo(target, anchor: .center)
-                    await Task.yield()
-                    guard !Task.isCancelled else { return }
+                    // The flake's actual site (probe traces, ×20 under load):
+                    // Down from row 11 fell back here, focus dropped to
+                    // nothing, and one yield then a single assignment never
+                    // reached the unrealised row-13 card — so Select opened
+                    // nothing and line 166 failed later. Same cure as the
+                    // restore: wait until realised, confirm focus lands.
                     if model?.panels.contains(where: { $0.id == target && !$0.boardMissing }) == true {
-                        focusedPanel = target
+                        await restoreFocus(to: target)
                     }
                     pendingFocusTarget = nil
                 }

@@ -45,6 +45,9 @@ final class PanelNavigationProbe: NSObject {
         if let index { sample["index"] = index }
         if samples.count >= 12_000 { samples.removeFirst(6_000) }
         samples.append(sample)
+        // Focus decisions are what a failing run needs to show: write them
+        // through at once rather than on the next 120-frame flush.
+        if name.hasPrefix("restore.") || name.hasPrefix("focus.fallback") { flush() }
     }
 
     @objc private func tick(_ link: CADisplayLink) {
