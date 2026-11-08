@@ -102,10 +102,13 @@ final class VocabularyTests: XCTestCase {
 
     // MARK: Viewer — web string family (TV-APPS §4 item 7)
 
-    func testDisconnectedUsesTheWebString() {
-        // web/messages/en.json → fiestaPanels.offline
-        XCTAssertEqual(TVCopy.Viewer.disconnected, "Connection to FiestaBoard lost — showing the last update")
-        XCTAssertEqual(TVCopy.Viewer.reconnecting, "Reconnecting")
+    /// A6b: the outage reads as the DD22 status chip ("Hub unreachable ·
+    /// showing the last update", then "Reconnected"), which replaced the
+    /// "Reconnecting" pill and its web-family announcement.
+    func testTheOutageCopyIsTheDD22Chip() {
+        let chip = PanelStatusChip.content(StatusChip(kind: .hubUnreachable, persistent: true))
+        XCTAssertEqual(chip.text, "Hub unreachable · showing the last update")
+        XCTAssertEqual(PanelStatusChip.content(StatusChip(kind: .reconnected, persistent: false)).text, "Reconnected")
     }
 
     /// "This panel's board was removed" read as the hub being gone
