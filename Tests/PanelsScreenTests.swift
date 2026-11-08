@@ -247,8 +247,9 @@ extension PanelsScreenTests {
     }
 
     /// The window follows the scroll: returning to the last panel scrolls the
-    /// grid to the bottom row, and that row's pictures are drawn while the
-    /// first row's are not. Without the scroll-geometry update the window
+    /// grid to the bottom row, and that row's pictures are drawn. (Whether
+    /// the first row drew before the scroll landed depends on the machine's
+    /// speed, so it isn't asserted.) Without the scroll-geometry update the window
     /// stays on the first rows and the last boards are blank, which every
     /// other test missed ("Board reads:" comes from the model, not from what
     /// is drawn).
@@ -267,12 +268,14 @@ extension PanelsScreenTests {
         app.lastViewedPanelRef = "panel-13"
         let cache = PanelPreviewImageCache()
 
-        RenderHarness.render(PanelsScreen(model: model, previewImages: cache).environment(app), settle: 0.5)
+        // Until the last row has drawn, or 10 s: the mutant never draws it.
+        RenderHarness.render(PanelsScreen(model: model, previewImages: cache).environment(app), timeout: 10) {
+            cache.panelIDs.isSuperset(of: ["panel-12", "panel-13"])
+        }
 
         let drawn = cache.panelIDs
         XCTAssertTrue(drawn.isSuperset(of: ["panel-12", "panel-13"]),
                       "the row scrolled to drew \(drawn.sorted())")
-        XCTAssertFalse(drawn.contains("panel-0"), "the first row, now far above, drew: \(drawn.sorted())")
     }
 
     /// `PanelsScreen.cardHeight(width:)` is what the preview window counts

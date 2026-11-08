@@ -11,10 +11,7 @@ enum RenderHarness {
 
     nonisolated static let tvSize = CGSize(width: 1920, height: 1080)
 
-    /// `settle` is how long the run loop turns between the two layout
-    /// passes: long enough for a `.task` and the updates it causes, such as
-    /// a `scrollTo` and the scroll geometry it reports, when a test needs them.
-    static func render<V: View>(_ view: V, size: CGSize = tvSize, settle: TimeInterval = 0.03) {
+    static func render<V: View>(_ view: V, size: CGSize = tvSize) {
         let host = UIHostingController(rootView: view.ignoresSafeArea())
         host.view.frame = CGRect(origin: .zero, size: size)
         let window = UIWindow(frame: host.view.frame)
@@ -22,9 +19,31 @@ enum RenderHarness {
         window.isHidden = false
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(settle))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.03))
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
+        window.isHidden = true
+        window.rootViewController = nil
+    }
+
+    /// Host `view` and turn the run loop, laying out each turn, until
+    /// `done()` holds or `timeout` passes. For effects that arrive over
+    /// several updates (a `.task`, a `scrollTo`, the scroll geometry it
+    /// reports): waiting on the outcome, not a guessed duration, keeps the
+    /// test independent of the machine's speed.
+    static func render<V: View>(_ view: V, size: CGSize = tvSize, timeout: TimeInterval,
+                                until done: () -> Bool) {
+        let host = UIHostingController(rootView: view.ignoresSafeArea())
+        host.view.frame = CGRect(origin: .zero, size: size)
+        let window = UIWindow(frame: host.view.frame)
+        window.rootViewController = host
+        window.isHidden = false
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        } while !done() && Date() < deadline
         window.isHidden = true
         window.rootViewController = nil
     }
