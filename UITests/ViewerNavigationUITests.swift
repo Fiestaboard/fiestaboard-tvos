@@ -86,6 +86,17 @@ final class ViewerNavigationUITests: XCTestCase {
     /// press anywhere wakes the chrome. While the chrome is up that target
     /// must get out of the way, or the focus engine keeps handing focus back
     /// to it and the buttons cannot be reached.
+    /// A9: the overlay holds exactly Panels and Settings (07b A4 `154:8170`);
+    /// the FiestaBot one-off send is retired.
+    func testTheOverlayHoldsOnlyPanelsAndSettings() {
+        let app = launchLoadedViewer()
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Settings"].exists)
+        XCTAssertFalse(app.buttons["FiestaBot"].exists, "FiestaBot is retired on TV")
+    }
+
     func testMovingRightFromPanelsReachesSettings() {
         let app = launchLoadedViewer()
         XCUIRemote.shared.press(.select)
