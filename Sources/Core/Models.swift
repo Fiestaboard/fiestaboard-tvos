@@ -286,6 +286,8 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
     public let mode: String
     public let firstRun: Bool
     public let tvSignIn: TVSignInCapability?
+    /// "tv" when the caller is a TV bearer; nil for a cookie session.
+    public let authKind: String?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -296,6 +298,7 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
         mode = try c.decodeIfPresent(String.self, forKey: .mode) ?? "enabled"
         firstRun = try c.decodeIfPresent(Bool.self, forKey: .firstRun) ?? false
         tvSignIn = try c.decodeIfPresent(TVSignInCapability.self, forKey: .tvSignIn)
+        authKind = try c.decodeIfPresent(String.self, forKey: .authKind)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -303,6 +306,7 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
         case setupRequired = "setup_required"
         case firstRun = "first_run"
         case tvSignIn = "tv_sign_in"
+        case authKind = "auth_kind"
     }
 }
 

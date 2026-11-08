@@ -14,18 +14,21 @@ final class DeviceSignInModel {
     private let connection: ConnectionStore
     private let now: () -> Date
     private let sleep: (TimeInterval) async throws -> Void
-    private let onSuccess: () -> Void
+    private let onSuccess: (String?) -> Void
+    private let deviceName: DeviceNameChoice
     private var task: Task<Void, Never>?
     private var attempt = UUID()
     private var interval: TimeInterval = 5
     private var expectedGeneration: UUID?
     private var challengeClient: FiestaClient?
 
-    init(connection: ConnectionStore, now: @escaping () -> Date = Date.init,
+    /// - Parameter onSuccess: called once signed in, with the approving
+    ///   user's name from `GET /auth/status`, or nil.
+    init(connection: ConnectionStore, deviceName: DeviceNameChoice = .fallback, now: @escaping () -> Date = Date.init,
          sleep: @escaping (TimeInterval) async throws -> Void = { seconds in
              try await Task.sleep(for: .seconds(seconds))
-         }, onSuccess: @escaping () -> Void) {
-        self.connection = connection; self.now = now; self.sleep = sleep; self.onSuccess = onSuccess
+         }, onSuccess: @escaping (String?) -> Void) {
+        self.connection = connection; self.deviceName = deviceName; self.now = now; self.sleep = sleep; self.onSuccess = onSuccess
     }
 
     func start() {
@@ -40,7 +43,7 @@ final class DeviceSignInModel {
         challengeClient = client
         task = Task {
             do {
-                let challenge = try await client.beginDeviceSignIn(deviceName: "Apple TV", appVersion: ConnectionStore.appVersion)
+                let challenge = try await client.beginDeviceSignIn(deviceName: deviceName.sent, appVersion: ConnectionStore.appVersion)
                 guard isCurrent(attempt, generation) else {
                     Task { try? await client.cancelDeviceSignIn(deviceCode: challenge.deviceCode) }
                     return
@@ -99,12 +102,15 @@ final class DeviceSignInModel {
                 let result = try await client.pollDeviceSignIn(deviceCode: challenge.deviceCode)
                 // Adoption also owns orphan revocation for a response that
                 // arrives after cancellation or a host switch.
-                try await connection.adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
+                let status = try await connection.adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
                 guard isCurrent(attempt, generation) else { return }
                 self.challenge = nil; manualURL = nil; completeURL = nil; expiresAt = nil
                 state = .complete; statusMessage = "Signed in."
                 Announce.say(statusMessage)
-                onSuccess(); return
+                // The status read that validated the new bearer also names
+                // the approver (fact 12: the hub stores the approving
+                // username) — no second request.
+                onSuccess(status.username); return
             } catch {
                 guard isCurrent(attempt, generation) else { return }
                 if let error = error as? DevicePollError {

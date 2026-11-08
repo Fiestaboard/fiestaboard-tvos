@@ -75,6 +75,15 @@ public final class ConnectionStore: @unchecked Sendable {
     /// The rule for anyone editing this file: **never hold `lock` across an
     /// `await`.** Take what you need into locals, unlock, then suspend.
     private let lock = NSLock()
+    private var storedDeviceName = DeviceName.fallback
+
+    /// What this TV calls itself on every sign-in that creates a TV
+    /// credential (password, migration, device code). Set by `AppModel` from
+    /// the device's name; "Apple TV" until then (A3, DD3).
+    public var deviceName: String {
+        get { lock.withLock { storedDeviceName } }
+        set { lock.withLock { storedDeviceName = newValue } }
+    }
 
     /// When the silent re-login may be trusted again, if it has just failed.
     private var silentLoginBlockedUntil: Date?
@@ -246,7 +255,7 @@ public final class ConnectionStore: @unchecked Sendable {
         try lock.withLock { try checkCurrentLocked(generation); client.setDeviceToken(nil) }
         if deviceSignInEnabled {
             let result = try await client.loginDevice(username: username, password: password,
-                                                     deviceName: "Apple TV", appVersion: Self.appVersion)
+                                                     deviceName: deviceName, appVersion: Self.appVersion)
             try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
             return
         }
@@ -261,8 +270,11 @@ public final class ConnectionStore: @unchecked Sendable {
         }
     }
 
+    /// - Returns: the `GET /auth/status` read that validated the new bearer,
+    ///   which also names the approving user (A3 "Approved by").
+    @discardableResult
     public func adoptDeviceCredential(_ result: DeviceTokenResult, expectedGeneration: UUID,
-                                      issuingClient: FiestaClient? = nil) async throws {
+                                      issuingClient: FiestaClient? = nil) async throws -> AuthStatus {
         // Capture the issuer independently of the current connection. A response
         // may arrive after a host switch, before staging has even started.
         let issuer = issuingClient ?? lock.withLock {
@@ -270,6 +282,7 @@ public final class ConnectionStore: @unchecked Sendable {
         }
         var stagedHost: URL?
         var adoptingClient: FiestaClient?
+        let validated: AuthStatus
         do {
             let credential = try result.credential(now: clock())
             let (client, host): (FiestaClient, URL) = try lock.withLock {
@@ -287,6 +300,7 @@ public final class ConnectionStore: @unchecked Sendable {
                 return (client, saved.host)
             }
             let status = try await client.authStatus()
+            validated = status
             try lock.withLock {
                 try checkCurrentLocked(expectedGeneration)
                 guard status.authenticated else { throw FiestaError.unauthorized }
@@ -322,6 +336,7 @@ public final class ConnectionStore: @unchecked Sendable {
                 try? credentials.delete(for: host.absoluteString + ".pending-device")
             }
         }
+        return validated
     }
 
     private func recover(_ credential: StoredCredential, client: FiestaClient, host: URL, generation: UUID) async throws {
@@ -338,7 +353,7 @@ public final class ConnectionStore: @unchecked Sendable {
                     defaults.set(true, forKey: Keys.signedOut)
                 }
                 let result = try await client.loginDevice(username: username, password: password,
-                                                         deviceName: "Apple TV", appVersion: Self.appVersion)
+                                                         deviceName: deviceName, appVersion: Self.appVersion)
                 try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
             } else {
                 try await client.login(username: username, password: password)

@@ -48,7 +48,8 @@ struct DeviceSignInScreen: View {
                     }
                     // The corrected scope line (TV-APPS §4 item 4). A3 puts
                     // the device-name sentence in front of it (DD3).
-                    Text(TVCopy.DeviceSignIn.scope)
+                    // A2 166:147647 / DD3 fallback 249:110266.
+                    Text(TVCopy.DeviceSignIn.scopeLine(for: app.deviceName))
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                     Text(TVCopy.DeviceSignIn.reachability)
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
@@ -63,7 +64,8 @@ struct DeviceSignInScreen: View {
         .padding(Fiesta.Metrics.safeInset)
         .onAppear {
             if model == nil {
-                model = DeviceSignInModel(connection: app.connection, onSuccess: { app.finishSignIn() })
+                model = DeviceSignInModel(connection: app.connection, deviceName: app.deviceName,
+                                          onSuccess: { app.finishSignIn(approvedBy: $0) })
                 model?.start()
             }
         }

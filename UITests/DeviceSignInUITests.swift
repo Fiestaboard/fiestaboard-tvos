@@ -29,6 +29,30 @@ final class DeviceSignInUITests: XCTestCase {
         XCTAssertTrue(app.secureTextFields["Password"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Activation Test Board"].exists)
     }
+    /// A3: after a 401 (or any sign-out) the app routes to Sign in, and the
+    /// phone path is what the remote lands on — no presses. It used to land
+    /// on the username field, because the phone row appears only after the
+    /// capability check.
+    func testSignInLandsOnThePhonePathWithoutAPress() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer(tvSignInEnabled: true)
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Activation Test Board\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "YES"]
+        app.launch()
+        defer { app.terminate() }
+        let phone = app.buttons["device-sign-in"]
+        XCTAssertTrue(phone.waitForExistence(timeout: 10))
+        XCTAssertEqual(phone.label, "Sign in with your phone", "the A2 title names the path")
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            phone.hasFocus || app.cells.containing(.button, identifier: "device-sign-in").firstMatch.hasFocus
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed,
+                       "the remote must start on the phone path")
+        capture("Sign in — phone path focused", app: app)
+    }
+
     func testEnrollmentDisabledShowsRecoveryWithoutAnEndlessSpinner() throws {
         try checkTerminalFailure(server: FixtureHTTPServer(tvSignInEnabled: true, deviceAuthorizationError: "feature_disabled"),
                                  expected: "TV sign-in is disabled.", screenshot: "TV sign-in — enrollment disabled")

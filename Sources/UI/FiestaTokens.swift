@@ -80,17 +80,25 @@ public enum Fiesta {
 
 /// Shared hierarchy for the app's browsing and connection screens.
 struct FiestaScreenHeading: View {
+    let title: String
+    let subtitle: String
+    var context: String = "FiestaBoard"
+
+    #if DEBUG
     /// The 07b text nodes a heading is measured against (parity probes).
+    /// DEBUG only: a stored id would ship its literal in Release.
     struct FigmaNodes {
         let eyebrow: String
         let title: String
         let subtitle: String
     }
-
-    let title: String
-    let subtitle: String
-    var context: String = "FiestaBoard"
     var figma: FigmaNodes? = nil
+    private var probes: (eyebrow: String, title: String, subtitle: String)? {
+        figma.map { ($0.eyebrow, $0.title, $0.subtitle) }
+    }
+    #else
+    private var probes: (eyebrow: String, title: String, subtitle: String)? { nil }
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -98,17 +106,17 @@ struct FiestaScreenHeading: View {
                 .font(Fiesta.Text.caption.weight(.medium))
                 .foregroundStyle(Fiesta.Colors.brand)
                 .lineLimit(1)
-                .figmaNode(figma?.eyebrow ?? "", label: context, enabled: figma != nil)
+                .figmaNode(probes?.eyebrow ?? "", label: context, enabled: probes != nil)
             Text(title)
                 .font(Fiesta.Text.title)
                 .foregroundStyle(Fiesta.Colors.foreground)
                 .accessibilityAddTraits(.isHeader)
-                .figmaNode(figma?.title ?? "", label: title, enabled: figma != nil)
+                .figmaNode(probes?.title ?? "", label: title, enabled: probes != nil)
             Text(subtitle)
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
-                .figmaNode(figma?.subtitle ?? "", label: subtitle, enabled: figma != nil)
+                .figmaNode(probes?.subtitle ?? "", label: subtitle, enabled: probes != nil)
         }
     }
 }

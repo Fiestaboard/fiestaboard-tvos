@@ -131,6 +131,10 @@ struct SignInScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: SignInModel?
     @State private var deviceSignInEnabled = false
+    /// The phone path takes focus when it appears (A3): after a 401 the
+    /// remote should land there, not on the username field the capability
+    /// check left it on.
+    @FocusState private var phonePathFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -140,8 +144,9 @@ struct SignInScreen: View {
                 errorSection
                 if deviceSignInEnabled {
                     Section {
-                        Button("Sign in with a phone or computer") { app.route = .deviceSignIn }
+                        Button(TVCopy.DeviceSignIn.title) { app.route = .deviceSignIn }
                             .accessibilityIdentifier("device-sign-in")
+                            .focused($phonePathFocused)
                     } footer: {
                         Text("Scan a QR code or enter a short code in your browser. You can also use username and password below.")
                     }
@@ -165,6 +170,11 @@ struct SignInScreen: View {
         .task {
             try? await app.connection.refreshSignInCapability()
             deviceSignInEnabled = app.connection.deviceSignInEnabled
+        }
+        .onChange(of: deviceSignInEnabled, initial: true) { _, enabled in
+            guard enabled else { return }
+            // A hop, so the row exists before focus is asked for.
+            Task { @MainActor in phonePathFocused = true }
         }
     }
 

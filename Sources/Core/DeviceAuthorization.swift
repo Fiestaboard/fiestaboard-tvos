@@ -120,7 +120,9 @@ extension FiestaClient {
         _ = try await send(method: "DELETE", path: "/auth/device/session", body: nil, deviceEndpoint: true)
     }
     private func metadata(_ name: String, _ version: String) -> [String: Any] {
-        ["client_id": "fiestaboard-tvos", "device_name": String(name.prefix(80)), "app_version": String(version.prefix(40))]
+        let sanitized = DeviceName.sanitize(name)
+        return ["client_id": "fiestaboard-tvos", "device_name": sanitized.isEmpty ? DeviceName.fallback : sanitized,
+                "app_version": String(version.prefix(40))]
     }
     private func deviceRequest<T: Decodable>(path: String, body: [String: Any]) async throws -> T {
         let data = try await send(method: "POST", path: path, body: body, deviceEndpoint: true)

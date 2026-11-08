@@ -101,7 +101,18 @@ public final class AppModel {
     /// Holds the display awake while a board is up. Tests replace its sink.
     @ObservationIgnored let screenAwake: ScreenAwake
 
-    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil, oledStore: OLEDCareStore = OLEDCareStore()) {
+    /// What this TV is called on the hub (A3, DD3). `.fallback` without the
+    /// user-assigned-device-name entitlement (O6, owner-pending).
+    public let deviceName: DeviceNameChoice
+
+    /// A short notice over the current screen, such as "Approved by maya".
+    public private(set) var notice: String?
+    @ObservationIgnored private var noticeTask: Task<Void, Never>?
+
+    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil, oledStore: OLEDCareStore = OLEDCareStore(),
+                deviceName: DeviceNameChoice = .fallback) {
+        self.deviceName = deviceName
+        connection.deviceName = deviceName.sent
         self.oledStore = oledStore
         self.oledCare = oledStore.load()
         self.connection = connection
@@ -192,6 +203,25 @@ public final class AppModel {
         errorMessage = nil
         if let ref = connection.saved?.defaultPanelRef { route = .viewer(ref) }
         else { route = .panels }
+    }
+
+    /// Device-code sign-in finished; `approvedBy` is the approving user from
+    /// `GET /auth/status`, or nil (no toast).
+    public func finishSignIn(approvedBy: String?) {
+        finishSignIn()
+        if let approvedBy, !approvedBy.isEmpty { showNotice(TVCopy.DeviceSignIn.approvedBy(approvedBy)) }
+    }
+
+    /// Shows `text` for `duration`, and says it.
+    public func showNotice(_ text: String, for duration: Duration = .seconds(4)) {
+        noticeTask?.cancel()
+        notice = text
+        Announce.say(text)
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self?.notice = nil
+        }
     }
 
     public func openPanel(ref: String) {
