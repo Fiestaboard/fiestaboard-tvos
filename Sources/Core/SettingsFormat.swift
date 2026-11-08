@@ -52,8 +52,9 @@ public struct OLEDCareSummary: Equatable, Sendable {
         brightness = "\(c.brightness) %"
         movement = !c.movement ? "Off" : (c.movementRange > 8 ? "Wider" : "Gentle")
         switch c.nightMode {
-        case .followPanel: night = "Follow panel schedule"
-        case .never: night = "Never dim"
+        // 07b G9 wording, the same as Android TV.
+        case .followPanel: night = "Follow panel"
+        case .never: night = "Never"
         case .custom: night = "Custom"
         }
         rest = c.restEnabled ? "\(Clock12.label(minutes: c.restStart)) – \(Clock12.label(minutes: c.restEnd))" : "Off"

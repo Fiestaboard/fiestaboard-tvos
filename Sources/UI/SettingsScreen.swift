@@ -9,6 +9,9 @@ struct SettingsScreen: View {
     @State private var category: Category
     /// A8e/A8f: a long text page shown in the content column, one focus target.
     @State private var helpDetail: HelpDetail?
+    /// S1: which This Apple TV row has focus, to bring the captions under the
+    /// last row on screen (they are not focusable, so nothing else scrolls them).
+    @FocusState private var thisTVFocus: SettingsLayout.Row?
     private let signage: SignageSettings
     @State private var selectedPanelID: String?
     @State private var previewReload = 0
@@ -132,18 +135,24 @@ struct SettingsScreen: View {
         case .tv:
             // DD17 / DD19 (A8 `166:206997`): four sections; TV size and LED
             // spacing only for True LED size, under Matrix size.
-            controlList {
-                let sections = SettingsLayout.thisTV(matrixTrueSize: model?.matrixPresentation.sizing == .trueSize)
-                ForEach(sections.indices, id: \.self) { index in
-                    let section = sections[index]
-                    Section {
-                        ForEach(section.rows.indices, id: \.self) { thisTVRow(section.rows[$0]) }
-                    } header: { Text(section.title).foregroundStyle(Fiesta.Colors.mutedForeground) }
-                    footer: {
-                        if index == sections.count - 1 {
-                            Text(SettingsCopy.thisTVFooter).foregroundStyle(Fiesta.Colors.mutedForeground)
-                        }
+            ScrollViewReader { proxy in
+                controlList {
+                    let sections = SettingsLayout.thisTV(matrixTrueSize: model?.matrixPresentation.sizing == .trueSize)
+                    ForEach(sections.indices, id: \.self) { index in
+                        let section = sections[index]
+                        Section {
+                            ForEach(section.rows.indices, id: \.self) { thisTVRow(section.rows[$0]) }
+                        } header: { Text(section.title).foregroundStyle(Fiesta.Colors.mutedForeground) }
                     }
+                    Section {
+                        caption(SettingsCopy.thisTVFooter)
+                            .accessibilityIdentifier("settings.thisTVFooter")
+                            .id(Self.thisTVEnd)
+                    }
+                }
+                .onChange(of: thisTVFocus) { _, row in
+                    guard row == .oledCare else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.thisTVEnd, anchor: .bottom) }
                 }
             }
         case .appearance:
@@ -179,9 +188,7 @@ struct SettingsScreen: View {
                         helpRow("Licenses", .licenses)
                     } footer: { Text(SettingsCopy.aboutFooter).foregroundStyle(Fiesta.Colors.mutedForeground) }
                     Section {
-                        Text(SettingsCopy.screenProtectionCaption)
-                            .font(Fiesta.Text.caption)
-                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                        caption(SettingsCopy.screenProtectionCaption)
                     } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 }
             }
@@ -200,6 +207,16 @@ struct SettingsScreen: View {
         }
         .accessibilityLabel(title)
         .accessibilityValue(value)
+    }
+
+    private static let thisTVEnd = "settings.thisTV.end"
+
+    /// 07b draws these as plain captions, not list cells.
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(Fiesta.Text.caption)
+            .foregroundStyle(Fiesta.Colors.mutedForeground)
+            .listRowBackground(Color.clear)
     }
 
     @ViewBuilder
@@ -227,10 +244,9 @@ struct SettingsScreen: View {
             choiceLink("OLED care", value: OLEDCareSummary(app.oledCare, neverDim: model?.autoDimOverride == .neverDim).rowValue,
                        destination: .oledCare)
             .accessibilityIdentifier("settings.oledCare")
+            .focused($thisTVFocus, equals: .oledCare)
         case .accessibilityNote:
-            Text(SettingsCopy.accessibilityNote)
-                .font(Fiesta.Text.caption)
-                .foregroundStyle(Fiesta.Colors.mutedForeground)
+            caption(SettingsCopy.accessibilityNote)
                 .accessibilityIdentifier("settings.accessibilityNote")
         }
     }
@@ -252,7 +268,8 @@ struct SettingsScreen: View {
         case .screenProtection:
             SettingsDetailPage(title: "Screen protection", body: SettingsCopy.screenProtectionBody)
         case .privacy:
-            SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: app.deviceName.sent),
+            SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: app.deviceName.sent,
+                                                                               legacySignIn: !app.connection.usesDeviceCredential),
                                footer: SettingsCopy.privacyFooter)
         case .licenses:
             SettingsDetailPage(title: "Licenses",

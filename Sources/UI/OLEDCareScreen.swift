@@ -110,8 +110,8 @@ struct NightDimmingScreen: View {
             OLEDCareHeader(title: "Night dimming")
             List {
                 Section {
-                    mode(.followPanel, "Follow panel schedule", detail: "Uses the shared schedule set on your phone")
-                    mode(.never, "Never dim", detail: nil)
+                    mode(.followPanel, "Follow panel", detail: "Uses the shared schedule set on your phone")
+                    mode(.never, "Never", detail: nil)
                     mode(.custom, "Custom", detail: "Only this TV")
                 }
                 Section {

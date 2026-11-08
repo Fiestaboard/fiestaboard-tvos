@@ -245,8 +245,10 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(app.buttons["TV size"].waitForExistence(timeout: 3))
         // DD19: the rows appear below, and focus stays on Matrix size.
         waitForRowFocus("settings.matrixSizing", in: app)
-        // S1: with the True LED rows the footer is below the fold; reaching
-        // the last row (OLED care) brings it and the Accessibility note on screen.
+        // S1: with the last row (OLED care) focused, the footer and the
+        // Accessibility note are on screen (a frame check, not `.exists`).
+        // On this layout the live list already shows them; the screen's
+        // scroll-to-end covers taller content above (loading, errors).
         for _ in 0..<6 {
             if rowHasFocus("settings.oledCare", in: app) { break }
             XCUIRemote.shared.press(.down)

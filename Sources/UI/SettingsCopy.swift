@@ -26,9 +26,17 @@ enum SettingsCopy {
         return lead + " Both erase this TV’s saved sign-in and revoke its access; if the hub is offline, revoke this TV on your phone in Displays › \(tvName) › Shown on."
     }
 
-    /// A8f `277:138880`.
-    static func privacyBody(tvName: String) -> String {
+    /// What FiestaBot sends, for TVs that still have it.
+    static let fiestaBotDisclosure = "FiestaBot also sends conversation and relevant board content through that hub to its configured AI provider, which may be a third party. "
+        + "The provider’s data handling applies to those requests. Siri dictation uses Apple’s system keyboard and privacy settings. "
+        + "Chat history stays in app memory until a new chat, sign-out, or app restart; your hub and AI provider may retain their own records. "
+
+    /// A8f `277:138880`. `legacySignIn`: a password sign-in still has FiestaBot
+    /// (the viewer overlay offers it), so its Privacy keeps the AI-provider and
+    /// Siri disclosure until A9 retires FiestaBot and this branch with it.
+    static func privacyBody(tvName: String, legacySignIn: Bool) -> String {
         "The app sends your requests to the hub you chose, at the address you typed or selected. "
+            + (legacySignIn ? fiestaBotDisclosure : "")
             + "FiestaBoard’s servers and the app developer receive no analytics or tracking from this app. "
             + "The hub’s address and display preferences stay in this Apple TV’s app preferences; "
             + "a revocable TV credential is kept in its Keychain. Your password is sent to the hub only to sign in "
