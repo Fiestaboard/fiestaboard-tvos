@@ -45,6 +45,13 @@ jobs:
           python3 scripts/test-app-store-release.py
           ruby scripts/test-fastlane-release.rb
 
+      # A2 hub vocabulary (the user-complete rule): the guard's own tests and
+      # the scan of Sources/ and project.yml. Also runs in Release archive.
+      - name: Hub vocabulary guard
+        run: |
+          node --test scripts/vocabulary/tests/*.test.mjs
+          node scripts/vocabulary/check-vocabulary.mjs
+
       # A1 token bridge: the generator's pins and tests, including the drift
       # check (`--check` fails when the generated Swift no longer matches
       # Tokens/fiestaui-tokens.json and Tokens/platform-tv.json).
@@ -247,6 +254,11 @@ jobs:
 
       # The DEBUG Figma parity probes (figmaNode, FigmaGeometryRegistry, the
       # parity fixture) must be compiled out of what ships.
+      # The user-complete rule (PHASE-4-TV-PLAN §2.0, S4): no hub-sense
+      # "board" in what ships.
+      - name: Hub vocabulary in Release
+        run: node scripts/vocabulary/check-vocabulary.mjs
+
       - name: No parity probes in Release
         run: ./scripts/check-release-probes.sh build/FiestaBoardTV.xcarchive
 
