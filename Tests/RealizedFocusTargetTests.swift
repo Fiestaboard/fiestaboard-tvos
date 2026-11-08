@@ -10,7 +10,7 @@ final class RealizedFocusTargetTests: XCTestCase {
 
     func testARequestForARealisedCardFocusesAtOnce() {
         var target = RealizedFocusTarget()
-        target.cardAppeared("a")
+        _ = target.cardAppeared("a")
         XCTAssertEqual(target.request("a"), "a")
         XCTAssertNil(target.pending)
     }
@@ -24,9 +24,18 @@ final class RealizedFocusTargetTests: XCTestCase {
         XCTAssertNil(target.pending)
     }
 
+    func testItKnowsWhichCardsAreRealised() {
+        var target = RealizedFocusTarget()
+        XCTAssertFalse(target.isRealized("a"))
+        _ = target.cardAppeared("a")
+        XCTAssertTrue(target.isRealized("a"))
+        target.cardDisappeared("a")
+        XCTAssertFalse(target.isRealized("a"))
+    }
+
     func testADisappearedCardIsNoLongerRealised() {
         var target = RealizedFocusTarget()
-        target.cardAppeared("a")
+        _ = target.cardAppeared("a")
         target.cardDisappeared("a")
         XCTAssertNil(target.request("a"))
         XCTAssertEqual(target.cardAppeared("a"), "a")

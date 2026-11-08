@@ -6,6 +6,8 @@ struct PanelsScreen: View {
     @State private var restoredInitialFocus = false
     @State private var previewImages = PanelPreviewImageCache()
     @State private var pendingFocusTarget: String?
+    /// Which cards are realised (see `RealizedFocusTarget`).
+    @State private var realizedFocus = RealizedFocusTarget()
     @State private var latestFocusUpdate: UIFocusUpdateContext?
 
     /// Which card holds focus, by panel id.
@@ -326,13 +328,17 @@ struct PanelsScreen: View {
                     pendingFocusTarget = nil
                 }
                 .task(id: panelIDs) {
+                    #if DEBUG
+                    PanelNavigationProbe.shared.event("restore.task", index: restoredInitialFocus ? 1 : (panelIDs.isEmpty ? 2 : 0))
+                    #endif
                     guard !restoredInitialFocus, !panelIDs.isEmpty else { return }
                     restoredInitialFocus = true
+                    #if DEBUG
+                    PanelNavigationProbe.shared.event("restore.guard", index: focusedPanel == nil ? (defaultFocusID == nil ? 2 : 0) : 1)
+                    #endif
                     guard focusedPanel == nil, let id = defaultFocusID else { return }
                     scroll.scrollTo(id, anchor: .center)
-                    await Task.yield()
-                    guard !Task.isCancelled else { return }
-                    focusedPanel = id
+                    await restoreFocus(to: id)
                 }
             }
         }
@@ -345,7 +351,54 @@ struct PanelsScreen: View {
                   previewImages: previewImages)
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
+        .onAppear { _ = realizedFocus.cardAppeared(panel.id) }
+        .onDisappear { realizedFocus.cardDisappeared(panel.id) }
     }
+
+    /// Restore focus to `id` after `scrollTo`.
+    ///
+    /// Returning from the viewer, the old single assignment after one
+    /// `Task.yield()` failed 6 times in 20 under CPU load, always the same
+    /// way: card 13 realised and on screen, and **nothing focused at all**,
+    /// because the request landed while the lazy row was unrealised or while
+    /// the screen, still crossfading in, refused focus
+    /// (`program/status/tv-panels-flake.md`). So:
+    /// 1. wait until the card is realised;
+    /// 2. assign focus once, unconditionally, as before;
+    /// 3. while *nothing* is focused, assign again. Re-asserting only into
+    ///    that empty state can't take focus from anyone, so the wait ends
+    ///    on the observed state, not on a guessed duration. The 10 s cap
+    ///    only stops a screen that never becomes focusable.
+    private func restoreFocus(to id: String) async {
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        func trace(_ name: String) {
+            // index: focusedPanel read-back (-1 none, -2 Settings, else the card's position)
+            let state = settingsFocused ? -2 : (focusedPanel.flatMap { panelIDs.firstIndex(of: $0) } ?? -1)
+            PanelNavigationProbe.shared.event(name, began: began, index: state)
+        }
+        #else
+        func trace(_ name: String) {}
+        #endif
+        trace("restore.start")
+        for _ in 0..<100 where !realizedFocus.isRealized(id) {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        trace(realizedFocus.isRealized(id) ? "restore.realized" : "restore.notRealized")
+        guard !Task.isCancelled, app.route == .panels else { trace("restore.cancelled"); return }
+        focusedPanel = id
+        trace("restore.assign")
+        for _ in 0..<100 {
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled, app.route == .panels else { trace("restore.cancelled"); return }
+            if focusedPanel != nil || settingsFocused { trace("restore.landed"); return }
+            focusedPanel = id
+            trace("restore.reassign")
+        }
+        trace("restore.gaveUp")
+    }
+
+
 
     /// Never "the FiestaBoard app": `CFBundleDisplayName` is exactly
     /// `FiestaBoard`, so that sent the user to the icon they are already
