@@ -1,0 +1,27 @@
+{
+  "$description": "Figma 'Platform · TV' variables (VariableCollectionId:149:182577), file ZQ8RMELCO6qEOFZUnQu36e page 07b. Exported read-only on 2026-11-08 with the Figma plugin API (getVariableCollectionByIdAsync; one mode, 'Value'). Stand-in for the refs-v1 export (O4) until the design-refs repo exists. Values are in the frame's units: pt at 1920x1080 for tvOS, px at 2 px/dp for Google TV. Do not edit by hand; re-export and re-run scripts/tokens/generate-swift.mjs.",
+  "$extensions": {
+    "app.fiestaboard": {
+      "fileKey": "ZQ8RMELCO6qEOFZUnQu36e",
+      "collection": "VariableCollectionId:149:182577",
+      "collectionName": "Platform · TV",
+      "exportedAt": "2026-11-08",
+      "figmaVersion": null
+    }
+  },
+  "tv": {
+    "tvos": {
+      "safe-side": { "$type": "dimension", "$value": { "value": 80, "unit": "pt" }, "$description": "tvOS HIG title-safe, left/right (pt @1920×1080)" },
+      "safe-top-bottom": { "$type": "dimension", "$value": { "value": 60, "unit": "pt" }, "$description": "tvOS HIG title-safe, top/bottom" },
+      "card-radius": { "$type": "dimension", "$value": { "value": 24, "unit": "pt" }, "$description": "tvOS card/platter radius" }
+    },
+    "gtv": {
+      "safe-side": { "$type": "dimension", "$value": { "value": 96, "unit": "px" }, "$description": "Android TV overscan 48dp at 2px/dp (960×540dp canvas)" },
+      "safe-top-bottom": { "$type": "dimension", "$value": { "value": 54, "unit": "px" }, "$description": "Android TV overscan 27dp at 2px/dp" },
+      "card-radius": { "$type": "dimension", "$value": { "value": 24, "unit": "px" }, "$description": "TV Material card radius 12dp ×2" }
+    },
+    "focus": {
+      "outline": { "$type": "dimension", "$value": { "value": 6, "unit": "pt" }, "$description": "Focus outline on dense board previews (both platforms)" }
+    }
+  }
+}
