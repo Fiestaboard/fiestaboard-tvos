@@ -61,6 +61,11 @@ public enum Fiesta {
     }
 
     public enum Metrics {
+        /// 07b's header rhythm: on A1, A2 and A3 the eyebrow sits at y 110,
+        /// 50 pt below the 60 pt title-safe top (`166:147308`,
+        /// `166:147403`, `166:147714`). Every `FiestaScreenHeading` keeps it,
+        /// so no screen's header sits higher than another's.
+        public static let headingTop: CGFloat = 50
         public static let gutter: CGFloat = 24
         /// Unchanged in A1: the 07b card radius (`PlatformTV.cardRadius`, 24)
         /// lands with the panel cards (A5), so no screen mixes the two.
@@ -119,6 +124,7 @@ struct FiestaScreenHeading: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .figmaNode(probes?.subtitle ?? "", label: subtitle, enabled: probes != nil)
         }
+        .padding(.top, Fiesta.Metrics.headingTop)
     }
 }
 

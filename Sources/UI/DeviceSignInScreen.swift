@@ -61,7 +61,10 @@ struct DeviceSignInScreen: View {
                 Button(TVCopy.DeviceSignIn.back) { backToPassword() }
             }
         }
-        // A4a: the system safe area is the 07b title-safe (80/60).
+        // A4a: the system safe area is the 07b title-safe (80/60), and the
+        // content hangs from the top as A2 draws it (eyebrow at y 110), not
+        // centred in the screen.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             if model == nil {
                 model = DeviceSignInModel(connection: app.connection, deviceName: app.deviceName,
