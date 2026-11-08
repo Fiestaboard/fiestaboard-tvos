@@ -42,6 +42,9 @@ struct ConnectScreen: View {
             manualEntry
         }
         .padding(Fiesta.Metrics.safeInset)
+        // Figma parity probes (DEBUG only; no-ops in Release): the 07b A1
+        // Screen slot and the nodes the A1 slice is measured against.
+        .figmaNode(Self.a1Slot)
         // No `.onExitCommand`: Connect is the app's root — it is where the
         // app opens with no board saved, and where forgetting one lands you.
         // There is nothing behind it, so Menu belongs to the system and
@@ -121,6 +124,9 @@ struct ConnectScreen: View {
             .focusSection()
         }
     }
+
+    /// The 07b A1 frame's Screen slot (`I<instance>;149:182603`).
+    private static let a1Slot = "I166:147296;149:182603"
 
     private static let columns = [GridItem(.adaptive(minimum: 400), spacing: 40, alignment: .topLeading)]
 
@@ -213,6 +219,7 @@ struct ConnectScreen: View {
             Text("Or enter your board's address")
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
+                .figmaNode(Self.a1Slot + ";166:147344", label: "Or enter your board's address")
 
             HStack(spacing: 20) {
                 TextField("192.168.1.50 or board.local", text: manualAddressBinding)
@@ -221,6 +228,7 @@ struct ConnectScreen: View {
                     .frame(maxWidth: 560)
                     .accessibilityLabel("FiestaBoard address")
                     .focused($focusedControl, equals: .address)
+                    .figmaNode(Self.a1Slot + ";166:147347")
 
                 // Not `.disabled` while a connect is in flight: on tvOS
                 // disabling the focused control moves focus off it and it
@@ -229,6 +237,7 @@ struct ConnectScreen: View {
                 Button("Connect") { Task { await model?.connectManually() } }
                     .accessibilityLabel("Connect to the address you entered")
                     .focused($focusedControl, equals: .connect)
+                    .figmaNode(Self.a1Slot + ";166:147351", label: "Connect")
 
                 if model?.manualConnectInFlight ?? false {
                     TacoLoader(size: .small)

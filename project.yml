@@ -3,6 +3,13 @@ options:
   bundleIdPrefix: com.fiestaboard
   createIntermediateGroups: true
 
+# Test-only. Pinned exactly: snapshot goldens are sensitive to the
+# renderer the library drives, so an upgrade is a deliberate re-record.
+packages:
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    exactVersion: 1.19.7
+
 configFiles:
   Debug: Config/Signing.xcconfig
   Release: Config/Signing.xcconfig
@@ -125,10 +132,15 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: Tests
+        excludes:
+          # Regression goldens are read from the source tree by path, never
+          # from the bundle.
+          - "**/__Snapshots__/**"
       - path: Spec
         type: folder
     dependencies:
       - target: FiestaBoardTV
+      - package: SnapshotTesting
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -140,6 +152,7 @@ targets:
     sources:
       - path: UITests
       - path: Tests/Support/Fixtures.swift
+      - path: Tests/Support/GlassProbe.swift
     dependencies:
       - target: FiestaBoardTV
     settings:

@@ -13,12 +13,26 @@ struct FiestaBoardApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(model)
-                .onAppear {
-                    BoardFont.registerIfNeeded()
-                    model.start()
-                }
+            #if DEBUG
+            // UI-test only: the A0 parity proofs launch into a fixture with
+            // no model, network or saved state.
+            if let fixture = ParityFixtureView.Kind.fromLaunchArguments() {
+                ParityFixtureView(kind: fixture)
+            } else {
+                root
+            }
+            #else
+            root
+            #endif
         }
+    }
+
+    private var root: some View {
+        RootView()
+            .environment(model)
+            .onAppear {
+                BoardFont.registerIfNeeded()
+                model.start()
+            }
     }
 }
