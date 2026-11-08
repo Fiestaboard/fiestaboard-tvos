@@ -322,6 +322,9 @@ public final class AppModel {
         activePanelsModel = nil
         panelBrowserCache = nil
         topShelfImages.images.removeAll()
+        topShelfStatuses.removeAll()
+        topShelfStatusAttempts.removeAll()
+        lastTopShelf = nil
         topShelfClient = nil
         return TopShelfPreviewPublisher.clear(store: topShelfStore, cache: topShelfImages)
     }
@@ -359,11 +362,90 @@ public final class AppModel {
         if topShelfClient !== connection.client {
             topShelfImages.invalidate()
             topShelfImages.images.removeAll()
+            topShelfStatuses.removeAll()
+            topShelfStatusAttempts.removeAll()
         }
         topShelfClient = connection.client
-        return TopShelfPreviewPublisher.publish(panels: panels, previews: previews,
+        lastTopShelf = (panels, previews)
+        refreshTopShelfStatuses(for: panels)
+        let now = Date()
+        let fresh = topShelfStatuses.filter { now.timeIntervalSince($0.value.at) <= TopShelfSnapshotStore.statusLifetime }
+        return TopShelfPreviewPublisher.publish(panels: panels, previews: previews, statuses: fresh,
                                          connection: connection,
                                          store: topShelfStore, cache: topShelfImages)
+    }
+
+    // MARK: Top Shelf status (A7, after A6a)
+
+    /// A status younger than this is reused rather than fetched again, so a
+    /// burst of frame publications costs no status requests. Shorter than
+    /// the store's 10-minute rule, so a TV in use keeps its line.
+    static let topShelfStatusInterval: TimeInterval = 300
+    /// The same four-at-a-time budget the frame fetcher uses.
+    static let topShelfStatusConcurrency = 4
+    /// At most this many panels' statuses per refresh: `/panels` carries no
+    /// status, so each one is its own `GET /panel/{id}` against a Pi.
+    var topShelfStatusLimit = 12
+    @ObservationIgnored private var topShelfStatuses: [String: TopShelfStatusReading] = [:]
+    /// When each panel was last asked, successful or not: a failing hub is
+    /// not asked again inside the interval either.
+    @ObservationIgnored private var topShelfStatusAttempts: [String: Date] = [:]
+    @ObservationIgnored private var lastTopShelf: (panels: [Panel], previews: [String: PanelPreviewState])?
+    @ObservationIgnored private(set) var topShelfStatusTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var topShelfRepublication: Task<Void, Never>?
+
+    private func refreshTopShelfStatuses(for panels: [Panel]) {
+        guard topShelfStatusTask == nil else { return }
+        let now = Date()
+        let due = panels.filter { !$0.boardMissing }.prefix(topShelfStatusLimit).map(\.id).filter {
+            topShelfStatusAttempts[$0].map { now.timeIntervalSince($0) >= Self.topShelfStatusInterval } ?? true
+        }
+        guard !due.isEmpty else { return }
+        for id in due { topShelfStatusAttempts[id] = now }
+        let client = connection.client
+        let connection = connection
+        topShelfStatusTask = Task { [weak self] in
+            // nil: the fetch failed, so the previous status (if any) stands.
+            // .some(nil): the hub answered with nothing worth a line.
+            let results = await Self.fetchTopShelfStatuses(due, connection: connection)
+            guard let self else { return }
+            topShelfStatusTask = nil
+            guard connection.client === client, !connection.isSignedOut else { return }
+            let at = Date()
+            for (id, status) in results {
+                topShelfStatuses[id] = status.map { TopShelfStatusReading(status: $0, at: at) }
+            }
+            // Re-confirmed lines are renewed on disk without a Home reload
+            // (the store tells the two apart); a changed one reloads Home.
+            if !results.isEmpty, let last = lastTopShelf {
+                topShelfRepublication = publishTopShelf(panels: last.panels, previews: last.previews)
+            }
+        }
+    }
+
+    /// Four at a time; a failed fetch is left out of the result.
+    nonisolated private static func fetchTopShelfStatuses(_ ids: [String], connection: ConnectionStore)
+        async -> [String: TopShelfStatus?] {
+        await withTaskGroup(of: (String, TopShelfStatus?, Bool).self) { group in
+            var pending = ids.makeIterator()
+            func add(_ id: String) {
+                group.addTask {
+                    guard let reading = try? await connection.authorized({ try await $0.panelReading(ref: id) })
+                    else { return (id, nil, false) }
+                    return (id, TopShelfStatus(reading: reading, receivedAt: Date()), true)
+                }
+            }
+            for _ in 0..<topShelfStatusConcurrency {
+                guard let id = pending.next() else { break }
+                add(id)
+            }
+            var results: [String: TopShelfStatus?] = [:]
+            for await (id, status, ok) in group {
+                if ok { results.updateValue(status, forKey: id) }
+                if let next = pending.next() { add(next) }
+            }
+            return results
+        }
     }
 
     /// Fetch the panel list and republish the card row.

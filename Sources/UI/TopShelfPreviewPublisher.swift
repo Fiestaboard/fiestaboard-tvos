@@ -119,10 +119,11 @@ enum TopShelfPreviewPublisher {
                 if let encoded {
                     // A7: the status line is formatted here, on the app side;
                     // the extension only reads the string and its timestamp.
-                    let line = TopShelfStatusLine.make(request.statuses[panel.id])
+                    let reading = request.statuses[panel.id]
+                    let line = TopShelfStatusLine.make(reading?.status)
                     snapshots.append(.init(panelID: panel.id, name: panel.name, imageData: encoded.0,
                                            imageData2x: encoded.1, statusLine: line,
-                                           statusAt: line == nil ? nil : request.now))
+                                           statusAt: line == nil ? nil : reading?.at))
                 }
             }
             guard self.revision == revision, request.isAuthorized else { return }
@@ -143,10 +144,9 @@ enum TopShelfPreviewPublisher {
     fileprivate struct Request {
         let panels: [Panel]
         let previews: [String: PanelPreviewState]
-        /// A7: per-panel status for the carousel's contextTitle. Empty until
-        /// A6a's status decoding lands (see `TopShelfStatus`).
-        let statuses: [String: TopShelfStatus]
-        let now: Date
+        /// A7: per-panel status for the carousel's contextTitle, with the
+        /// time it was read.
+        let statuses: [String: TopShelfStatusReading]
         let connection: ConnectionStore
         let client: FiestaClient?
         let directory: URL
@@ -160,11 +160,11 @@ enum TopShelfPreviewPublisher {
 
     @discardableResult
     static func publish(panels: [Panel], previews: [String: PanelPreviewState] = [:],
-                        statuses: [String: TopShelfStatus] = [:], now: Date = Date(),
+                        statuses: [String: TopShelfStatusReading] = [:],
                         connection: ConnectionStore, store: TopShelfSnapshotStore,
                         cache: Cache? = nil) -> Task<Void, Never>? {
         guard connection.saved != nil, !connection.isSignedOut else { return nil }
-        return (cache ?? Cache()).enqueue(Request(panels: panels, previews: previews, statuses: statuses, now: now,
+        return (cache ?? Cache()).enqueue(Request(panels: panels, previews: previews, statuses: statuses,
                                      connection: connection,
                                      client: connection.client, directory: store.directory))
     }

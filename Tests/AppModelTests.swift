@@ -305,7 +305,12 @@ final class AppModelTests: XCTestCase {
     /// A list the caller already holds needs no second fetch — this is the
     /// entry point the panel list calls, and it is how a TV whose owner never
     /// sets a default panel gets a carousel at all.
-    func testPublishingFromALoadedPanelListAsksTheBoardForNothing() async throws {
+    ///
+    /// A7 changed one thing deliberately: `/panels` carries no status, so the
+    /// carousel's contextTitle costs one `GET /panel/{id}` per panel (bounded
+    /// and reused; `TopShelfStatusWiringTests`). Nothing else: no list, no
+    /// frame.
+    func testPublishingFromALoadedPanelListAsksTheBoardOnlyForStatus() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("topshelf-list-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -321,10 +326,11 @@ final class AppModelTests: XCTestCase {
         StubURLProtocol.reset()
 
         await model.publishTopShelf(panels: [panel])?.value
+        await model.topShelfStatusTask?.value
 
         XCTAssertEqual(store.items().map(\.panelID), [panel.id])
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty,
-                      "made \(StubURLProtocol.requests)")
+        XCTAssertEqual(StubURLProtocol.requests.map(\.url.path), ["/api/panel/\(panel.id)"],
+                       "made \(StubURLProtocol.requests)")
     }
 
     // MARK: A board that still needs its first account
