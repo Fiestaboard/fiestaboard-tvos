@@ -96,10 +96,9 @@ final class PanelsPresentationTests: XCTestCase {
                       "A refreshed panel order must not steal intentional focus from Settings")
     }
 
-    /// More panels than the thumbnail working set, mixing dense matrices and
-    /// split-flap boards. Revisit evicted rows using the real remote focus engine.
-    func testRemoteCanRevisitRowsBeyondThePreviewCacheCapacity() throws {
-        continueAfterFailure = false
+    /// Fourteen panels, mixing dense matrices and split-flap boards: more
+    /// than the thumbnail working set (`PanelPreviewImageCache`, 12).
+    private func launchStressFixture() throws -> XCUIApplication {
         var panels: [String] = []
         var byID: [String: String] = [:]
         for index in 0..<14 {
@@ -127,6 +126,144 @@ final class PanelsPresentationTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
         app.launch()
+        return app
+    }
+
+    /// Every card is a view, and so a focus target, before its row is ever
+    /// scrolled to. In a `LazyVGrid` the rows below the viewport didn't exist
+    /// yet: under CPU load, Down at that boundary found nothing, focus fell
+    /// to nothing, and tvOS then ignored focus requests for seconds
+    /// (`program/status/tv-panels-flake.md`). Deterministic: at launch the
+    /// last row is several screens below the viewport.
+    func testEveryCardIsAFocusTargetBeforeItsRowIsScrolledTo() throws {
+        continueAfterFailure = false
+        let app = try launchStressFixture()
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Stress \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        for index in 0..<14 {
+            XCTAssertTrue(card(index).exists, "Stress \(index) must exist before its row is scrolled to")
+        }
+        XCTAssertGreaterThan(card(13).frame.minY, app.frame.maxY,
+                             "The last row should start below the screen, or this proves nothing")
+    }
+
+    /// The native focus engine, with no fallback of the app's, crosses the
+    /// grid where nothing sits directly beneath: past a column of removed
+    /// boards, and from the right column into an odd last row. Rows:
+    /// [0, 1], [2 removed, 3 removed], [4, 5 removed], [6].
+    func testRemoteCrossesRemovedBoardsAndReachesAnOddLastRow() throws {
+        continueAfterFailure = false
+        var panels: [String] = []
+        var byID: [String: String] = [:]
+        for index in 0..<7 {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+            let id = "odd-\(index)"
+            object["id"] = id
+            object["name"] = "Odd \(index)"
+            object["board_missing"] = [2, 3, 5].contains(index)
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            panels.append(json)
+            byID[id] = json
+        }
+        let server = try FixtureHTTPServer(frameBody: Fixtures.frameJSON,
+            panelsBody: "{\"panels\":[\(panels.joined(separator: ","))],\"total\":7}", additionalPanels: byID)
+        self.server = server
+        let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"Odd fixture\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
+        app.launch()
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Odd \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        XCUIRemote.shared.press(.right)
+        waitForFocus(card(1))
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(4), "Down past two removed boards should reach the next card")
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(6), "Down should reach the odd last row")
+        XCUIRemote.shared.press(.up)
+        waitForFocus(card(4))
+        XCUIRemote.shared.press(.up)
+        waitForFocus(card(0), "Up past the removed boards should reach the first row")
+    }
+
+    /// Launch `count` plain split-flap panels named "<prefix> <index>".
+    private func launchPlainFixture(prefix: String, count: Int) throws -> (XCUIApplication, FixtureHTTPServer, [String]) {
+        var panels: [String] = []
+        var byID: [String: String] = [:]
+        for index in 0..<count {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as? [String: Any])
+            let id = "\(prefix.lowercased())-\(index)"
+            object["id"] = id
+            object["name"] = "\(prefix) \(index)"
+            let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+            panels.append(json)
+            byID[id] = json
+        }
+        let server = try FixtureHTTPServer(frameBody: Fixtures.frameJSON,
+            panelsBody: "{\"panels\":[\(panels.joined(separator: ","))],\"total\":\(count)}", additionalPanels: byID)
+        self.server = server
+        let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"\(prefix) fixture\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
+        app.launch()
+        return (app, server, panels)
+    }
+
+    /// Down from the right column into a lone last card, with nothing
+    /// directly beneath: the row's focus section takes it. Seven panels.
+    func testRemoteCrossesFromTheRightColumnIntoALoneLastCard() throws {
+        continueAfterFailure = false
+        let (app, _, _) = try launchPlainFixture(prefix: "Lone", count: 7)
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Lone \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        XCUIRemote.shared.press(.right)
+        waitForFocus(card(1))
+        for index in [3, 5] {
+            XCUIRemote.shared.press(.down)
+            waitForFocus(card(index))
+        }
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(6), "Down from the right column should reach the lone last card")
+    }
+
+    /// A foreground refresh that moves the focused card into another row
+    /// keeps focus on that card. The card is rebuilt in its new row, and the
+    /// focus engine had moved focus to the neighbour that took its place.
+    func testARefreshThatMovesTheFocusedCardKeepsItsFocus() throws {
+        continueAfterFailure = false
+        let (app, server, panels) = try launchPlainFixture(prefix: "Shift", count: 6)
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Shift \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        XCUIRemote.shared.press(.down)
+        waitForFocus(card(2))
+        // Removing Shift 0 moves Shift 2 from row 1 (left) to row 0 (right).
+        server.updatePanels("{\"panels\":[\(panels.dropFirst().joined(separator: ","))],\"total\":5}")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"), object: card(0))
+        XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 10), .completed, "The refresh should drop Shift 0")
+        waitForFocus(card(2), "A refresh that moves the focused card must keep the user's place")
+    }
+
+    /// More panels than the thumbnail working set, mixing dense matrices and
+    /// split-flap boards. Revisit evicted rows using the real remote focus engine.
+    func testRemoteCanRevisitRowsBeyondThePreviewCacheCapacity() throws {
+        continueAfterFailure = false
+        let app = try launchStressFixture()
         func card(_ index: Int) -> XCUIElement {
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Stress \(index),")).firstMatch
         }
@@ -136,6 +273,13 @@ final class PanelsPresentationTests: XCTestCase {
                     predicate: NSPredicate(format: "label CONTAINS %@", "Board reads:"), object: card(item))
                 XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed,
                                "Navigation must exercise loaded previews, not placeholders")
+                // "Board reads:" comes from the model; this is the picture
+                // itself, which only rows near the viewport draw. A preview
+                // window that stopped following the scroll leaves it unset.
+                let drawn = XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "value == %@", "Preview drawn"), object: card(item))
+                XCTAssertEqual(XCTWaiter.wait(for: [drawn], timeout: 5), .completed,
+                               "Stress \(item)'s board picture should be drawn once its row is on screen")
             }
         }
         XCTAssertTrue(card(0).waitForExistence(timeout: 15))
@@ -230,7 +374,7 @@ final class PanelsPresentationTests: XCTestCase {
     }
 
     /// Remote presses can return while tvOS is still transferring focus and
-    /// scrolling a lazy row into view. Assert the eventual target, without
+    /// scrolling the next row into view. Assert the eventual target, without
     /// issuing extra presses that could hide a navigation regression.
     private func waitForFocus(_ element: XCUIElement, _ message: String = "Expected remote focus",
                               file: StaticString = #filePath, line: UInt = #line) {

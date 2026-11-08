@@ -64,6 +64,9 @@ final class PanelPreviewImageCache {
         return image
     }
 
+    /// The panels whose picture is held: which ones have been drawn.
+    var panelIDs: Set<String> { Set(entries.keys) }
+
     func removeAll() {
         entries.removeAll()
         byteCount = 0

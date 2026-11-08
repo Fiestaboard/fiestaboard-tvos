@@ -55,6 +55,8 @@ The 14-panel cache-traversal test also exposed an upward move from the second
 row reaching Settings while the preceding lazy row was absent. The browser now
 recovers that directional escape using its existing scroll/focus task. It keeps
 lazy previews and allows normal Settings access from the first available row.
+(Superseded in November 2026: every card is now built up front and only the
+board pictures are deferred, so no row is ever absent and the recovery is gone.)
 
 The simulator and automated tests do not establish physical Siri Remote feel,
 VoiceOver usability, couch-distance legibility on the target TV, or a long-running
