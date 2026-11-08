@@ -91,14 +91,16 @@ enum TVSnapshot {
     /// Compare against the golden for this OS major. Perceptual precision
     /// absorbs glyph anti-aliasing noise; a moved or recoloured element
     /// still fails.
-    static func assertMatches(_ image: UIImage, named name: String,
+    /// `precision` overrides the suite's 1.0 for one golden, with the reason
+    /// at the call site (a measured flake, never a design difference).
+    static func assertMatches(_ image: UIImage, named name: String, precision: Float? = nil,
                               file: StaticString = #filePath, testName: String = #function,
                               line: UInt = #line) {
         let testClass = URL(fileURLWithPath: "\(file)").deletingPathExtension().lastPathComponent
         let directory = repoRoot
             .appendingPathComponent("Tests/__Snapshots__/tvOS\(osMajor)/\(testClass)").path
         let failure = verifySnapshot(of: image,
-                                     as: .image(precision: precision, perceptualPrecision: perceptualPrecision, scale: scale),
+                                     as: .image(precision: precision ?? Self.precision, perceptualPrecision: perceptualPrecision, scale: scale),
                                      named: name,
                                      snapshotDirectory: directory,
                                      file: file, testName: testName, line: line)
