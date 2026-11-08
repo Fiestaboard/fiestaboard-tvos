@@ -245,6 +245,20 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(app.buttons["TV size"].waitForExistence(timeout: 3))
         // DD19: the rows appear below, and focus stays on Matrix size.
         waitForRowFocus("settings.matrixSizing", in: app)
+        // S1: with the True LED rows the footer is below the fold; reaching
+        // the last row (OLED care) brings it and the Accessibility note on screen.
+        for _ in 0..<6 {
+            if rowHasFocus("settings.oledCare", in: app) { break }
+            XCUIRemote.shared.press(.down)
+        }
+        XCTAssertTrue(rowHasFocus("settings.oledCare", in: app))
+        let screen = app.windows.firstMatch.frame
+        for caption in [app.staticTexts["settings.thisTVFooter"], app.staticTexts["settings.accessibilityNote"]] {
+            let onScreen = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                caption.exists && screen.contains(caption.frame) }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [onScreen], timeout: 3), .completed, "\(caption) must scroll on screen")
+        }
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
         openRow("TV size", in: app)
         openRow("55 inches", in: app)
         XCTAssertEqual(app.buttons["TV size"].value as? String, "55 inches")

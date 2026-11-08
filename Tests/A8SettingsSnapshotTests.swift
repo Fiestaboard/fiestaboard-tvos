@@ -37,7 +37,9 @@ final class A8SettingsSnapshotTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try? await app.connection.connect(to: URL(string: "http://fiestapi.local:4420")!, displayName: "Maya’s FiestaPi")
         if let oled { app.saveOLEDCare(oled) }
-        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        // N1: a render style, so A8c's Display style row is in the golden.
+        let panel = String(Fixtures.panelJSON.dropLast()) + #","render_style":"split_flap"}"#
+        StubURLProtocol.enqueue(.json(#"{"panels":["# + panel + #"],"total":1}"#), for: "/api/panels")
         for _ in 0..<4 { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
         return app
     }
@@ -71,7 +73,7 @@ final class A8SettingsSnapshotTests: XCTestCase {
 
     /// A8f: the body is one scroll target; title Title 3 48, body 29, footer 23.
     func testThePrivacyDetailPage() async {
-        let image = TVSnapshot.image(SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: "Living room TV"),
+        let image = TVSnapshot.image(SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false),
                                                         footer: SettingsCopy.privacyFooter)
             .frame(width: 1200, height: 860, alignment: .topLeading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing), settle: 0.3)

@@ -85,7 +85,7 @@ final class A8SettingsTests: XCTestCase {
 
     /// A8f: no FiestaBot, AI-provider or Siri lines; the revoke goes through the phone.
     func testPrivacyIsTheA8fText() {
-        let body = SettingsCopy.privacyBody(tvName: "Living room TV")
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
         XCTAssertTrue(body.hasPrefix("The app sends your requests to the hub you chose, at the address you typed or selected."))
         XCTAssertTrue(body.contains("FiestaBoard’s servers and the app developer receive no analytics or tracking from this app."))
         XCTAssertTrue(body.contains("Your password is sent to the hub only to sign in"))
@@ -95,6 +95,20 @@ final class A8SettingsTests: XCTestCase {
         }
         XCTAssertEqual(SettingsCopy.privacyFooter,
                        "The full privacy policy is linked from this app’s App Store page. Apple TV has no web browser, so it can’t be opened here.")
+    }
+
+    /// #26 review must-fix: FiestaBot still ships for legacy password
+    /// sign-ins (ViewerScreen's overlay button) until A9 retires it, so their
+    /// Privacy keeps the AI-provider and Siri disclosure. Device-code TVs have
+    /// no FiestaBot and read A8f's text.
+    func testLegacySignInsKeepTheFiestaBotDisclosureUntilA9() {
+        let legacy = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: true)
+        XCTAssertTrue(legacy.contains("FiestaBot also sends conversation and relevant board content through that hub to its configured AI provider, which may be a third party."), legacy)
+        XCTAssertTrue(legacy.contains("Siri dictation"), legacy)
+        XCTAssertTrue(legacy.contains("Chat history stays in app memory"), legacy)
+        XCTAssertTrue(legacy.hasPrefix("The app sends your requests to the hub you chose"))
+        let deviceCode = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
+        for gone in ["FiestaBot", "AI provider", "Siri"] { XCTAssertFalse(deviceCode.contains(gone), gone) }
     }
 
     /// DD10 + DD23: what the TV does, and the one honest burn-in sentence.
@@ -135,7 +149,7 @@ final class A8SettingsTests: XCTestCase {
         let s = OLEDCareSummary(c, neverDim: false)
         XCTAssertEqual(s.brightness, "80 %")
         XCTAssertEqual(s.movement, "Gentle")
-        XCTAssertEqual(s.night, "Follow panel schedule")
+        XCTAssertEqual(s.night, "Follow panel", "07b G9 wording, the same as Android TV")
         XCTAssertEqual(s.rest, "10:00 PM – 7:00 AM")
         XCTAssertEqual(s.breaks, "Off")
         XCTAssertEqual(s.rotation, "On")
@@ -146,6 +160,8 @@ final class A8SettingsTests: XCTestCase {
         XCTAssertEqual(t.movement, "Wider")
         XCTAssertEqual(t.breaks, "Every 60 min")
         XCTAssertEqual(t.night, "Custom")
+        c.nightMode = .never
+        XCTAssertEqual(OLEDCareSummary(c, neverDim: false).night, "Never")
         XCTAssertEqual(t.disconnected, "Keep last frame")
     }
 
