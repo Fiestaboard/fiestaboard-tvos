@@ -8,3 +8,8 @@ the canonical server fixture when the contract changes.
 /api/auth/status` as a TV bearer sees it, authored from the hub's
 `StatusResponse` until the hub publishes `tests/fixtures/auth/tv-auth-status-v1.json`.
 Replace both apps' copies byte for byte then.
+
+`panel-status-v1.json` is the hub-generated panel-status contract (H2b #2454),
+copied byte for byte; `SOURCE.json` records its branch, commit and sha256 and a
+test checks the hash. Client-only cases and the expected chip copy live in
+`panel-status-v1.tv.json`, keyed by case name.
