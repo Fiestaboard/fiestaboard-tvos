@@ -56,8 +56,32 @@ final class A5GeometryTests: XCTestCase {
 
         assertRect(try frame(Self.a3Slot + ";166:149713"), x: 80, y: 320, width: 800, height: 628,
                    "the panel card (154:4187 Default: 450 preview + 178 meta)")
-        assertRect(try frame(Self.a3Slot + ";166:149722"), x: 960, y: 320, width: 800, height: 359,
-                   "the open-at-launch offer")
+        let offer = try frame(Self.a3Slot + ";166:149722")
+        assertRect(offer, x: 960, y: 320, width: 800, "the open-at-launch offer")
+        // 07b draws it 359 tall with 85 pt stock buttons; the system's own
+        // buttons and SF lines set the height here, within that.
+        XCTAssertEqual(offer.height, 359, accuracy: 30, "the offer's height")
+    }
+
+    /// Golden: Panels with one panel that fits, its board drawn, and the
+    /// offer in the side slot. A3 `I166:147702;149:182603` (unfocused: an
+    /// offscreen draw shows no focus; the focused card is the UI shot).
+    func testPanelsWithTheOfferGolden() async throws {
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
+        StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame")
+        let model = PanelsModel(app: app)
+        await model.load()
+        let panel = try XCTUnwrap(model.panels.first)
+        for _ in 0..<300 where model.previewState(for: panel) == .loading {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        guard case .ready = model.previewState(for: panel) else { return XCTFail("the preview never landed") }
+        XCTAssertNotNil(model.openAtLaunchOffer)
+        let image = TVSnapshot.image(PanelsScreen(model: model).environment(app)
+            .background(Fiesta.Colors.background), settle: 0.3)
+        try ParityOutput.write(png: image, as: "a3-panels-offer")
+        TVSnapshot.assertMatches(image, named: "panels-a3-offer")
     }
 
     /// The preview window counts rows by this; it must be the card's height.

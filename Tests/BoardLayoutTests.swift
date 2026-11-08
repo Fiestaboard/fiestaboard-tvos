@@ -23,10 +23,12 @@ final class BoardLayoutTests: XCTestCase {
         XCTAssertEqual(tile.radius, 7.5, accuracy: 1e-9)
     }
 
+    /// Width and gutter are whole points, as FiestaUI rounds them
+    /// (`board-metrics.ts`): at h 100 the gutter is round(14.4999…) = 14.
     func testTilesArePitchedByWidthPlusGutter() {
         let layout = BoardLayout.make(rows: 2, cols: 2, cells: cells(rows: 2, cols: 2), tileHeight: 100)
-        let colPitch = 70.0 + 14.5
-        let rowPitch = 100.0 + 14.5
+        let colPitch = 70.0 + 14
+        let rowPitch = 100.0 + 14
         XCTAssertEqual(layout.tiles[0].x, 0, accuracy: 1e-9)
         XCTAssertEqual(layout.tiles[1].x, colPitch, accuracy: 1e-9)
         XCTAssertEqual(layout.tiles[0].y, 0, accuracy: 1e-9)
@@ -37,8 +39,8 @@ final class BoardLayoutTests: XCTestCase {
     /// screen edge the way the web viewer does.
     func testOverallSizeExcludesTheOuterGutter() {
         let layout = BoardLayout.make(rows: 3, cols: 15, cells: cells(rows: 3, cols: 15), tileHeight: 100)
-        XCTAssertEqual(layout.width, 15 * 84.5 - 14.5, accuracy: 1e-9)
-        XCTAssertEqual(layout.height, 3 * 114.5 - 14.5, accuracy: 1e-9)
+        XCTAssertEqual(layout.width, 15 * 84 - 14, accuracy: 1e-9)
+        XCTAssertEqual(layout.height, 3 * 114 - 14, accuracy: 1e-9)
     }
 
     func testTilesCarryTheirCellAndCoordinates() {
@@ -112,10 +114,11 @@ final class BoardLayoutTests: XCTestCase {
                                              colPitchIn: BoardGeometry.colPitchIn)
         XCTAssertLessThanOrEqual(layout.width, 1920.001)
         XCTAssertLessThanOrEqual(layout.height, 1080.001)
-        // It must actually fill one axis, not sit small in the middle.
-        let fillsWidth = abs(layout.width - 1920) < 1
-        let fillsHeight = abs(layout.height - 1080) < 1
-        XCTAssertTrue(fillsWidth || fillsHeight, "fit must touch one axis")
+        // It must actually fill one axis, not sit small in the middle: to
+        // within one column, since widths and gutters are whole points.
+        let fillsWidth = layout.width > 1920 - layout.tileHeight
+        let fillsHeight = layout.height > 1080 - layout.tileHeight
+        XCTAssertTrue(fillsWidth || fillsHeight, "fit must reach one axis (\(layout.width)×\(layout.height))")
     }
 
     func testFitModePreservesAspect() throws {
@@ -124,8 +127,9 @@ final class BoardLayoutTests: XCTestCase {
                                              in: CGSize(width: 1920, height: 1080), mode: .fit,
                                              diagonalInches: 65, calibration: 1.0,
                                              colPitchIn: BoardGeometry.colPitchIn)
+        // Whole-point widths and gutters quantise the aspect slightly.
         XCTAssertEqual(fitted.width / fitted.height,
-                       unscaled.width / unscaled.height, accuracy: 1e-6)
+                       unscaled.width / unscaled.height, accuracy: 0.02)
     }
 
     /// True scale is allowed to leave margins — that is the point of it.
@@ -140,7 +144,8 @@ final class BoardLayoutTests: XCTestCase {
                                              in: CGSize(width: 1920, height: 1080), mode: .trueScale,
                                              diagonalInches: 65, calibration: 1.0,
                                              colPitchIn: BoardGeometry.colPitchIn)
-        XCTAssertEqual(layout.width, base.width * expected, accuracy: 1e-6)
+        // Within the whole-point rounding of each column (≤ 1 pt a column).
+        XCTAssertEqual(layout.width, base.width * expected, accuracy: Double(cols))
     }
 
     /// Font size is a fixed fraction of tile height so glyphs scale with the

@@ -194,7 +194,8 @@ final class PanelsPresentationTests: XCTestCase {
     }
 
     /// Launch `count` plain split-flap panels named "<prefix> <index>".
-    private func launchPlainFixture(prefix: String, count: Int) throws -> (XCUIApplication, FixtureHTTPServer, [String]) {
+    private func launchPlainFixture(prefix: String, count: Int,
+                                    arguments: [String] = []) throws -> (XCUIApplication, FixtureHTTPServer, [String]) {
         var panels: [String] = []
         var byID: [String: String] = [:]
         for index in 0..<count {
@@ -212,9 +213,91 @@ final class PanelsPresentationTests: XCTestCase {
         let connection = "{\"host\":\"http://127.0.0.1:\(server.port)\",\"displayName\":\"\(prefix) fixture\"}"
         let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
-        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO", "-fiestaboard.panelProfile", "YES"]
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO",
+                               "-fiestaboard.panelProfile", "YES"] + arguments
         app.launch()
         return (app, server, panels)
+    }
+
+    /// A5 (07b Focused `154:6178`): focus draws a 6 pt primary outline
+    /// outside the card and a shadow, and nothing else. The board is the
+    /// frame's "stationary layer": its pixels are the same focused and not.
+    func testTheFocusedCardKeepsItsBoardStill() throws {
+        continueAfterFailure = false
+        let (app, _, _) = try launchPlainFixture(prefix: "Still", count: 2)
+        func card(_ index: Int) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Still \(index),")).firstMatch
+        }
+        XCTAssertTrue(card(0).waitForExistence(timeout: 15))
+        waitForFocus(card(0))
+        let drawn = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Preview drawn"), object: card(1))
+        XCTAssertEqual(XCTWaiter.wait(for: [drawn], timeout: 15), .completed)
+        Thread.sleep(forTimeInterval: 1)
+        let frame = card(1).frame
+        let board = CGRect(x: frame.minX + 20, y: frame.minY + 10, width: frame.width - 40, height: 430)
+        func pixels(_ shot: XCUIScreenshot, _ rect: CGRect) throws -> [UInt8] {
+            let image = try XCTUnwrap(shot.image.cgImage)
+            let scale = CGFloat(image.width) / app.frame.width
+            let crop = try XCTUnwrap(image.cropping(to: CGRect(x: rect.minX * scale, y: rect.minY * scale,
+                                                               width: rect.width * scale, height: rect.height * scale)))
+            var bytes = [UInt8](repeating: 0, count: crop.width * crop.height * 4)
+            let context = try XCTUnwrap(CGContext(data: &bytes, width: crop.width, height: crop.height, bitsPerComponent: 8,
+                bytesPerRow: crop.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+            return bytes
+        }
+        // Across the card's left edge, halfway down: where the outline is.
+        let ring = CGRect(x: frame.minX - 12, y: frame.midY, width: 24, height: 1)
+        let unfocused = XCUIScreen.main.screenshot()
+        XCUIRemote.shared.press(.right)
+        waitForFocus(card(1))
+        Thread.sleep(forTimeInterval: 1)
+        let focused = XCUIScreen.main.screenshot()
+        add(XCTAttachment(screenshot: focused))
+        XCTAssertEqual(card(1).frame, frame, "focus must not move or resize the card")
+        XCTAssertEqual(try pixels(unfocused, board), try pixels(focused, board),
+                       "the board's pixels must not move between unfocused and focused")
+        /// The most amber pixel in the band: red well above blue.
+        func amber(_ bytes: [UInt8]) -> Int {
+            stride(from: 0, to: bytes.count, by: 4).map { Int(bytes[$0]) - Int(bytes[$0 + 2]) }.max() ?? 0
+        }
+        XCTAssertLessThan(amber(try pixels(unfocused, ring)), 0x30, "no outline while unfocused")
+        XCTAssertGreaterThan(amber(try pixels(focused, ring)), 0x80, "the primary outline at the focused card's edge")
+        // And it's outside the board: the board band above is unchanged.
+    }
+
+    /// A5 (07b A3 `166:149722`): one panel that fits this TV, nothing set to
+    /// open at launch: Panels offers "Always open …?" in the side slot. Not
+    /// now dismisses it for good; Always open sets the panel.
+    func testTheOpenAtLaunchOfferIsAskedOnce() throws {
+        continueAfterFailure = false
+        let (app, _, _) = try launchPlainFixture(prefix: "Only", count: 1,
+                                                 arguments: ["-fiestaboard.panels.openAtLaunchOffered", "NO"])
+        let card = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Only 0,")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["Always open Only 0?"].waitForExistence(timeout: 5))
+        let accept = app.buttons["Always open"], dismiss = app.buttons["Not now"]
+        XCTAssertTrue(accept.exists && dismiss.exists)
+        waitForFocus(card)
+        capture(app, "Panels — open-at-launch offer")
+        XCUIRemote.shared.press(.right)
+        waitForFocus(accept, "Right from the card reaches the offer")
+        XCUIRemote.shared.press(.right)
+        waitForFocus(dismiss)
+        XCUIRemote.shared.press(.select)
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"),
+                                             object: app.staticTexts["Always open Only 0?"])
+        XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 5), .completed, "Not now dismisses the offer")
+        waitForFocus(card, "focus goes back to the card")
+
+        // Asked once: a relaunch (the answer persisted) doesn't ask again.
+        app.terminate()
+        app.launchArguments.removeLast(2)
+        app.launch()
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        waitForFocus(card)
+        XCTAssertFalse(app.staticTexts["Always open Only 0?"].exists, "the offer is asked once")
     }
 
     /// Down from the right column into a lone last card, with nothing

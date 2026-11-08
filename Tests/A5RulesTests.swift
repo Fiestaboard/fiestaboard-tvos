@@ -37,9 +37,10 @@ final class A5RulesTests: XCTestCase {
                                                      diagonalInches: 55, calibration: 1, colPitchIn: BoardGeometry.colPitchIn)
                 XCTAssertLessThanOrEqual(layout.width, screen.width + 1e-9, "\(cols)×\(rows) in \(screen)")
                 XCTAssertLessThanOrEqual(layout.height, screen.height + 1e-9, "\(cols)×\(rows) in \(screen)")
-                // …and still fills it to within one tile.
-                XCTAssertTrue(layout.width > screen.width - layout.tileHeight
-                              || layout.height > screen.height - layout.tileHeight * 1.2,
+                // …and still fills it, within 5 %: small tiles can only take
+                // whole-point pitches (a 96-column board at a ~10 pt tile
+                // gets 8, not 8.3), so a little width is given up.
+                XCTAssertTrue(layout.width > screen.width * 0.95 || layout.height > screen.height * 0.95,
                               "\(cols)×\(rows) in \(screen) fills the screen (\(layout.width)×\(layout.height))")
             }
         }

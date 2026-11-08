@@ -1,10 +1,14 @@
 import SwiftUI
 
-/// One panel, shown as what its board currently says.
+/// One panel, shown as what its board currently says: 07b `tvOS / Panel
+/// card` `154:8169`.
 ///
-/// The focus engine handles navigation, while a stationary outline marks the
-/// selected card. Scaling and tilting a dense board preview makes its pixels
-/// shimmer and competes with the scroll motion during remote swipes.
+/// Default (`154:4187`): 800 × 628, the card fill, radius 24; a 450 pt live
+/// preview on the board bezel, then the meta block. Focused (`154:6178`): a
+/// 6 pt primary outline and a 0/30/60 shadow, with no scale and no
+/// parallax: the preview is the frame's "stationary layer". Scaling and
+/// tilting a dense board preview makes its pixels shimmer and competes with
+/// the scroll motion during remote swipes (A5 decision, DD7 resolved).
 struct PanelCard: View {
     let panel: Panel
     let preview: PanelPreviewState
@@ -12,10 +16,12 @@ struct PanelCard: View {
 
     // Defaults keep standalone previews useful. The browser passes the width
     // of its actual safe-area column instead of assuming a 1920-point canvas.
-    static let width: CGFloat = 860
-    static let previewHeight: CGFloat = width * 9 / 16
-    static let detailHeight: CGFloat = 166
-    static let boardInset: CGFloat = 24
+    static let width: CGFloat = 800                     // 154:4187
+    static let previewHeight: CGFloat = width * 9 / 16  // 450, "Live preview"
+    static let detailHeight: CGFloat = 178              // "Meta"
+    /// The board inside the preview: 16 pt either side, 4 pt top and bottom
+    /// (the 768 × 441.5 board at (16, 4) in the 800 × 450 preview).
+    static let boardInset = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
     var cardWidth: CGFloat = Self.width
     var previewImages: PanelPreviewImageCache? = nil
     /// False while the card is far from the viewport: the board picture is
@@ -39,19 +45,9 @@ struct PanelCard: View {
             }
             .frame(width: cardWidth)
             .background(Fiesta.Colors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius))
-            // A hairline, not a focus ring — it is there in every state.
-            //
-            // The card used to be told apart from the app's ground by
-            // being lighter than it. Now that the ground is near-black the
-            // plate is only a few values above it, and the board on the
-            // card is PURE black, darker than either: the top half of the
-            // card read as a hole rather than as a card. `border` is white
-            // at 12%, so it draws the edge whatever the surfaces underneath
-            // do next.
-            .overlay(
-                RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius)
-                    .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
+            // 07b's Default has no hairline: the --card plate on the
+            // --background ground, the bezel-black preview inside it.
+            .clipShape(RoundedRectangle(cornerRadius: PlatformTV.cardRadius))
             .opacity(panel.boardMissing ? 0.45 : 1)
         }
         .buttonStyle(PanelCardButtonStyle())
@@ -72,6 +68,7 @@ struct PanelCard: View {
         }
         .padding(Self.boardInset)
         .frame(width: cardWidth, height: cardWidth * 9 / 16)
+        .background(Color(token: FiestaTokenValues.Board.bezelDark))
         .clipped()
     }
 
@@ -114,21 +111,29 @@ struct PanelCard: View {
     // MARK: Words
 
     private func details(subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(displayKind, systemImage: panel.renderStyle == .ledMatrix ? "circle.grid.3x3.fill" : "rectangle.split.3x3.fill")
-                .font(Fiesta.Text.caption)
+        // 07b "Meta": padding 24 / 32 / 28, gap 6; Caption 1 in primary,
+        // Headline, then Body in muted foreground.
+        VStack(alignment: .leading, spacing: 6) {
+            Text(eyebrow)
+                .font(Fiesta.Text.caption1)
                 .foregroundStyle(Fiesta.Colors.brand)
+                .lineLimit(1)
             Text(panel.name)
-                .font(.system(size: 32, weight: .semibold))
+                .font(Fiesta.Text.heading)
                 .foregroundStyle(Fiesta.Colors.foreground)
                 .lineLimit(1)
             Text(subtitle)
-                .font(Fiesta.Text.caption)
+                .font(Fiesta.Text.body)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 28)
-        .frame(width: cardWidth, height: Self.detailHeight, alignment: .leading)
+        .padding(EdgeInsets(top: 24, leading: 32, bottom: 28, trailing: 32))
+        .frame(width: cardWidth, height: Self.detailHeight, alignment: .topLeading)
+    }
+
+    /// "Split-flap · 29 × 12": the kind, then the grid (07b `154:8166`).
+    var eyebrow: String {
+        panel.boardMissing ? displayKind : "\(displayKind) · \(panel.gridDescription)"
     }
 
     private var displayKind: String {
@@ -226,11 +231,23 @@ private struct PanelCardButtonStyle: ButtonStyle {
         @Environment(\.isFocused) private var isFocused
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+        /// 07b `tv/focus/outline`.
+        static let outline = PlatformTV.focusOutline
+
         var body: some View {
             label
+                // 07b Focused `154:6178`: a 0/30/60 shadow at 60 % black.
+                // Always present, only its colour changes, so focusing a
+                // card never changes the view's structure.
+                .shadow(color: .black.opacity(isFocused ? 0.6 : 0), radius: 30, x: 0, y: 30)
+                // The 6 pt primary outline sits OUTSIDE the 800 × 628 body
+                // (outer bounds 812 × 640, the Focused symbol's height), so
+                // the preview never moves or narrows. Figma draws it inside,
+                // narrowing the preview to 788: that would move board pixels.
                 .overlay {
-                    RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius)
-                        .strokeBorder(Fiesta.Colors.brand, lineWidth: 4)
+                    RoundedRectangle(cornerRadius: PlatformTV.cardRadius + Self.outline)
+                        .strokeBorder(Fiesta.Colors.brand, lineWidth: Self.outline)
+                        .padding(-Self.outline)
                         .opacity(isFocused ? 1 : 0)
                         .allowsHitTesting(false)
                 }

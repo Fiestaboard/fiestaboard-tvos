@@ -49,11 +49,22 @@ public struct BoardLayout: Sendable {
     public static func size(rows: Int, cols: Int,
                             tileHeight: Double) -> (width: Double, height: Double) {
         guard rows > 0, cols > 0, tileHeight > 0 else { return (0, 0) }
-        let gutter = tileHeight * BoardGeometry.tileGutterRatio
-        let colPitch = tileHeight * BoardGeometry.tileWidthRatio + gutter
+        let (tileWidth, gutter) = metrics(tileHeight: tileHeight)
+        let colPitch = tileWidth + gutter
         let rowPitch = tileHeight + gutter
         // Borderless: the trailing gutter is not part of the board.
         return (Double(cols) * colPitch - gutter, Double(rows) * rowPitch - gutter)
+    }
+
+    /// A tile's width and the gutter, from its height, as FiestaUI
+    /// `board-metrics.ts` derives them: each rounded to a whole point
+    /// (`width = round(h × 0.70)`, `gutter = round(h × 0.145)`), so the
+    /// web, Figma and the TV agree at integer pixels. At 07b's 46 pt tile
+    /// that is 32 / 7, and a 29 × 12 board of 1124 × 629 (`149:182628`);
+    /// unrounded, it drifted 3.4 pt over 29 columns. The radius is
+    /// paint-only and stays exact, as in FiestaUI.
+    public static func metrics(tileHeight h: Double) -> (width: Double, gutter: Double) {
+        ((h * BoardGeometry.tileWidthRatio).rounded(), (h * BoardGeometry.tileGutterRatio).rounded())
     }
 
     public static func make(rows: Int, cols: Int, cells: [[BoardCell]], tileHeight: Double) -> BoardLayout {
@@ -68,8 +79,7 @@ public struct BoardLayout: Sendable {
         }
 
         let h = tileHeight
-        let tileWidth = h * BoardGeometry.tileWidthRatio
-        let gutter = h * BoardGeometry.tileGutterRatio
+        let (tileWidth, gutter) = metrics(tileHeight: h)
         let radius = h * BoardGeometry.tileRadiusRatio
         let colPitch = tileWidth + gutter
         let rowPitch = h + gutter
@@ -132,6 +142,15 @@ public struct BoardLayout: Sendable {
                                   calibration: calibration, colPitchIn: colPitchIn))
         }
 
-        return make(rows: rows, cols: cols, cells: cells, tileHeight: reference * scale)
+        // Whole-point widths and gutters can round a fitted board a few
+        // points past the screen. Step the tile height down until it fits.
+        // True scale keeps its physical size: calibration may overflow.
+        var tileHeight = reference * scale
+        while mode == .fit, tileHeight > 0.1 {
+            let fitted = size(rows: rows, cols: cols, tileHeight: tileHeight)
+            if fitted.width <= Double(screen.width) + 1e-9, fitted.height <= Double(screen.height) + 1e-9 { break }
+            tileHeight -= 0.05
+        }
+        return make(rows: rows, cols: cols, cells: cells, tileHeight: tileHeight)
     }
 }

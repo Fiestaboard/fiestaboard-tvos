@@ -11,7 +11,8 @@ struct PanelsScreen: View {
     @State private var previewWindow: Range<Int>?
     /// The focused card a refresh moved into another row, while focus is
     /// owed back to it (see `onChange(of: panelIDs)`).
-    @State private var refocusPanel: String?
+    /// Focus owed back to a card a refresh moved (see `OwedFocus`).
+    @State private var owedFocus = OwedFocus()
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
@@ -30,9 +31,15 @@ struct PanelsScreen: View {
         _previewImages = State(initialValue: previewImages ?? PanelPreviewImageCache())
     }
 
-    /// Breathing room between cards and the scrolling viewport's edges.
-    /// Keep the layout stable as focus moves; the card's outline is inset.
+    /// Breathing room between cards and the scrolling viewport's edges, for
+    /// the focus outline and shadow. Keep the layout stable as focus moves.
     private static let focusInset: CGFloat = 44
+    /// Above the first row: 07b A3 puts the card at y 320 (`166:149713`).
+    static let gridTopInset: CGFloat = 320 - ScreenRhythm.contentTop
+    /// Below the last row: A3's card ends at y 948 and the grid at y 960, so
+    /// one row fills the viewport exactly and the restore has nothing to
+    /// scroll. Room enough for the 6 pt focus outline.
+    static let gridBottomInset: CGFloat = 960 - 948
 
     var body: some View {
         VStack(alignment: .leading, spacing: Fiesta.Metrics.gutter) {
@@ -41,7 +48,9 @@ struct PanelsScreen: View {
             // focusable directly beneath a button in the top right corner,
             // found nothing under it, and left focus where it was — the
             // cards were unreachable from the header.
-            header.focusSection()
+            header
+                .frame(height: ScreenRhythm.headingHeight, alignment: .topLeading)
+                .focusSection()
 
             content
         }
@@ -61,17 +70,15 @@ struct PanelsScreen: View {
             // neighbour that took its place. Owe focus back to it. Only when
             // a card had focus: a refresh never takes it from Settings.
             guard let id = focusedPanel, let from = old.firstIndex(of: id), let to = new.firstIndex(of: id),
-                  from / 2 != to / 2,
+                  from / gridColumns != to / gridColumns,
                   model?.panels.first(where: { $0.id == id })?.boardMissing == false else { return }
-            refocusPanel = id
+            owedFocus.owe(id)
         }
         .onChange(of: focusedPanel) { _, id in
             // The engine moves focus off the rebuilt card, through nothing,
-            // to its neighbour. At the first card it lands on, give focus
-            // back, once.
-            guard let owed = refocusPanel, let id else { return }
-            refocusPanel = nil
-            if id != owed { focusedPanel = owed }
+            // to its neighbour. At the first card it lands on, within the
+            // debt's short expiry, give focus back, once.
+            if let owed = owedFocus.take(landedOn: id) { focusedPanel = owed }
         }
         #if DEBUG
         // In a child, so that reading focus doesn't make this whole screen,
@@ -95,7 +102,7 @@ struct PanelsScreen: View {
             model?.stopPreviews()
             previewImages.removeAll()
             boardMessages.removeAll()
-            refocusPanel = nil
+            owedFocus.cancel()
         }
     }
 
@@ -218,9 +225,28 @@ struct PanelsScreen: View {
                 }
                 .focusSection()
             }
-            grid
+            HStack(alignment: .top, spacing: Self.columnGap) {
+                grid
+                    .frame(width: offer == nil ? nil : Self.maxCardWidth)
+                if let offer {
+                    OpenAtLaunchOfferCard(panel: offer.name,
+                                          hub: app.connection.saved?.displayName ?? "FiestaBoard",
+                                          accept: { model?.acceptOpenAtLaunch() },
+                                          dismiss: { model?.dismissOpenAtLaunch() })
+                        .figmaNode(Self.a3Slot + ";166:149722")
+                        // Level with the first card (A3: both at y 320).
+                        .padding(.top, Self.gridTopInset)
+                }
+            }
         }
     }
+
+    /// "Always open …?" while it is owed (07b A3 `166:149722`). It takes
+    /// the side slot, and the cards keep one column.
+    private var offer: Panel? { model?.openAtLaunchOffer }
+
+    /// Two columns of 800 pt cards; one while the offer has the side slot.
+    private var gridColumns: Int { offer == nil ? 2 : 1 }
 
     private func failureState(_ message: String) -> some View {
         VStack(spacing: 16) {
@@ -265,8 +291,11 @@ struct PanelsScreen: View {
         .font(Fiesta.Text.body)
     }
 
-    /// The column gap and the row gap.
+    /// The row gap.
     static let gridSpacing: CGFloat = 48
+    /// The column gap: 07b A3 puts the card at x 80 and the side slot at
+    /// x 960, both 800 wide.
+    static let columnGap: CGFloat = 80
     /// Rows either side of the viewport whose pictures are drawn ahead of
     /// being scrolled to.
     static let previewLookahead = 1
@@ -285,14 +314,15 @@ struct PanelsScreen: View {
     private var grid: some View {
         GeometryReader { proxy in
             let spacing = Self.gridSpacing
-            // Two columns, each at most A3's 800 pt card (`166:149713`,
-            // 800 × 640). A4a widened the content to the 1760 pt title-safe;
-            // uncapped, cards grew to 856 pt and their taller rows broke the
-            // remote's row-by-row walk (PanelsPresentationTests). A5 owns the
-            // grid's final geometry.
-            let cardWidth = max(1, min(Self.maxCardWidth, (proxy.size.width - spacing) / 2))
+            let columns = gridColumns
+            // Columns of A3's 800 pt card (`166:149713`), 80 pt apart. A4a
+            // widened the content to the 1760 pt title-safe; uncapped, cards
+            // grew to 856 pt and their taller rows broke the remote's
+            // row-by-row walk (PanelsPresentationTests).
+            let cardWidth = max(1, min(Self.maxCardWidth,
+                                       (proxy.size.width - Self.columnGap * CGFloat(columns - 1)) / CGFloat(columns)))
             let panels = model?.panels ?? []
-            let rowCount = (panels.count + 1) / 2
+            let rowCount = (panels.count + columns - 1) / columns
             let rowHeight = Self.cardHeight(width: cardWidth)
             let window = previewWindow ?? Self.previewRows(visibleMinY: 0, visibleHeight: proxy.size.height,
                                                            rowHeight: rowHeight, rowCount: rowCount)
@@ -300,8 +330,8 @@ struct PanelsScreen: View {
                 ScrollView {
                     VStack(spacing: spacing) {
                         ForEach(0..<rowCount, id: \.self) { row in
-                            PanelGridRow(spacing: spacing) {
-                                ForEach(panels[(row * 2)..<min(row * 2 + 2, panels.count)]) { panel in
+                            PanelGridRow(spacing: Self.columnGap, columns: columns, cardWidth: cardWidth) {
+                                ForEach(panels[(row * columns)..<min(row * columns + columns, panels.count)]) { panel in
                                     card(for: panel, width: cardWidth, showsPreview: window.contains(row))
                                         .id(panel.id)
                                 }
@@ -314,7 +344,8 @@ struct PanelsScreen: View {
                             .focusSection()
                         }
                     }
-                    .padding(Self.focusInset)
+                    .padding(EdgeInsets(top: Self.gridTopInset, leading: Self.focusInset,
+                                        bottom: Self.gridBottomInset, trailing: Self.focusInset))
                 }
                 .onScrollGeometryChange(for: Range<Int>.self) { geometry in
                     Self.previewRows(visibleMinY: geometry.visibleRect.minY,
@@ -341,10 +372,12 @@ struct PanelsScreen: View {
 
     /// A card's height at `width`: its 16:9 picture and the words under it.
     ///
+    /// 07b A5: 450 + 178 = 628 at 800 wide (`154:4187` Default). The focus
+    /// outline sits outside it (the Focused symbol's 640) and adds nothing.
+    ///
     /// `previewRows` derives the row pitch from this, so it must follow
-    /// `PanelCard`'s real height. When A5 changes the card (07b's 640 pt
-    /// height, the `.card` lift), change this with it, or the preview window
-    /// drifts by a row. `testTheCardIsAsTallAsCardHeightSays` pins the two.
+    /// `PanelCard`'s real height, or the preview window drifts by a row.
+    /// `testTheCardIsAsTallAsCardHeightSays` pins the two.
     static func cardHeight(width: CGFloat) -> CGFloat {
         width * 9 / 16 + PanelCard.detailHeight
     }
@@ -356,8 +389,8 @@ struct PanelsScreen: View {
                             rowCount: Int, lookahead: Int = previewLookahead) -> Range<Int> {
         guard rowCount > 0, rowHeight > 0, visibleHeight > 0 else { return 0..<0 }
         let pitch = rowHeight + gridSpacing
-        let first = Int(((visibleMinY - focusInset) / pitch).rounded(.down))
-        let last = Int(((visibleMinY + visibleHeight - focusInset) / pitch).rounded(.down))
+        let first = Int(((visibleMinY - gridTopInset) / pitch).rounded(.down))
+        let last = Int(((visibleMinY + visibleHeight - gridTopInset) / pitch).rounded(.down))
         let lower = min(max(0, first - lookahead), rowCount)
         let upper = max(lower, min(rowCount, last + 1 + lookahead))
         return lower..<upper
@@ -409,6 +442,10 @@ struct PanelsScreen: View {
 /// and a lone last card sits in the left column.
 struct PanelGridRow: Layout {
     var spacing: CGFloat
+    var columns: Int = 2
+    /// The column pitch is the card plus the gap (A3: x 80 and x 960). Nil
+    /// splits the width evenly, as the lazy grid's flexible columns did.
+    var cardWidth: CGFloat? = nil
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? 0
@@ -418,18 +455,19 @@ struct PanelGridRow: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let column = columnWidth(bounds.width)
         let cell = ProposedViewSize(width: column, height: nil)
-        for (side, card) in subviews.prefix(2).enumerated() {
+        for (side, card) in subviews.prefix(columns).enumerated() {
             let x = bounds.minX + CGFloat(side) * (column + spacing)
             card.place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading, proposal: cell)
         }
     }
 
     private func columnWidth(_ width: CGFloat) -> CGFloat {
-        max(0, (width - spacing) / 2)
+        if let cardWidth { return cardWidth }
+        return max(0, (width - spacing * CGFloat(columns - 1)) / CGFloat(max(1, columns)))
     }
 
     private func height(of subviews: Subviews, column: CGFloat) -> CGFloat {
-        subviews.prefix(2).map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
+        subviews.prefix(columns).map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
     }
 }
 

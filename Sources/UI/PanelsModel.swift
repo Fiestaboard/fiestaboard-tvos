@@ -63,19 +63,61 @@ final class PanelsModel {
     static let previewConcurrency = 4
 
     private let app: AppModel
+    @ObservationIgnored private let signage: SignageSettings
+    /// Whether the open-at-launch offer has been answered on this TV.
+    private var openAtLaunchAnswered: Bool
     @ObservationIgnored private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var previewGeneration = UUID()
     @ObservationIgnored private var previewClient: FiestaClient?
     @ObservationIgnored private var loadGeneration = UUID()
 
-    init(app: AppModel) {
+    init(app: AppModel, signage: SignageSettings = .shared) {
         self.app = app
+        self.signage = signage
+        openAtLaunchAnswered = signage.openAtLaunchOffered
         if let cached = app.panelBrowserCache, cached.client === app.connection.client,
            !app.connection.isSignedOut {
             panels = cached.panels
             previews = cached.previews
             previewClient = cached.client
         }
+    }
+
+    // MARK: The open-at-launch offer (07b A3 `166:149722`)
+
+    /// A panel "fits this TV" when its board is there and the screen it was
+    /// set up for is this TV's 16:9, within 1 %: then it fills the screen
+    /// with nothing to resize.
+    static func fitsThisTV(_ panel: Panel) -> Bool {
+        guard !panel.boardMissing, panel.screenAspectW > 0, panel.screenAspectH > 0 else { return false }
+        let aspect = panel.screenAspectW / panel.screenAspectH
+        return abs(aspect / (16.0 / 9.0) - 1) <= 0.01
+    }
+
+    /// "Always open …?": asked once on this TV, when nothing opens at launch
+    /// yet and exactly one panel fits. With two candidates there is no
+    /// obvious answer to offer.
+    var openAtLaunchOffer: Panel? {
+        guard !openAtLaunchAnswered, app.connection.saved?.defaultPanelRef == nil else { return nil }
+        let fitting = panels.filter(Self.fitsThisTV)
+        return fitting.count == 1 ? fitting[0] : nil
+    }
+
+    /// "Always open": the offered panel opens whenever the app starts.
+    func acceptOpenAtLaunch() {
+        guard let panel = openAtLaunchOffer else { return }
+        app.connection.setDefaultPanel(ref: panel.id)
+        answerOpenAtLaunch()
+    }
+
+    /// "Not now": remembered; Settings can still set it.
+    func dismissOpenAtLaunch() {
+        answerOpenAtLaunch()
+    }
+
+    private func answerOpenAtLaunch() {
+        signage.openAtLaunchOffered = true
+        openAtLaunchAnswered = true
     }
 
     /// The picture to draw for `panel`, if any.
