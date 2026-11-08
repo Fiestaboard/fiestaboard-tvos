@@ -40,9 +40,12 @@ final class ViewerOverlaySnapshotTests: XCTestCase {
         let cells = [blank, colour, text("GOOD EVENING MAYA"), blank, blank, text("64 CLEAR LO 55"),
                      blank, blank, text("N JUDAH 6 MIN"), text("MOVIE NIGHT 8 PM"), colour, blank]
         let layout = BoardLayout.make(rows: cells.count, cols: cols, cells: cells, tileHeight: 86)
+        // Full-bleed at 1920 wide (DD24), as the viewer fits it.
+        let fit = min(TVSnapshot.size.width / layout.width, TVSnapshot.size.height / layout.height)
         return BoardCanvas(layout: layout, background: .black)
             .frame(width: layout.width, height: layout.height)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scaleEffect(fit)
+            .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
     }
 
     private func overlay(chip: AnyView? = nil) -> some View {
@@ -57,6 +60,7 @@ final class ViewerOverlaySnapshotTests: XCTestCase {
             board
             overlay(chip: chip)
         }
+        .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
         .environment(\.viewerMaterialForce, force)
         .environment(\._accessibilityReduceTransparency, reduceTransparency), settle: 0.3, fullBleed: true)
     }
