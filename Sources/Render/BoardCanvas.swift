@@ -86,7 +86,7 @@ public struct BoardCanvas: View {
                                   in context: inout GraphicsContext) {
         let white = background == .white
         let unlit = white ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
-        let ink = white ? Color.black : Color(hex: "#f0f0e8")
+        let ink = white ? Color.black : Color(hex: FiestaTokenValues.Board.textOnDark.hex)
         let font = BoardFont.glyph(size: tile.height * BoardLayout.fontSizeRatio)
         var resolved: [Character: GraphicsContext.ResolvedText] = [:]
         if let progress {
@@ -109,7 +109,7 @@ public struct BoardCanvas: View {
         let whiteHardware = background == .white
         // The face reflects room light; only the hardware gaps are OLED black.
         let unlit = whiteHardware ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
-        let ink = whiteHardware ? Color.black : Color(hex: "#f0f0e8")
+        let ink = whiteHardware ? Color.black : Color(hex: FiestaTokenValues.Board.textOnDark.hex)
 
         // Resolve each distinct glyph once, then stamp it.
         var resolved: [Character: GraphicsContext.ResolvedText] = [:]

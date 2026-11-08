@@ -45,6 +45,14 @@ jobs:
           python3 scripts/test-app-store-release.py
           ruby scripts/test-fastlane-release.rb
 
+      # A1 token bridge: the generator's pins and tests, including the drift
+      # check (`--check` fails when the generated Swift no longer matches
+      # Tokens/fiestaui-tokens.json and Tokens/platform-tv.json).
+      - name: Token bridge drift check
+        run: |
+          node scripts/tokens/generate-swift.mjs --check
+          node --test scripts/tokens/tests/*.test.mjs
+
       - name: Parity comparer tests
         run: |
           npm ci --prefix scripts/parity --no-audit --no-fund

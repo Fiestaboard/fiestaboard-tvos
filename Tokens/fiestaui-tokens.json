@@ -1,0 +1,3782 @@
+{
+  "$description": "FiestaUI design tokens, generated from src/styles/theme.css of @fiestaboard/ui 8.16.0. Do not edit by hand.",
+  "$extensions": {
+    "app.fiestaboard": {
+      "package": "@fiestaboard/ui",
+      "version": "8.16.0",
+      "modes": [
+        "light",
+        "dark"
+      ]
+    }
+  },
+  "color": {
+    "light": {
+      "background": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9451,
+            0.925,
+            0.9006
+          ],
+          "alpha": 1,
+          "hex": "#f1ece6"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--background",
+            "authored": "oklch(0.945 0.01 73)"
+          }
+        }
+      },
+      "foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--foreground",
+            "authored": "oklch(0.16 0.008 73)"
+          }
+        }
+      },
+      "card": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9946,
+            0.9824,
+            0.9677
+          ],
+          "alpha": 1,
+          "hex": "#fefbf7"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--card",
+            "authored": "oklch(0.988 0.006 73)"
+          }
+        }
+      },
+      "card-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--card-foreground",
+            "authored": "oklch(0.16 0.008 73)"
+          }
+        }
+      },
+      "popover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9982,
+            0.988,
+            0.9757
+          ],
+          "alpha": 1,
+          "hex": "#fffcf9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--popover",
+            "authored": "oklch(0.992 0.005 73)"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--popover-foreground",
+            "authored": "oklch(0.16 0.008 73)"
+          }
+        }
+      },
+      "primary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary",
+            "authored": "#f5a623"
+          }
+        }
+      },
+      "primary-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "primary-hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9925,
+            0.7406,
+            0.3974
+          ],
+          "alpha": 1,
+          "hex": "#fdbd65"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary-hover",
+            "authored": "oklch(0.84 0.128 73)"
+          }
+        }
+      },
+      "primary-active": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8684,
+            0.5754,
+            0.0079
+          ],
+          "alpha": 1,
+          "hex": "#dd9302"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary-active",
+            "authored": "oklch(0.72 0.153 73)"
+          }
+        }
+      },
+      "ring-edge": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--ring-edge",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8982,
+            0.8724,
+            0.841
+          ],
+          "alpha": 1,
+          "hex": "#e5ded6"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--secondary",
+            "authored": "oklch(0.905 0.013 73)"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--secondary-foreground",
+            "authored": "oklch(0.16 0.008 73)"
+          }
+        }
+      },
+      "muted": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9095,
+            0.8856,
+            0.8565
+          ],
+          "alpha": 1,
+          "hex": "#e8e2da"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--muted",
+            "authored": "oklch(0.915 0.012 73)"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2889,
+            0.2792,
+            0.2673
+          ],
+          "alpha": 1,
+          "hex": "#4a4744"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--muted-foreground",
+            "authored": "oklch(0.4 0.006 73)"
+          }
+        }
+      },
+      "accent": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9264,
+            0.9024,
+            0.8732
+          ],
+          "alpha": 1,
+          "hex": "#ece6df"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--accent",
+            "authored": "oklch(0.928 0.012 73)"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--accent-foreground",
+            "authored": "oklch(0.16 0.008 73)"
+          }
+        }
+      },
+      "destructive": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6732,
+            0.1953,
+            0.1538
+          ],
+          "alpha": 1,
+          "hex": "#ac3227"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--destructive",
+            "authored": "oklch(0.5 0.16 29)"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--destructive-foreground",
+            "authored": "oklch(1 0 0)"
+          }
+        }
+      },
+      "border": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 0.14,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--border",
+            "authored": "color-mix(in oklch, var(--foreground) 14%, transparent)"
+          }
+        }
+      },
+      "input": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 0.5,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--input",
+            "authored": "color-mix(in oklch, var(--foreground) 50%, transparent)"
+          }
+        }
+      },
+      "ring": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--ring",
+            "authored": "var(--primary)",
+            "aliasOf": "--primary"
+          }
+        }
+      },
+      "sidebar": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9073,
+            0.8814,
+            0.85
+          ],
+          "alpha": 1,
+          "hex": "#e7e1d9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar",
+            "authored": "oklch(0.912 0.013 73)"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-foreground",
+            "authored": "oklch(0.16 0.008 73)"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 0.14,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-accent",
+            "authored": "oklch(1 0 0 / 14%)"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9837,
+            0.9797,
+            0.9748
+          ],
+          "alpha": 1,
+          "hex": "#fbfaf9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-accent-foreground",
+            "authored": "oklch(0.985 0.002 73)"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 0.1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-border",
+            "authored": "oklch(1 0 0 / 10%)"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-ring",
+            "authored": "var(--primary)",
+            "aliasOf": "--primary"
+          }
+        }
+      },
+      "info": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.3932,
+            0.7097
+          ],
+          "alpha": 1,
+          "hex": "#0064b5"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--info",
+            "authored": "oklch(0.5 0.151 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "info-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--info-foreground",
+            "authored": "oklch(1 0 0)"
+          }
+        }
+      },
+      "success": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2469,
+            0.4528,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#3f7300"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--success",
+            "authored": "oklch(0.5 0.147 133)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "success-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--success-foreground",
+            "authored": "oklch(1 0 0)"
+          }
+        }
+      },
+      "warning": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5678,
+            0.5254,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#918600"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--warning",
+            "authored": "oklch(0.61 0.131 104)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "warning-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--warning-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "tag-variable": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5191,
+            0.249,
+            0.6288
+          ],
+          "alpha": 1,
+          "hex": "#843fa0"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-variable",
+            "authored": "oklch(0.5 0.16 315)"
+          }
+        }
+      },
+      "tag-variable-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.3591,
+            0.2067,
+            0.4242
+          ],
+          "alpha": 1,
+          "hex": "#5c356c"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-variable-foreground",
+            "authored": "oklch(0.4 0.1 315)"
+          }
+        }
+      },
+      "tag-success": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2469,
+            0.4528,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#3f7300"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-success",
+            "authored": "oklch(0.5 0.147 133)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "tag-success-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1924,
+            0.3234,
+            0.0663
+          ],
+          "alpha": 1,
+          "hex": "#315211"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-success-foreground",
+            "authored": "oklch(0.4 0.1 133)"
+          }
+        }
+      },
+      "tag-formula": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.3932,
+            0.7097
+          ],
+          "alpha": 1,
+          "hex": "#0064b5"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-formula",
+            "authored": "oklch(0.5 0.151 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "tag-formula-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0811,
+            0.2876,
+            0.483
+          ],
+          "alpha": 1,
+          "hex": "#15497b"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-formula-foreground",
+            "authored": "oklch(0.4 0.1 251)"
+          }
+        }
+      },
+      "category-entertainment": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9216,
+            0.251,
+            0.2039
+          ],
+          "alpha": 1,
+          "hex": "#eb4034"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-entertainment",
+            "authored": "#eb4034"
+          }
+        }
+      },
+      "category-entertainment-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6732,
+            0.1953,
+            0.1538
+          ],
+          "alpha": 1,
+          "hex": "#ac3227"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-entertainment-foreground",
+            "authored": "oklch(0.5 0.16 29)"
+          }
+        }
+      },
+      "category-home": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-home",
+            "authored": "#f5a623"
+          }
+        }
+      },
+      "category-home-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5362,
+            0.3418,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#895700"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-home-foreground",
+            "authored": "oklch(0.5 0.111 73)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-art": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9725,
+            0.9059,
+            0.1098
+          ],
+          "alpha": 1,
+          "hex": "#f8e71c"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-art",
+            "authored": "#f8e71c"
+          }
+        }
+      },
+      "category-art-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4319,
+            0.3976,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#6e6500"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-art-foreground",
+            "authored": "oklch(0.5 0.11 104)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-transit": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4941,
+            0.8275,
+            0.1294
+          ],
+          "alpha": 1,
+          "hex": "#7ed321"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-transit",
+            "authored": "#7ed321"
+          }
+        }
+      },
+      "category-transit-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2469,
+            0.4528,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#3f7300"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-transit-foreground",
+            "authored": "oklch(0.5 0.147 133)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-weather": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2902,
+            0.5647,
+            0.851
+          ],
+          "alpha": 1,
+          "hex": "#4a90d9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-weather",
+            "authored": "#4a90d9"
+          }
+        }
+      },
+      "category-weather-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.3932,
+            0.7097
+          ],
+          "alpha": 1,
+          "hex": "#0064b5"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-weather-foreground",
+            "authored": "oklch(0.5 0.151 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-data": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6078,
+            0.349,
+            0.7137
+          ],
+          "alpha": 1,
+          "hex": "#9b59b6"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-data",
+            "authored": "#9b59b6"
+          }
+        }
+      },
+      "category-data-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5191,
+            0.249,
+            0.6288
+          ],
+          "alpha": 1,
+          "hex": "#843fa0"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-data-foreground",
+            "authored": "oklch(0.5 0.16 315)"
+          }
+        }
+      },
+      "category-utility": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-utility",
+            "authored": "#ffffff"
+          }
+        }
+      },
+      "category-utility-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2997,
+            0.277,
+            0.2493
+          ],
+          "alpha": 1,
+          "hex": "#4c4740"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-utility-foreground",
+            "authored": "oklch(0.4 0.014 73)"
+          }
+        }
+      },
+      "hue-red": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6732,
+            0.1953,
+            0.1538
+          ],
+          "alpha": 1,
+          "hex": "#ac3227"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-red",
+            "authored": "oklch(0.5 0.16 29)"
+          }
+        }
+      },
+      "hue-orange": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5362,
+            0.3418,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#895700"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-orange",
+            "authored": "oklch(0.5 0.111 73)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "hue-yellow": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4319,
+            0.3976,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#6e6500"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-yellow",
+            "authored": "oklch(0.5 0.11 104)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "hue-green": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2469,
+            0.4528,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#3f7300"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-green",
+            "authored": "oklch(0.5 0.147 133)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "hue-blue": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.3932,
+            0.7097
+          ],
+          "alpha": 1,
+          "hex": "#0064b5"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-blue",
+            "authored": "oklch(0.5 0.151 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "hue-violet": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5191,
+            0.249,
+            0.6288
+          ],
+          "alpha": 1,
+          "hex": "#843fa0"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-violet",
+            "authored": "oklch(0.5 0.16 315)"
+          }
+        }
+      },
+      "overlay": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0645,
+            0.049,
+            0.0304
+          ],
+          "alpha": 0.6,
+          "hex": "#100d08"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--overlay",
+            "authored": "oklch(0.16 0.012 73 / 60%)"
+          }
+        }
+      },
+      "brand": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5362,
+            0.3418,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#895700"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand",
+            "authored": "var(--hue-orange)",
+            "aliasOf": "--hue-orange",
+            "outOfGamut": true
+          }
+        }
+      },
+      "brand-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "brand-wordmark": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7742,
+            0.51,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#c58200"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-wordmark",
+            "authored": "oklch(0.66 0.141 73)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "brand-tile-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-tile-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "brand-hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4408,
+            0.2852,
+            0.0379
+          ],
+          "alpha": 1,
+          "hex": "#70490a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-hover",
+            "authored": "color-mix(in oklch, var(--brand) 82%, var(--foreground))"
+          }
+        }
+      },
+      "nav-active": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 1,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--nav-active",
+            "authored": "var(--foreground)",
+            "aliasOf": "--foreground"
+          }
+        }
+      },
+      "nav-active-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9451,
+            0.925,
+            0.9006
+          ],
+          "alpha": 1,
+          "hex": "#f1ece6"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--nav-active-foreground",
+            "authored": "var(--background)",
+            "aliasOf": "--background"
+          }
+        }
+      },
+      "nav-active-hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0604,
+            0.0501,
+            0.0374
+          ],
+          "alpha": 0.14,
+          "hex": "#0f0d0a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--nav-active-hover",
+            "authored": "color-mix(in oklch, var(--foreground) 14%, transparent)"
+          }
+        }
+      },
+      "fiesta-red": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6052,
+            0.1642,
+            0.1274
+          ],
+          "alpha": 1,
+          "hex": "#9a2a20"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--fiesta-red",
+            "authored": "oklch(0.46 0.15 29)"
+          }
+        }
+      },
+      "fiesta-orange": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4727,
+            0.305,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#794e00"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--fiesta-orange",
+            "authored": "oklch(0.46 0.098 73)"
+          }
+        }
+      },
+      "fiesta-purple": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4644,
+            0.2151,
+            0.5651
+          ],
+          "alpha": 1,
+          "hex": "#763790"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--fiesta-purple",
+            "authored": "oklch(0.46 0.15 315)"
+          }
+        }
+      }
+    },
+    "dark": {
+      "background": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0436,
+            0.0386,
+            0.0328
+          ],
+          "alpha": 1,
+          "hex": "#0b0a08"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--background",
+            "authored": "oklch(0.145 0.004 73)"
+          }
+        }
+      },
+      "foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 1,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--foreground",
+            "authored": "oklch(0.965 0.003 73)"
+          }
+        }
+      },
+      "card": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0863,
+            0.0809,
+            0.0743
+          ],
+          "alpha": 1,
+          "hex": "#161513"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--card",
+            "authored": "oklch(0.195 0.004 73)"
+          }
+        }
+      },
+      "card-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 1,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--card-foreground",
+            "authored": "oklch(0.965 0.003 73)"
+          }
+        }
+      },
+      "popover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1224,
+            0.1168,
+            0.1099
+          ],
+          "alpha": 1,
+          "hex": "#1f1e1c"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--popover",
+            "authored": "oklch(0.235 0.004 73)"
+          }
+        }
+      },
+      "popover-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 1,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--popover-foreground",
+            "authored": "oklch(0.965 0.003 73)"
+          }
+        }
+      },
+      "primary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary",
+            "authored": "#f5a623"
+          }
+        }
+      },
+      "primary-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "primary-hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9925,
+            0.7406,
+            0.3974
+          ],
+          "alpha": 1,
+          "hex": "#fdbd65"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary-hover",
+            "authored": "oklch(0.84 0.128 73)"
+          }
+        }
+      },
+      "primary-active": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8684,
+            0.5754,
+            0.0079
+          ],
+          "alpha": 1,
+          "hex": "#dd9302"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--primary-active",
+            "authored": "oklch(0.72 0.153 73)"
+          }
+        }
+      },
+      "ring-edge": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--ring-edge",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1411,
+            0.1353,
+            0.1283
+          ],
+          "alpha": 1,
+          "hex": "#242321"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--secondary",
+            "authored": "oklch(0.255 0.004 73)"
+          }
+        }
+      },
+      "secondary-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 1,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--secondary-foreground",
+            "authored": "oklch(0.965 0.003 73)"
+          }
+        }
+      },
+      "muted": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1224,
+            0.1168,
+            0.1099
+          ],
+          "alpha": 1,
+          "hex": "#1f1e1c"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--muted",
+            "authored": "oklch(0.235 0.004 73)"
+          }
+        }
+      },
+      "muted-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6572,
+            0.6497,
+            0.6406
+          ],
+          "alpha": 1,
+          "hex": "#a8a6a3"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--muted-foreground",
+            "authored": "oklch(0.725 0.004 73)"
+          }
+        }
+      },
+      "accent": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1133,
+            0.1076,
+            0.1008
+          ],
+          "alpha": 1,
+          "hex": "#1d1b1a"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--accent",
+            "authored": "oklch(0.225 0.004 73)"
+          }
+        }
+      },
+      "accent-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 1,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--accent-foreground",
+            "authored": "oklch(0.965 0.003 73)"
+          }
+        }
+      },
+      "destructive": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9639,
+            0.4316,
+            0.3678
+          ],
+          "alpha": 1,
+          "hex": "#f66e5e"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--destructive",
+            "authored": "oklch(0.7 0.17 29)"
+          }
+        }
+      },
+      "destructive-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--destructive-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "border": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 0.14,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--border",
+            "authored": "color-mix(in oklch, var(--foreground) 14%, transparent)"
+          }
+        }
+      },
+      "input": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 0.4,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--input",
+            "authored": "color-mix(in oklch, var(--foreground) 40%, transparent)"
+          }
+        }
+      },
+      "ring": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--ring",
+            "authored": "var(--primary)",
+            "aliasOf": "--primary"
+          }
+        }
+      },
+      "sidebar": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.1283,
+            0.1211,
+            0.1125
+          ],
+          "alpha": 1,
+          "hex": "#211f1d"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar",
+            "authored": "oklch(0.24 0.005 73)"
+          }
+        }
+      },
+      "sidebar-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9837,
+            0.9797,
+            0.9748
+          ],
+          "alpha": 1,
+          "hex": "#fbfaf9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-foreground",
+            "authored": "oklch(0.985 0.002 73)"
+          }
+        }
+      },
+      "sidebar-accent": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 0.14,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-accent",
+            "authored": "oklch(1 0 0 / 14%)"
+          }
+        }
+      },
+      "sidebar-accent-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9837,
+            0.9797,
+            0.9748
+          ],
+          "alpha": 1,
+          "hex": "#fbfaf9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-accent-foreground",
+            "authored": "oklch(0.985 0.002 73)"
+          }
+        }
+      },
+      "sidebar-border": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 0.1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-border",
+            "authored": "oklch(1 0 0 / 10%)"
+          }
+        }
+      },
+      "sidebar-ring": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--sidebar-ring",
+            "authored": "var(--primary)",
+            "aliasOf": "--primary"
+          }
+        }
+      },
+      "info": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.387,
+            0.688,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#63afff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--info",
+            "authored": "oklch(0.74 0.139 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "info-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--info-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "success": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5447,
+            0.8066,
+            0.3234
+          ],
+          "alpha": 1,
+          "hex": "#8bce52"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--success",
+            "authored": "oklch(0.78 0.17 133)"
+          }
+        }
+      },
+      "success-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--success-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "warning": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8944,
+            0.8368,
+            0.1887
+          ],
+          "alpha": 1,
+          "hex": "#e4d530"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--warning",
+            "authored": "oklch(0.86 0.17 104)"
+          }
+        }
+      },
+      "warning-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--warning-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "tag-variable": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8722,
+            0.5826,
+            0.9988
+          ],
+          "alpha": 1,
+          "hex": "#de95ff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-variable",
+            "authored": "oklch(0.78 0.164 315)"
+          }
+        }
+      },
+      "tag-variable-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9177,
+            0.743,
+            0.998
+          ],
+          "alpha": 1,
+          "hex": "#eabdfe"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-variable-foreground",
+            "authored": "oklch(0.86 0.1 315)"
+          }
+        }
+      },
+      "tag-success": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5447,
+            0.8066,
+            0.3234
+          ],
+          "alpha": 1,
+          "hex": "#8bce52"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-success",
+            "authored": "oklch(0.78 0.17 133)"
+          }
+        }
+      },
+      "tag-success-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7195,
+            0.8768,
+            0.6103
+          ],
+          "alpha": 1,
+          "hex": "#b7e09c"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-success-foreground",
+            "authored": "oklch(0.86 0.1 133)"
+          }
+        }
+      },
+      "tag-formula": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4923,
+            0.7383,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#7ebcff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-formula",
+            "authored": "oklch(0.78 0.116 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "tag-formula-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6473,
+            0.8382,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#a5d6ff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--tag-formula-foreground",
+            "authored": "oklch(0.86 0.09 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-entertainment": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9216,
+            0.251,
+            0.2039
+          ],
+          "alpha": 1,
+          "hex": "#eb4034"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-entertainment",
+            "authored": "#eb4034"
+          }
+        }
+      },
+      "category-entertainment-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.5887,
+            0.5297
+          ],
+          "alpha": 1,
+          "hex": "#ff9687"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-entertainment-foreground",
+            "authored": "oklch(0.78 0.129 29)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-home": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-home",
+            "authored": "#f5a623"
+          }
+        }
+      },
+      "category-home-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9659,
+            0.6416,
+            0.0035
+          ],
+          "alpha": 1,
+          "hex": "#f6a401"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-home-foreground",
+            "authored": "oklch(0.78 0.166 73)"
+          }
+        }
+      },
+      "category-art": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9725,
+            0.9059,
+            0.1098
+          ],
+          "alpha": 1,
+          "hex": "#f8e71c"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-art",
+            "authored": "#f8e71c"
+          }
+        }
+      },
+      "category-art-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7901,
+            0.7342,
+            0.019
+          ],
+          "alpha": 1,
+          "hex": "#c9bb05"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-art-foreground",
+            "authored": "oklch(0.78 0.164 104)"
+          }
+        }
+      },
+      "category-transit": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4941,
+            0.8275,
+            0.1294
+          ],
+          "alpha": 1,
+          "hex": "#7ed321"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-transit",
+            "authored": "#7ed321"
+          }
+        }
+      },
+      "category-transit-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5447,
+            0.8066,
+            0.3234
+          ],
+          "alpha": 1,
+          "hex": "#8bce52"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-transit-foreground",
+            "authored": "oklch(0.78 0.17 133)"
+          }
+        }
+      },
+      "category-weather": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.2902,
+            0.5647,
+            0.851
+          ],
+          "alpha": 1,
+          "hex": "#4a90d9"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-weather",
+            "authored": "#4a90d9"
+          }
+        }
+      },
+      "category-weather-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4923,
+            0.7383,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#7ebcff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-weather-foreground",
+            "authored": "oklch(0.78 0.116 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "category-data": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6078,
+            0.349,
+            0.7137
+          ],
+          "alpha": 1,
+          "hex": "#9b59b6"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-data",
+            "authored": "#9b59b6"
+          }
+        }
+      },
+      "category-data-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8722,
+            0.5826,
+            0.9988
+          ],
+          "alpha": 1,
+          "hex": "#de95ff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-data-foreground",
+            "authored": "oklch(0.78 0.164 315)"
+          }
+        }
+      },
+      "category-utility": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#ffffff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-utility",
+            "authored": "#ffffff"
+          }
+        }
+      },
+      "category-utility-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.67,
+            0.6474,
+            0.62
+          ],
+          "alpha": 1,
+          "hex": "#aba59e"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--category-utility-foreground",
+            "authored": "oklch(0.725 0.012 73)"
+          }
+        }
+      },
+      "hue-red": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.5887,
+            0.5297
+          ],
+          "alpha": 1,
+          "hex": "#ff9687"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-red",
+            "authored": "oklch(0.78 0.129 29)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "hue-orange": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9659,
+            0.6416,
+            0.0035
+          ],
+          "alpha": 1,
+          "hex": "#f6a401"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-orange",
+            "authored": "oklch(0.78 0.166 73)"
+          }
+        }
+      },
+      "hue-yellow": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.7901,
+            0.7342,
+            0.019
+          ],
+          "alpha": 1,
+          "hex": "#c9bb05"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-yellow",
+            "authored": "oklch(0.78 0.164 104)"
+          }
+        }
+      },
+      "hue-green": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.5447,
+            0.8066,
+            0.3234
+          ],
+          "alpha": 1,
+          "hex": "#8bce52"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-green",
+            "authored": "oklch(0.78 0.17 133)"
+          }
+        }
+      },
+      "hue-blue": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4923,
+            0.7383,
+            1
+          ],
+          "alpha": 1,
+          "hex": "#7ebcff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-blue",
+            "authored": "oklch(0.78 0.116 251)",
+            "outOfGamut": true
+          }
+        }
+      },
+      "hue-violet": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.8722,
+            0.5826,
+            0.9988
+          ],
+          "alpha": 1,
+          "hex": "#de95ff"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--hue-violet",
+            "authored": "oklch(0.78 0.164 315)"
+          }
+        }
+      },
+      "overlay": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0087,
+            0.0062,
+            0.0038
+          ],
+          "alpha": 0.72,
+          "hex": "#020201"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--overlay",
+            "authored": "oklch(0.08 0.006 73 / 72%)"
+          }
+        }
+      },
+      "brand": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9659,
+            0.6416,
+            0.0035
+          ],
+          "alpha": 1,
+          "hex": "#f6a401"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand",
+            "authored": "var(--hue-orange)",
+            "aliasOf": "--hue-orange"
+          }
+        }
+      },
+      "brand-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "brand-wordmark": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-wordmark",
+            "authored": "var(--primary)",
+            "aliasOf": "--primary"
+          }
+        }
+      },
+      "brand-tile-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-tile-foreground",
+            "authored": "oklch(0.205 0.008 73)"
+          }
+        }
+      },
+      "brand-hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9693,
+            0.7019,
+            0.3243
+          ],
+          "alpha": 1,
+          "hex": "#f7b353"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--brand-hover",
+            "authored": "color-mix(in oklch, var(--brand) 82%, var(--foreground))"
+          }
+        }
+      },
+      "nav-active": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9608,
+            0.651,
+            0.1373
+          ],
+          "alpha": 1,
+          "hex": "#f5a623"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--nav-active",
+            "authored": "var(--primary)",
+            "aliasOf": "--primary"
+          }
+        }
+      },
+      "nav-active-foreground": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0997,
+            0.0888,
+            0.0753
+          ],
+          "alpha": 1,
+          "hex": "#191713"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--nav-active-foreground",
+            "authored": "var(--primary-foreground)",
+            "aliasOf": "--primary-foreground"
+          }
+        }
+      },
+      "nav-active-hover": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.9592,
+            0.9532,
+            0.9458
+          ],
+          "alpha": 0.14,
+          "hex": "#f5f3f1"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--nav-active-hover",
+            "authored": "color-mix(in oklch, var(--foreground) 14%, transparent)"
+          }
+        }
+      },
+      "fiesta-red": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.6052,
+            0.1642,
+            0.1274
+          ],
+          "alpha": 1,
+          "hex": "#9a2a20"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--fiesta-red",
+            "authored": "oklch(0.46 0.15 29)"
+          }
+        }
+      },
+      "fiesta-orange": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4727,
+            0.305,
+            0
+          ],
+          "alpha": 1,
+          "hex": "#794e00"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--fiesta-orange",
+            "authored": "oklch(0.46 0.098 73)"
+          }
+        }
+      },
+      "fiesta-purple": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.4644,
+            0.2151,
+            0.5651
+          ],
+          "alpha": 1,
+          "hex": "#763790"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--fiesta-purple",
+            "authored": "oklch(0.46 0.15 315)"
+          }
+        }
+      }
+    }
+  },
+  "radius": {
+    "base": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius"
+        }
+      }
+    },
+    "control-inset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-control-inset",
+          "authored": "calc(var(--radius) - 4px)"
+        }
+      }
+    },
+    "control": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-control",
+          "authored": "calc(var(--radius) - 2px)"
+        }
+      }
+    },
+    "surface": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-surface",
+          "authored": "var(--radius)"
+        }
+      }
+    },
+    "card": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-card",
+          "authored": "calc(var(--radius) + 4px)"
+        }
+      }
+    },
+    "pill": {
+      "$type": "dimension",
+      "$value": {
+        "value": 9999,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-pill",
+          "authored": "calc(infinity * 1px)"
+        }
+      }
+    },
+    "chrome": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-chrome",
+          "authored": "14px"
+        }
+      }
+    },
+    "chrome-mobile": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--radius-chrome-mobile",
+          "authored": "16px"
+        }
+      }
+    }
+  },
+  "motion": {
+    "duration": {
+      "fast": {
+        "$type": "duration",
+        "$value": {
+          "value": 100,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-fast"
+          }
+        }
+      },
+      "control": {
+        "$type": "duration",
+        "$value": {
+          "value": 150,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-control"
+          }
+        }
+      },
+      "base": {
+        "$type": "duration",
+        "$value": {
+          "value": 200,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-base"
+          }
+        }
+      },
+      "exit": {
+        "$type": "duration",
+        "$value": {
+          "value": 250,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-exit"
+          }
+        }
+      },
+      "slow": {
+        "$type": "duration",
+        "$value": {
+          "value": 300,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-slow"
+          }
+        }
+      },
+      "slower": {
+        "$type": "duration",
+        "$value": {
+          "value": 350,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-slower"
+          }
+        }
+      },
+      "slowest": {
+        "$type": "duration",
+        "$value": {
+          "value": 400,
+          "unit": "ms"
+        },
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-duration-slowest"
+          }
+        }
+      }
+    },
+    "easing": {
+      "out": {
+        "$type": "cubicBezier",
+        "$value": [
+          0,
+          0,
+          0.58,
+          1
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-ease-out",
+            "authored": "ease-out"
+          }
+        }
+      },
+      "spring": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.16,
+          1,
+          0.3,
+          1
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-ease-spring",
+            "authored": "cubic-bezier(0.16, 1, 0.3, 1)"
+          }
+        }
+      },
+      "in": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.4,
+          0,
+          1,
+          1
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-ease-in",
+            "authored": "cubic-bezier(0.4, 0, 1, 1)"
+          }
+        }
+      },
+      "out-cubic": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.33,
+          1,
+          0.68,
+          1
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-ease-out-cubic",
+            "authored": "cubic-bezier(0.33, 1, 0.68, 1)"
+          }
+        }
+      },
+      "standard": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.25,
+          0.1,
+          0.25,
+          1
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--motion-ease-standard",
+            "authored": "cubic-bezier(0.25, 0.1, 0.25, 1)"
+          }
+        }
+      }
+    }
+  },
+  "elevation": {
+    "light": {
+      "card": {
+        "$type": "shadow",
+        "$value": [
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 1,
+            "blur": 2,
+            "spread": 0,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0.2161,
+                0.1708,
+                0.1131
+              ],
+              "alpha": 0.07,
+              "hex": "#372c1d"
+            }
+          },
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 2,
+            "blur": 8,
+            "spread": -2,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0.2161,
+                0.1708,
+                0.1131
+              ],
+              "alpha": 0.1,
+              "hex": "#372c1d"
+            }
+          }
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--elevation-card"
+          }
+        }
+      },
+      "card-hover": {
+        "$type": "shadow",
+        "$value": [
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 2,
+            "blur": 8,
+            "spread": -2,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0.2161,
+                0.1708,
+                0.1131
+              ],
+              "alpha": 0.12,
+              "hex": "#372c1d"
+            }
+          },
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 4,
+            "blur": 16,
+            "spread": -4,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0.2161,
+                0.1708,
+                0.1131
+              ],
+              "alpha": 0.1,
+              "hex": "#372c1d"
+            }
+          }
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--elevation-card-hover"
+          }
+        }
+      },
+      "modal": {
+        "$type": "shadow",
+        "$value": [
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 16,
+            "blur": 40,
+            "spread": -12,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0.2161,
+                0.1708,
+                0.1131
+              ],
+              "alpha": 0.24,
+              "hex": "#372c1d"
+            }
+          },
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 4,
+            "blur": 10,
+            "spread": -4,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0.2161,
+                0.1708,
+                0.1131
+              ],
+              "alpha": 0.12,
+              "hex": "#372c1d"
+            }
+          }
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--elevation-modal"
+          }
+        }
+      }
+    },
+    "dark": {
+      "card": {
+        "$type": "shadow",
+        "$value": [
+          {
+            "inset": true,
+            "offsetX": 0,
+            "offsetY": 1,
+            "blur": 0,
+            "spread": 0,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                1,
+                1,
+                1
+              ],
+              "alpha": 0.1,
+              "hex": "#ffffff"
+            }
+          },
+          {
+            "inset": true,
+            "offsetX": 0,
+            "offsetY": -1,
+            "blur": 0,
+            "spread": 0,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0,
+                0,
+                0
+              ],
+              "alpha": 0.55,
+              "hex": "#000000"
+            }
+          },
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 2,
+            "blur": 8,
+            "spread": -3,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0,
+                0,
+                0
+              ],
+              "alpha": 0.55,
+              "hex": "#000000"
+            }
+          }
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--elevation-card"
+          }
+        }
+      },
+      "card-hover": {
+        "$type": "shadow",
+        "$value": [
+          {
+            "inset": true,
+            "offsetX": 0,
+            "offsetY": 1,
+            "blur": 0,
+            "spread": 0,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                1,
+                1,
+                1
+              ],
+              "alpha": 0.14,
+              "hex": "#ffffff"
+            }
+          },
+          {
+            "inset": true,
+            "offsetX": 0,
+            "offsetY": -1,
+            "blur": 0,
+            "spread": 0,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0,
+                0,
+                0
+              ],
+              "alpha": 0.55,
+              "hex": "#000000"
+            }
+          },
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 4,
+            "blur": 14,
+            "spread": -4,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0,
+                0,
+                0
+              ],
+              "alpha": 0.6,
+              "hex": "#000000"
+            }
+          }
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--elevation-card-hover"
+          }
+        }
+      },
+      "modal": {
+        "$type": "shadow",
+        "$value": [
+          {
+            "inset": false,
+            "offsetX": 0,
+            "offsetY": 24,
+            "blur": 48,
+            "spread": -12,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                0,
+                0,
+                0
+              ],
+              "alpha": 0.75,
+              "hex": "#000000"
+            }
+          },
+          {
+            "inset": true,
+            "offsetX": 0,
+            "offsetY": 0,
+            "blur": 0,
+            "spread": 1,
+            "color": {
+              "colorSpace": "srgb",
+              "components": [
+                1,
+                1,
+                1
+              ],
+              "alpha": 0.14,
+              "hex": "#ffffff"
+            }
+          }
+        ],
+        "$extensions": {
+          "app.fiestaboard": {
+            "css": "--elevation-modal"
+          }
+        }
+      }
+    }
+  },
+  "font": {
+    "sans": {
+      "$type": "fontFamily",
+      "$value": "Archivo",
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--font-sans-stack"
+        }
+      }
+    },
+    "mono": {
+      "$type": "fontFamily",
+      "$value": "Spline Sans Mono",
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--font-mono-stack"
+        }
+      }
+    }
+  },
+  "zIndex": {
+    "sidebar": {
+      "$type": "number",
+      "$value": 50,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-sidebar"
+        }
+      }
+    },
+    "sidebar-toggle": {
+      "$type": "number",
+      "$value": 51,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-sidebar-toggle"
+        }
+      }
+    },
+    "mobile-backdrop": {
+      "$type": "number",
+      "$value": 90,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-mobile-backdrop"
+        }
+      }
+    },
+    "mobile-menu": {
+      "$type": "number",
+      "$value": 95,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-mobile-menu"
+        }
+      }
+    },
+    "mobile-header": {
+      "$type": "number",
+      "$value": 100,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-mobile-header"
+        }
+      }
+    },
+    "sheet": {
+      "$type": "number",
+      "$value": 110,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-sheet"
+        }
+      }
+    },
+    "select": {
+      "$type": "number",
+      "$value": 120,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-select"
+        }
+      }
+    },
+    "modal": {
+      "$type": "number",
+      "$value": 130,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-modal"
+        }
+      }
+    },
+    "popover": {
+      "$type": "number",
+      "$value": 135,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-popover"
+        }
+      }
+    },
+    "tooltip": {
+      "$type": "number",
+      "$value": 140,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-tooltip"
+        }
+      }
+    },
+    "skip-link": {
+      "$type": "number",
+      "$value": 200,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-skip-link"
+        }
+      }
+    },
+    "confetti": {
+      "$type": "number",
+      "$value": 9999,
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--z-confetti"
+        }
+      }
+    }
+  },
+  "board": {
+    "red": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.9216,
+          0.251,
+          0.2039
+        ],
+        "alpha": 1,
+        "hex": "#eb4034"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-red"
+        }
+      }
+    },
+    "orange": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.9608,
+          0.651,
+          0.1373
+        ],
+        "alpha": 1,
+        "hex": "#f5a623"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-orange"
+        }
+      }
+    },
+    "yellow": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.9725,
+          0.9059,
+          0.1098
+        ],
+        "alpha": 1,
+        "hex": "#f8e71c"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-yellow"
+        }
+      }
+    },
+    "green": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.4941,
+          0.8275,
+          0.1294
+        ],
+        "alpha": 1,
+        "hex": "#7ed321"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-green"
+        }
+      }
+    },
+    "blue": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.2902,
+          0.5647,
+          0.851
+        ],
+        "alpha": 1,
+        "hex": "#4a90d9"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-blue"
+        }
+      }
+    },
+    "violet": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.6078,
+          0.349,
+          0.7137
+        ],
+        "alpha": 1,
+        "hex": "#9b59b6"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-violet"
+        }
+      }
+    },
+    "white": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "alpha": 1,
+        "hex": "#ffffff"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-white"
+        }
+      }
+    },
+    "black": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.102,
+          0.102,
+          0.102
+        ],
+        "alpha": 1,
+        "hex": "#1a1a1a"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-black"
+        }
+      }
+    },
+    "surface-light": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.9804,
+          0.9804,
+          0.9804
+        ],
+        "alpha": 1,
+        "hex": "#fafafa"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-surface-light"
+        }
+      }
+    },
+    "surface-dark": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.051,
+          0.051,
+          0.051
+        ],
+        "alpha": 1,
+        "hex": "#0d0d0d"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-surface-dark"
+        }
+      }
+    },
+    "text-on-light": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.051,
+          0.051,
+          0.051
+        ],
+        "alpha": 1,
+        "hex": "#0d0d0d"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-text-on-light"
+        }
+      }
+    },
+    "text-on-dark": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.9412,
+          0.9412,
+          0.9098
+        ],
+        "alpha": 1,
+        "hex": "#f0f0e8"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-text-on-dark"
+        }
+      }
+    },
+    "bezel-light": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.9725,
+          0.9725,
+          0.9725
+        ],
+        "alpha": 1,
+        "hex": "#f8f8f8"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-bezel-light"
+        }
+      }
+    },
+    "bezel-dark": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.0196,
+          0.0196,
+          0.0196
+        ],
+        "alpha": 1,
+        "hex": "#050505"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-bezel-dark"
+        }
+      }
+    },
+    "bezel-border-light": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.8471,
+          0.8471,
+          0.8471
+        ],
+        "alpha": 1,
+        "hex": "#d8d8d8"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-bezel-border-light"
+        }
+      }
+    },
+    "bezel-border-dark": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.102,
+          0.102,
+          0.102
+        ],
+        "alpha": 1,
+        "hex": "#1a1a1a"
+      },
+      "$extensions": {
+        "app.fiestaboard": {
+          "css": "--color-board-bezel-border-dark"
+        }
+      }
+    }
+  }
+}
