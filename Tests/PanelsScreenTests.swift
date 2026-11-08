@@ -543,12 +543,12 @@ extension PanelsScreenTests {
         XCTAssertTrue(card.accessibilityLabel.contains("can't be shown"))
     }
 
-    /// Two cards to a row at 1920 x 1080, inside the safe inset and the
+    /// Two cards to a row at 1920 x 1080, inside the title-safe sides and the
     /// padding the focus lift needs. Three made the flaps illegible.
     func testTwoCardsFitARowOnATVScreen() {
         // The scroll view is widened by exactly the focus padding it then
         // spends on its content, so the cards get the inset width.
-        let usable = RenderHarness.tvSize.width - Fiesta.Metrics.safeInset * 2
+        let usable = RenderHarness.tvSize.width - PlatformTV.safeSide * 2 // A4a: the 80 pt title-safe sides
         let spacing = Fiesta.Metrics.gutter + 16
         XCTAssertGreaterThanOrEqual(usable, PanelCard.width * 2 + spacing)
         XCTAssertLessThan(usable, PanelCard.width * 3 + spacing * 2)

@@ -48,7 +48,6 @@ struct OLEDCareScreen: View {
             .listStyle(.grouped)
             .accessibilityIdentifier("oled.controls")
         }
-        .padding(.horizontal, 60)
         .navigationTitle("OLED care")
     }
 

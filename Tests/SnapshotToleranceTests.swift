@@ -28,7 +28,6 @@ final class SnapshotToleranceTests: XCTestCase {
         }
         defer { model.stopScan() }
         return TVSnapshot.image(ConnectScreen(model: model).environment(app)
-            .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
             .background(Fiesta.Colors.background), settle: 0.3)
     }
 

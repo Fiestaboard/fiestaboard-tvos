@@ -37,7 +37,11 @@ struct PanelsScreen: View {
 
             content
         }
-        .padding(Fiesta.Metrics.safeInset)
+        // A4a: the system safe area is the 07b title-safe (80/60). The grid
+        // ends where A3's card does (y 960, `166:149713`), 60 pt above
+        // title-safe bottom. Without it the taller viewport broke the
+        // remote's row-by-row walk (PanelsPresentationTests, bisected).
+        .padding(.bottom, Self.contentBottom)
         .onAppear {
             #if DEBUG
             PanelNavigationProbe.shared.start()
@@ -278,7 +282,12 @@ struct PanelsScreen: View {
     private var grid: some View {
         GeometryReader { proxy in
             let spacing: CGFloat = 48
-            let cardWidth = max(1, (proxy.size.width - spacing) / 2)
+            // Two columns, each at most A3's 800 pt card (`166:149713`,
+            // 800 × 640). A4a widened the content to the 1760 pt title-safe;
+            // uncapped, cards grew to 856 pt and their taller rows broke the
+            // remote's row-by-row walk (PanelsPresentationTests). A5 owns the
+            // grid's final geometry.
+            let cardWidth = max(1, min(Self.maxCardWidth, (proxy.size.width - spacing) / 2))
             ScrollViewReader { scroll in
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: spacing), GridItem(.flexible())],
@@ -343,6 +352,11 @@ struct PanelsScreen: View {
     /// looking at. Panels are made on the board's own web page — but the
     /// path to them once you are there still has to be named, so it stays.
     /// Hoisted out of the body so the copy rule can be asserted.
+    /// A3 `tvOS / Panel card` instance width.
+    static let maxCardWidth: CGFloat = 800
+    /// A3: content ends at y 960, 60 pt above the title-safe bottom.
+    static let contentBottom: CGFloat = 1080 - 60 - 960
+
     static let emptyStateDetail = "Open your hub's web page in a browser on a phone or "
         + "computer and create one under Settings → Hardware → FiestaPanel."
 

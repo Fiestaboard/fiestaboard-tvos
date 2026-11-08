@@ -12,6 +12,9 @@ import SwiftUI
 /// these is up the board has given up its full-screen focus target, so the
 /// primary action is what the remote should be holding.
 struct ViewerMessage: View {
+    /// Registry probe on the card (A4a geometry test).
+    static let probe = "tv:viewer-message"
+
     let title: String
     let detail: String
     let primaryTitle: String
@@ -47,7 +50,9 @@ struct ViewerMessage: View {
         .overlay(cardShape.strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         // Lifts the card off a live board behind it.
         .shadow(color: .black.opacity(0.7), radius: 40, y: 16)
-        .padding(Fiesta.Metrics.safeInset)
+        .figmaNode(Self.probe)
+        // A4a: the viewer is full-bleed, so title-safe is applied here.
+        .padding(EdgeInsets(top: PlatformTV.safeTopBottom, leading: PlatformTV.safeSide, bottom: PlatformTV.safeTopBottom, trailing: PlatformTV.safeSide))
         .onAppear { primaryFocused = true }
     }
 

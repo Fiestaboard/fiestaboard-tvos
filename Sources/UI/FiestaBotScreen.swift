@@ -17,7 +17,6 @@ struct FiestaBotScreen: View {
                 }
                 .focusSection()
             }
-            .padding(.horizontal, Fiesta.Metrics.safeInset)
             .padding(.bottom, 36)
             .navigationTitle("FiestaBot")
             .navigationDestination(for: Destination.self) { destination in

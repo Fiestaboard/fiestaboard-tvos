@@ -135,6 +135,10 @@ struct SignInScreen: View {
     /// remote should land there, not on the username field the capability
     /// check left it on.
     @FocusState private var phonePathFocused: Bool
+    /// Where the remote is among the credential controls, and where it was
+    /// when the capability check started (#19 review 7.3).
+    @FocusState private var field: SignInFocusPolicy.Field?
+    @State private var fieldAtCheck: SignInFocusPolicy.Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -165,6 +169,7 @@ struct SignInScreen: View {
         .onExitCommand { model?.back() }
         .onAppear {
             if model == nil { model = SignInModel(app: app) }
+            fieldAtCheck = field
             deviceSignInEnabled = app.connection.deviceSignInEnabled
         }
         .task {
@@ -173,8 +178,13 @@ struct SignInScreen: View {
         }
         .onChange(of: deviceSignInEnabled, initial: true) { _, enabled in
             guard enabled else { return }
-            // A hop, so the row exists before focus is asked for.
-            Task { @MainActor in phonePathFocused = true }
+            // A hop, so the row exists before focus is asked for — and only
+            // if the remote hasn't moved since the check started.
+            Task { @MainActor in
+                if SignInFocusPolicy.takePhonePath(enabled: enabled, focusAtCheck: fieldAtCheck, focusNow: field) {
+                    phonePathFocused = true
+                }
+            }
         }
     }
 
@@ -195,8 +205,6 @@ struct SignInScreen: View {
     private var header: some View {
         FiestaScreenHeading(title: "Sign in", subtitle: "Use the account you created on your FiestaBoard hub.",
                             context: boardName)
-        .padding(.horizontal, Fiesta.Metrics.safeInset)
-        .padding(.top, Fiesta.Metrics.safeInset)
         .padding(.bottom, 12)
     }
 
@@ -220,6 +228,7 @@ struct SignInScreen: View {
     private var credentialsSection: some View {
         Section {
             TextField("Username", text: usernameBinding)
+                .focused($field, equals: .username)
                 .textContentType(.username)
                 .autocorrectionDisabled()
                 .accessibilityLabel("Username")
@@ -228,6 +237,7 @@ struct SignInScreen: View {
             // revealed on a sixty-five inch screen in a living room is a
             // worse default than the typing it saves.
             SecureField("Password", text: passwordBinding)
+                .focused($field, equals: .password)
                 .textContentType(.password)
                 .accessibilityLabel("Password")
         } header: {
@@ -264,6 +274,7 @@ struct SignInScreen: View {
             // reliably bring it back. `SignInModel.submit`'s `guard
             // !isSubmitting` is the re-entrancy guard instead.
             Button("Sign in") { Task { await model?.submit() } }
+                .focused($field, equals: .submit)
                 .accessibilityLabel("Sign in to \(boardName)")
         } footer: {
             submitFooter
@@ -306,5 +317,17 @@ struct SignInScreen: View {
     private var passwordBinding: Binding<String> {
         Binding(get: { model?.password ?? "" },
                 set: { model?.setPassword($0) })
+    }
+}
+
+/// When Sign in may move the remote to "Sign in with your phone" (A3, #19
+/// review 7.3): only once the phone path is enabled, and only if the remote
+/// is still where it was when the capability check started — someone who
+/// has already moved to the password field keeps their place.
+enum SignInFocusPolicy {
+    enum Field: Hashable { case username, password, submit }
+
+    static func takePhonePath(enabled: Bool, focusAtCheck: Field?, focusNow: Field?) -> Bool {
+        enabled && focusNow == focusAtCheck
     }
 }

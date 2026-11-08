@@ -76,7 +76,7 @@ final class ParitySnapshotTests: XCTestCase {
                 .offset(x: 100, y: 50)
         }
         .figmaNode("1:1")
-        _ = TVSnapshot.image(view)
+        _ = TVSnapshot.image(view, fullBleed: true)
 
         let entries = FigmaGeometryRegistry.shared.snapshot()
         let root = try XCTUnwrap(entries["1:1"], "the root must register")
@@ -121,7 +121,7 @@ final class ParitySnapshotTests: XCTestCase {
             BoardCanvas(layout: layout, background: .black)
                 .frame(width: layout.width, height: layout.height)
         }
-        let image = TVSnapshot.image(view)
+        let image = TVSnapshot.image(view, fullBleed: true)
 
         // The red tile's centre, in pixels: the board is centred, row 1, col 0.
         let originX = (TVSnapshot.size.width - layout.width) / 2
@@ -158,9 +158,9 @@ final class ParitySnapshotTests: XCTestCase {
         }
         XCTAssertEqual(model.boards.count, 1)
 
+        // A4a: as the device draws it, inside the 80/60 safe area.
         let image = TVSnapshot.image(ConnectScreen(model: model)
             .environment(app)
-            .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
             .background(Fiesta.Colors.background), settle: 0.3)
         model.stopScan()
 
@@ -180,7 +180,7 @@ final class ParitySnapshotTests: XCTestCase {
     /// numbers go to `build/parity/glass-drawhierarchy.json` and the A0
     /// status; `ParityShotsUITests` holds the assertion.
     func testGlassUnderDrawHierarchyIsMeasuredNotAsserted() throws {
-        let image = TVSnapshot.image(ParityFixtureView(kind: .glass), settle: 0.3)
+        let image = TVSnapshot.image(ParityFixtureView(kind: .glass), settle: 0.3, fullBleed: true)
         let panel = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()[ParityFixtureView.glassNode]?.frame)
         let measurement = try XCTUnwrap(GlassProbe.measure(try XCTUnwrap(image.cgImage),
                                                            scale: TVSnapshot.scale, panel: panel))

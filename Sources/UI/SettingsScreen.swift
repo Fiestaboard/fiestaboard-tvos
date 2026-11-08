@@ -33,6 +33,9 @@ struct SettingsScreen: View {
         case displaySettings(String), resize(String), calibration(String), topShelf, privacy, screenProtection
     }
 
+    /// Registry probe for the content row (A4a geometry test).
+    static let contentProbe = "tv:settings-content"
+
     var body: some View {
         NavigationStack(path: $path) {
             HStack(alignment: .top, spacing: 56) {
@@ -44,7 +47,8 @@ struct SettingsScreen: View {
                     // even when its first control is lower on the screen.
                     .focusSection()
             }
-            .padding(.horizontal, Fiesta.Metrics.safeInset)
+            // A4a: the system safe area is the 07b title-safe (80/60).
+            .figmaNode(Self.contentProbe)
             .padding(.bottom, 32)
             .background(Fiesta.Colors.background)
             .navigationTitle("Settings")
@@ -450,7 +454,7 @@ struct SettingsScreen: View {
             if let model {
                 SettingsPanelPreview(panel: panel, state: model.previewState(for: panel),
                                      calibrationScale: model.calibration(for: panel))
-                    .ignoresSafeArea()
+                    .ignoresSafeArea() // full-bleed: true flap size is measured against the whole TV
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(panel.name) at true flap size")
                     .accessibilityValue(previewDescription(for: panel))
@@ -465,7 +469,6 @@ struct SettingsScreen: View {
             }
             .frame(width: 590)
             .background(.regularMaterial)
-            .padding(.trailing, Fiesta.Metrics.safeInset)
             .padding(.vertical, 32)
         }
         .navigationTitle("Calibrate \(panel.name)")
