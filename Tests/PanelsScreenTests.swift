@@ -218,22 +218,83 @@ final class PanelsScreenTests: XCTestCase {
 
 extension PanelsScreenTests {
 
-    func testVerticalFocusRecoveryKeepsTheColumnAndStopsAtGridEdges() throws {
-        let panels = try (0..<14).map { try decodedPanel(id: "p\($0)") }
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p11", direction: .down), "p13")
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p12", direction: .up), "p10")
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p13", direction: .down))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .up))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .right))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "gone", direction: .down))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: [], from: "p1", direction: .down))
+    /// Every card is built, but only the rows near the viewport draw a
+    /// board picture: the eager grid must not render fourteen previews up
+    /// front. Fourteen is past the cache's twelve, so drawing them all
+    /// would also leave the last rows' pictures in it.
+    func testOnlyRowsNearTheViewportDrawTheirPreviews() async {
+        let count = 14
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(panelsList(count: count)), for: "/api/panels")
+        for _ in 0..<count { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
+        let model = PanelsModel(app: app)
+        await model.load()
+        for panel in model.panels {
+            guard case .ready = await settledPreview(model, for: panel) else {
+                return XCTFail("\(panel.id) never got a preview")
+            }
+        }
+        let cache = PanelPreviewImageCache()
+
+        RenderHarness.render(PanelsScreen(model: model, previewImages: cache).environment(app))
+
+        let drawn = cache.panelIDs
+        XCTAssertTrue(drawn.isSuperset(of: ["panel-0", "panel-1"]), "the first row on screen drew \(drawn.sorted())")
+        XCTAssertFalse(drawn.contains("panel-12") || drawn.contains("panel-13"),
+                       "the last row, screens below, drew its pictures: \(drawn.sorted())")
+        XCTAssertLessThanOrEqual(drawn.count, 2 * 4, "more than the viewport and one row either side: \(drawn.sorted())")
+        XCTAssertEqual(model.panels.count, count)
     }
 
-    func testVerticalFocusRecoverySkipsRemovedBoardsAndReachesAnOddLastRow() throws {
-        let panels = try (0..<7).map { try decodedPanel(id: "p\($0)", boardMissing: [2, 3, 5].contains($0)) }
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .down), "p4")
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p4", direction: .down), "p6")
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p6", direction: .up), "p4")
+    /// The rows the viewport touches, and one more each side.
+    func testPreviewRowsAreTheViewportAndOneRowEitherSide() {
+        let card: CGFloat = 616, pitch = card + PanelsScreen.gridSpacing, inset: CGFloat = 44
+        func rows(_ minY: CGFloat, _ height: CGFloat = 700, count: Int = 7) -> Range<Int> {
+            PanelsScreen.previewRows(visibleMinY: minY, visibleHeight: height, rowHeight: card, rowCount: count)
+        }
+        XCTAssertEqual(rows(0), 0..<2, "row 0 is on screen; row 1 is the look-ahead")
+        XCTAssertEqual(rows(0, 900), 0..<3, "rows 0 and 1 are on screen; row 2 is the look-ahead")
+        XCTAssertEqual(rows(inset + pitch * 3), 2..<6)
+        XCTAssertEqual(rows(inset + pitch * 6), 5..<7, "clamped to the last row")
+        XCTAssertEqual(rows(-200), 0..<2, "an overscroll above the top")
+        XCTAssertEqual(rows(0, count: 0), 0..<0)
+        XCTAssertEqual(rows(0, 0), 0..<0, "no viewport yet")
+        XCTAssertEqual(PanelsScreen.previewRows(visibleMinY: 0, visibleHeight: 700, rowHeight: card,
+                                                rowCount: 7, lookahead: 0), 0..<1)
+    }
+
+    /// The eager layout puts cards exactly where the `LazyVGrid` with two
+    /// flexible columns did, odd last card included, so the A3 frame's
+    /// geometry is unchanged.
+    func testTheEagerGridPlacesCardsWhereTheLazyGridDid() {
+        let colors: [Color] = [.red, .green, .blue, .yellow, .purple]
+        // The app's: the 1760 pt column, widened by the focus inset either side.
+        let size = CGSize(width: 1760 + 88, height: 1400)
+        func cell(_ index: Int) -> some View {
+            colors[index].frame(width: 800, height: index == 1 ? 300 : 250)
+        }
+        let lazy = RenderHarness.image(
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 48), GridItem(.flexible())],
+                      alignment: .leading, spacing: 48) {
+                ForEach(0..<colors.count, id: \.self) { cell($0) }
+            }
+            .padding(44)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top), size: size)
+        let eager = RenderHarness.image(
+            VStack(spacing: 48) {
+                ForEach(0..<3, id: \.self) { row in
+                    PanelGridRow(spacing: 48) {
+                        ForEach((row * 2)..<min(row * 2 + 2, colors.count), id: \.self) { cell($0) }
+                    }
+                }
+            }
+            .padding(44)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top), size: size)
+        XCTAssertEqual(lazy.pngData(), eager.pngData(), "the eager grid moved a card")
+        // And it is not two blank images agreeing.
+        let first = try? XCTUnwrap(eager.pixel(x: 44 + 10, y: 44 + 25 + 10))
+        XCTAssertGreaterThan(first?.r ?? 0, 200)
+        XCTAssertLessThan(first?.g ?? 255, 120)
     }
 
     /// `n` panels with distinct ids, from the one-panel fixture.

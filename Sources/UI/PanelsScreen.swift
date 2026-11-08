@@ -4,11 +4,10 @@ struct PanelsScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: PanelsModel?
     @State private var restoredInitialFocus = false
-    @State private var previewImages = PanelPreviewImageCache()
-    @State private var pendingFocusTarget: String?
-    /// Which cards are realised (see `RealizedFocusTarget`).
-    @State private var realizedFocus = RealizedFocusTarget()
-    @State private var latestFocusUpdate: UIFocusUpdateContext?
+    @State private var previewImages: PanelPreviewImageCache
+    /// Grid rows whose board pictures are drawn; nil until the scroll view
+    /// first reports its geometry (see `previewRows`).
+    @State private var previewWindow: Range<Int>?
 
     /// Which card holds focus, by panel id.
     @FocusState private var focusedPanel: String?
@@ -20,8 +19,12 @@ struct PanelsScreen: View {
     /// `ViewerScreen`. A model handed in is taken as already loaded and is
     /// left alone; the `.task` below fetches only for a model this screen
     /// built itself.
-    init(model: PanelsModel? = nil) {
+    ///
+    /// `previewImages` is injectable so a render test can see which
+    /// pictures were drawn.
+    init(model: PanelsModel? = nil, previewImages: PanelPreviewImageCache? = nil) {
         _model = State(initialValue: model)
+        _previewImages = State(initialValue: previewImages ?? PanelPreviewImageCache())
     }
 
     /// Breathing room between cards and the scrolling viewport's edges.
@@ -49,29 +52,9 @@ struct PanelsScreen: View {
             PanelNavigationProbe.shared.start()
             #endif
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { notification in
-            latestFocusUpdate = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey] as? UIFocusUpdateContext
-        }
-        .onChange(of: focusedPanel) { previousID, id in
-            defer { latestFocusUpdate = nil }
+        .onChange(of: focusedPanel) { _, id in
             #if DEBUG
             PanelNavigationProbe.shared.event("focus.changed", index: panelIDs.firstIndex(of: id ?? "") ?? -1)
-            #endif
-            // A recycled row above the viewport may be absent from the
-            // native focus search. Up then finds Settings and consumes the
-            // command before onMoveCommand can recover it. Materialize the
-            // preceding row; Settings is reachable once no row remains above.
-            // Require a direct card-to-Settings transition, not a historical
-            // card visited before another control such as Try again.
-            guard let previousID, id == nil, settingsFocused, app.route == .panels,
-                  let update = latestFocusUpdate, update.focusHeading.contains(.up),
-                  let next = update.nextFocusedItem,
-                  UIFocusSystem.focusSystem(for: next)?.focusedItem === next,
-                  let target = Self.verticalFocusTarget(in: model?.panels ?? [],
-                                                        from: previousID, direction: .up) else { return }
-            pendingFocusTarget = target
-            #if DEBUG
-            PanelNavigationProbe.shared.event("focus.recoverHeader", index: panelIDs.firstIndex(of: target))
             #endif
         }
         .task {
@@ -90,8 +73,6 @@ struct PanelsScreen: View {
             #endif
             model?.stopPreviews()
             previewImages.removeAll()
-            pendingFocusTarget = nil
-            latestFocusUpdate = nil
         }
     }
 
@@ -114,28 +95,6 @@ struct PanelsScreen: View {
         let available = panels.filter { !$0.boardMissing }
         return available.first { $0.id == preferredRef || String($0.shortCode) == preferredRef }?.id
             ?? available.first?.id
-    }
-
-    /// Fallback for a vertical move the native focus engine could not resolve
-    /// because the adjacent lazy row has not been materialized yet.
-    static func verticalFocusTarget(in panels: [Panel], from id: String,
-                                    direction: MoveCommandDirection) -> String? {
-        guard direction == .up || direction == .down,
-              let index = panels.firstIndex(where: { $0.id == id }) else { return nil }
-        let step = direction == .down ? 2 : -2
-        let column = index % 2
-        var row = index - column + step
-        while row >= 0 && row < panels.count {
-            // Prefer the same column, then the other available card in this
-            // row. A removed board must never become a focus target.
-            for candidate in [row + column, row + 1 - column] {
-                if candidate < panels.count, !panels[candidate].boardMissing {
-                    return panels[candidate].id
-                }
-            }
-            row += step
-        }
-        return nil
     }
 
     private var header: some View {
@@ -281,128 +240,106 @@ struct PanelsScreen: View {
         .font(Fiesta.Text.body)
     }
 
+    /// The column gap and the row gap.
+    static let gridSpacing: CGFloat = 48
+    /// Rows either side of the viewport whose pictures are drawn ahead of
+    /// being scrolled to.
+    static let previewLookahead = 1
+
+    /// Every card is built up front; only the board pictures are lazy.
+    ///
+    /// This was a `LazyVGrid`, whose rows below the viewport aren't views
+    /// until they scroll in. Down at that boundary, under CPU load, found no
+    /// card beneath: focus fell to nothing, and tvOS then ignored focus
+    /// requests for seconds (`program/status/tv-panels-flake.md`). A card
+    /// without its picture costs a few text views, so all of them are here
+    /// for the focus engine to find. The picture is what is expensive, so
+    /// only rows within `previewLookahead` of the viewport draw one, which
+    /// also keeps the working set inside `PanelPreviewImageCache`'s limit.
     private var grid: some View {
         GeometryReader { proxy in
-            let spacing: CGFloat = 48
+            let spacing = Self.gridSpacing
             // Two columns, each at most A3's 800 pt card (`166:149713`,
             // 800 × 640). A4a widened the content to the 1760 pt title-safe;
             // uncapped, cards grew to 856 pt and their taller rows broke the
             // remote's row-by-row walk (PanelsPresentationTests). A5 owns the
             // grid's final geometry.
             let cardWidth = max(1, min(Self.maxCardWidth, (proxy.size.width - spacing) / 2))
+            let panels = model?.panels ?? []
+            let rowCount = (panels.count + 1) / 2
+            let rowHeight = Self.cardHeight(width: cardWidth)
+            let window = previewWindow ?? Self.previewRows(visibleMinY: 0, visibleHeight: proxy.size.height,
+                                                           rowHeight: rowHeight, rowCount: rowCount)
             ScrollViewReader { scroll in
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: spacing), GridItem(.flexible())],
-                              alignment: .leading, spacing: 48) {
-                        ForEach(model?.panels ?? []) { panel in
-                            card(for: panel, width: cardWidth).id(panel.id)
+                    VStack(spacing: spacing) {
+                        ForEach(0..<rowCount, id: \.self) { row in
+                            PanelGridRow(spacing: spacing) {
+                                ForEach(panels[(row * 2)..<min(row * 2 + 2, panels.count)]) { panel in
+                                    card(for: panel, width: cardWidth, showsPreview: window.contains(row))
+                                        .id(panel.id)
+                                }
+                            }
+                            // Down from the right column into an odd last
+                            // row, or past a column of removed boards, has
+                            // nothing directly beneath it. A row-wide section
+                            // is, so the focus engine enters the row and
+                            // takes its nearest card.
+                            .focusSection()
                         }
                     }
                     .padding(Self.focusInset)
+                }
+                .onScrollGeometryChange(for: Range<Int>.self) { geometry in
+                    Self.previewRows(visibleMinY: geometry.visibleRect.minY,
+                                     visibleHeight: geometry.visibleRect.height,
+                                     rowHeight: rowHeight, rowCount: rowCount)
+                } action: { _, window in
+                    previewWindow = window
                 }
                 // Expand the viewport, then inset its content without moving
                 // the columns out of alignment with the heading.
                 .padding(.horizontal, -Self.focusInset)
                 .focusScope(gridScope)
                 .focusSection()
-                .onMoveCommand { direction in
-                    // Successful native focus moves consume their command.
-                    // Only recover an unhandled vertical move inside the grid.
-                    guard let id = focusedPanel else { return }
-                    pendingFocusTarget = Self.verticalFocusTarget(
-                        in: model?.panels ?? [], from: id, direction: direction)
-                    #if DEBUG
-                    if let target = pendingFocusTarget {
-                        PanelNavigationProbe.shared.event("focus.fallback", index: panelIDs.firstIndex(of: target))
-                    }
-                    #endif
-                }
-                .task(id: pendingFocusTarget) {
-                    guard let target = pendingFocusTarget else { return }
-                    scroll.scrollTo(target, anchor: .center)
-                    // The flake's actual site (probe traces, ×20 under load):
-                    // Down from row 11 fell back here, focus dropped to
-                    // nothing, and one yield then a single assignment never
-                    // reached the unrealised row-13 card — so Select opened
-                    // nothing and line 166 failed later. Same cure as the
-                    // restore: wait until realised, confirm focus lands.
-                    if model?.panels.contains(where: { $0.id == target && !$0.boardMissing }) == true {
-                        await restoreFocus(to: target)
-                    }
-                    pendingFocusTarget = nil
-                }
                 .task(id: panelIDs) {
-                    #if DEBUG
-                    PanelNavigationProbe.shared.event("restore.task", index: restoredInitialFocus ? 1 : (panelIDs.isEmpty ? 2 : 0))
-                    #endif
                     guard !restoredInitialFocus, !panelIDs.isEmpty else { return }
                     restoredInitialFocus = true
-                    #if DEBUG
-                    PanelNavigationProbe.shared.event("restore.guard", index: focusedPanel == nil ? (defaultFocusID == nil ? 2 : 0) : 1)
-                    #endif
                     guard focusedPanel == nil, let id = defaultFocusID else { return }
                     scroll.scrollTo(id, anchor: .center)
-                    await restoreFocus(to: id)
+                    focusedPanel = id
                 }
             }
         }
     }
 
-    private func card(for panel: Panel, width: CGFloat) -> some View {
+    /// A card's height at `width`: its 16:9 picture and the words under it.
+    static func cardHeight(width: CGFloat) -> CGFloat {
+        width * 9 / 16 + PanelCard.detailHeight
+    }
+
+    /// The rows whose pictures are drawn when the scroll view shows content
+    /// from `visibleMinY` for `visibleHeight` points: every row that band
+    /// touches, and `lookahead` more on each side.
+    static func previewRows(visibleMinY: CGFloat, visibleHeight: CGFloat, rowHeight: CGFloat,
+                            rowCount: Int, lookahead: Int = previewLookahead) -> Range<Int> {
+        guard rowCount > 0, rowHeight > 0, visibleHeight > 0 else { return 0..<0 }
+        let pitch = rowHeight + gridSpacing
+        let first = Int(((visibleMinY - focusInset) / pitch).rounded(.down))
+        let last = Int(((visibleMinY + visibleHeight - focusInset) / pitch).rounded(.down))
+        let lower = min(max(0, first - lookahead), rowCount)
+        let upper = max(lower, min(rowCount, last + 1 + lookahead))
+        return lower..<upper
+    }
+
+    private func card(for panel: Panel, width: CGFloat, showsPreview: Bool) -> some View {
         PanelCard(panel: panel,
                   preview: model?.previewState(for: panel) ?? .loading,
                   action: { app.openPanel(ref: panel.id) }, cardWidth: width,
-                  previewImages: previewImages)
+                  previewImages: previewImages, showsPreview: showsPreview)
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
-        .onAppear { _ = realizedFocus.cardAppeared(panel.id) }
-        .onDisappear { realizedFocus.cardDisappeared(panel.id) }
     }
-
-    /// Restore focus to `id` after `scrollTo`.
-    ///
-    /// Returning from the viewer, the old single assignment after one
-    /// `Task.yield()` failed 6 times in 20 under CPU load, always the same
-    /// way: card 13 realised and on screen, and **nothing focused at all**,
-    /// because the request landed while the lazy row was unrealised or while
-    /// the screen, still crossfading in, refused focus
-    /// (`program/status/tv-panels-flake.md`). So:
-    /// 1. wait until the card is realised;
-    /// 2. assign focus once, unconditionally, as before;
-    /// 3. while *nothing* is focused, assign again. Re-asserting only into
-    ///    that empty state can't take focus from anyone, so the wait ends
-    ///    on the observed state, not on a guessed duration. The 10 s cap
-    ///    only stops a screen that never becomes focusable.
-    private func restoreFocus(to id: String) async {
-        #if DEBUG
-        let began = CACurrentMediaTime()
-        func trace(_ name: String) {
-            // index: focusedPanel read-back (-1 none, -2 Settings, else the card's position)
-            let state = settingsFocused ? -2 : (focusedPanel.flatMap { panelIDs.firstIndex(of: $0) } ?? -1)
-            PanelNavigationProbe.shared.event(name, began: began, index: state)
-        }
-        #else
-        func trace(_ name: String) {}
-        #endif
-        trace("restore.start")
-        for _ in 0..<100 where !realizedFocus.isRealized(id) {
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-        trace(realizedFocus.isRealized(id) ? "restore.realized" : "restore.notRealized")
-        guard !Task.isCancelled, app.route == .panels else { trace("restore.cancelled"); return }
-        focusedPanel = id
-        trace("restore.assign")
-        for _ in 0..<100 {
-            try? await Task.sleep(for: .milliseconds(100))
-            guard !Task.isCancelled, app.route == .panels else { trace("restore.cancelled"); return }
-            if focusedPanel != nil || settingsFocused { trace("restore.landed"); return }
-            focusedPanel = id
-            trace("restore.reassign")
-        }
-        trace("restore.gaveUp")
-    }
-
-
 
     /// Never "the FiestaBoard app": `CFBundleDisplayName` is exactly
     /// `FiestaBoard`, so that sent the user to the icon they are already
@@ -427,5 +364,37 @@ struct PanelsScreen: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// One row of the panel grid: two columns, built eagerly.
+///
+/// It places cards where the `LazyVGrid` with two flexible columns did:
+/// each column is half the width less the gap, a card sits at its cell's
+/// leading edge, centred vertically in a row as tall as its tallest card,
+/// and a lone last card sits in the left column.
+struct PanelGridRow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 0
+        return CGSize(width: width, height: height(of: subviews, column: columnWidth(width)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let column = columnWidth(bounds.width)
+        let cell = ProposedViewSize(width: column, height: nil)
+        for (side, card) in subviews.prefix(2).enumerated() {
+            let x = bounds.minX + CGFloat(side) * (column + spacing)
+            card.place(at: CGPoint(x: x, y: bounds.midY), anchor: .leading, proposal: cell)
+        }
+    }
+
+    private func columnWidth(_ width: CGFloat) -> CGFloat {
+        max(0, (width - spacing) / 2)
+    }
+
+    private func height(of subviews: Subviews, column: CGFloat) -> CGFloat {
+        subviews.prefix(2).map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
     }
 }

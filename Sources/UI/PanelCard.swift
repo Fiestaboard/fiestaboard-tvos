@@ -18,6 +18,10 @@ struct PanelCard: View {
     static let boardInset: CGFloat = 24
     var cardWidth: CGFloat = Self.width
     var previewImages: PanelPreviewImageCache? = nil
+    /// False while the card is far from the viewport: the board picture is
+    /// the expensive part of a card, so the browser builds every card but
+    /// draws only the pictures near the screen (`PanelsScreen.grid`).
+    var showsPreview = true
 
     var body: some View {
         Button(action: action) {
@@ -69,6 +73,9 @@ struct PanelCard: View {
             // happened — the card, the viewer and `gridDescription` all say
             // it the same way.
             placeholder("Board was removed")
+        } else if !showsPreview {
+            // Nothing to draw, and nothing animating, until it's near.
+            Color.clear
         } else {
             switch preview {
             case .loading:
