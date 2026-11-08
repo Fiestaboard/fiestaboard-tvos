@@ -58,7 +58,7 @@ struct ViewerScreen: View {
             }
             .onChange(of: proxy.size) { _, _ in model?.considerResizeOffer(for: proxy.size) }
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea() // full-bleed: the board fills the TV; overlays apply PlatformTV title-safe
         .onAppear {
             bind(model ?? ViewerModel(app: app, ref: ref))
             // Keeping the TV awake is AppModel's job, not this view's: it

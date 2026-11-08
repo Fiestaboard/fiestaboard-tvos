@@ -65,9 +65,6 @@ public enum Fiesta {
         /// Unchanged in A1: the 07b card radius (`PlatformTV.cardRadius`, 24)
         /// lands with the panel cards (A5), so no screen mixes the two.
         public static let cornerRadius: CGFloat = 16
-        /// tvOS title-safe inset. Overscan is still real on many sets.
-        /// Unchanged in A1: A4a moves every screen to `PlatformTV` at once.
-        public static let safeInset: CGFloat = 60
     }
 
     public enum Text {
@@ -80,6 +77,9 @@ public enum Fiesta {
 
 /// Shared hierarchy for the app's browsing and connection screens.
 struct FiestaScreenHeading: View {
+    /// Registry probe on every heading's eyebrow (A4a: x 80, y >= 60).
+    static let eyebrowProbe = "tv:heading-eyebrow"
+
     let title: String
     let subtitle: String
     var context: String = "FiestaBoard"
@@ -106,6 +106,7 @@ struct FiestaScreenHeading: View {
                 .font(Fiesta.Text.caption.weight(.medium))
                 .foregroundStyle(Fiesta.Colors.brand)
                 .lineLimit(1)
+                .figmaNode(Self.eyebrowProbe, label: context)
                 .figmaNode(probes?.eyebrow ?? "", label: context, enabled: probes != nil)
             Text(title)
                 .font(Fiesta.Text.title)

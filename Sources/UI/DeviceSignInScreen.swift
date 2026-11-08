@@ -61,7 +61,7 @@ struct DeviceSignInScreen: View {
                 Button(TVCopy.DeviceSignIn.back) { backToPassword() }
             }
         }
-        .padding(Fiesta.Metrics.safeInset)
+        // A4a: the system safe area is the 07b title-safe (80/60).
         .onAppear {
             if model == nil {
                 model = DeviceSignInModel(connection: app.connection, deviceName: app.deviceName,

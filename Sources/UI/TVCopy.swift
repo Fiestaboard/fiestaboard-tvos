@@ -58,7 +58,7 @@ enum TVCopy {
         }
         /// After device-code approval (DD6; no 07b frame for the notice).
         static func approvedBy(_ username: String) -> String { "Approved by \(username)" }
-        /// Not on the A2 frame yet: proposed as DD15 for the 07b designer.
+        /// Not on the A2 frame yet: accepted as DD16 (the 07b designer draws it).
         static let reachability = "Your phone and this TV must both reach this hub. If the address won’t open, connect your phone to the same network."
         /// DD13: the activation address as A2 draws it
         /// (`fiestapi.local:4420/activate`). Drops only what a browser

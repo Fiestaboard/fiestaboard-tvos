@@ -10,6 +10,9 @@ import SwiftUI
 /// they read from across a room the same way every other Apple TV button
 /// does, and nothing here hand-rolls a focus effect.
 struct ViewerOverlay: View {
+    /// 07b A4 "tvOS / Viewer overlay" instance.
+    static let barNode = "I166:191865;149:182603;166:193875"
+
     let panelName: String
     /// Called whenever someone is plainly still using the bar.
     ///
@@ -69,8 +72,11 @@ struct ViewerOverlay: View {
         .padding(.vertical, 16)
         .background(.regularMaterial,
                     in: RoundedRectangle(cornerRadius: Fiesta.Metrics.cornerRadius))
-        .padding(.horizontal, Fiesta.Metrics.safeInset)
-        .padding(.top, Fiesta.Metrics.safeInset)
+        .figmaNode(Self.barNode)
+        // A4 `166:193875`: the bar spans title-safe, (80, 60), 1760 wide. The
+        // viewer is full-bleed, so the inset is applied here.
+        .padding(.horizontal, PlatformTV.safeSide)
+        .padding(.top, PlatformTV.safeTopBottom)
     }
 }
 
@@ -82,6 +88,9 @@ struct ViewerOverlay: View {
 /// the one thing a roomful of people cannot all be relied on to see. A
 /// labelled pill says the same thing in words, and keeps the tint.
 struct BoardStatusPill: View {
+    /// Registry probe (A4a geometry test).
+    static let probe = "tv:status-pill"
+
     let title: String
     let systemImage: String
     let tint: Color
@@ -104,7 +113,9 @@ struct BoardStatusPill: View {
                     // than an icon and a string VoiceOver reads separately.
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(spoken)
-                    .padding(Fiesta.Metrics.safeInset)
+                    .figmaNode(Self.probe)
+                    // A4a: inside the full-bleed viewer, title-safe is applied here.
+                    .padding(EdgeInsets(top: PlatformTV.safeTopBottom, leading: PlatformTV.safeSide, bottom: PlatformTV.safeTopBottom, trailing: PlatformTV.safeSide))
             }
         }
     }

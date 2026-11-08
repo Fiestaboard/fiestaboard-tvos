@@ -48,7 +48,7 @@ struct ParityFixtureView: View {
             .placed(x: 780, y: 820)
         }
         .frame(width: 1920, height: 1080)
-        .ignoresSafeArea()
+        .ignoresSafeArea() // full-bleed: DEBUG parity fixture laid out in absolute screen points
         .preferredColorScheme(.dark)
     }
 

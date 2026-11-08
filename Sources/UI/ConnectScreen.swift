@@ -41,10 +41,11 @@ struct ConnectScreen: View {
             boards
             manualEntry
         }
-        .padding(Fiesta.Metrics.safeInset)
-        // Figma parity probes (DEBUG only; no-ops in Release): the 07b A1
-        // Screen slot and the nodes the A1 slice is measured against.
-        .figmaNode(Self.a1Slot)
+        // A4a: no padding of its own; the system safe area is the 07b
+        // title-safe (80/60). The A1 Screen slot is the whole 1920×1080
+        // screen, so its probe covers the safe area and child probes stay
+        // relative to the slot, as get_metadata reports them.
+        .figmaNode(Self.a1Slot, coversSafeArea: true)
         // No `.onExitCommand`: Connect is the app's root — it is where the
         // app opens with no board saved, and where forgetting one lands you.
         // There is nothing behind it, so Menu belongs to the system and

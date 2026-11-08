@@ -49,7 +49,6 @@ public struct RootView: View {
                     .padding(.horizontal, 32)
                     .padding(.vertical, 16)
                     .background(Fiesta.Colors.surfaceRaised, in: Capsule())
-                    .padding(.top, Fiesta.Metrics.safeInset)
                     .transition(.opacity)
                     .accessibilityHidden(true) // announced by showNotice
             }

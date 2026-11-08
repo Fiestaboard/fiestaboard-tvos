@@ -37,7 +37,7 @@ struct PanelsScreen: View {
 
             content
         }
-        .padding(Fiesta.Metrics.safeInset)
+        // A4a: the system safe area is the 07b title-safe (80/60).
         .onAppear {
             #if DEBUG
             PanelNavigationProbe.shared.start()

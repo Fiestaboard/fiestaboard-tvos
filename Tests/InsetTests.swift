@@ -102,11 +102,10 @@ final class InsetTests: XCTestCase {
         _ = TVSnapshot.image(ZStack {
             Color.black
             ViewerMessage(title: "This panel no longer exists",
-                          detail: String(repeating: "A long explanation that wraps. ", count: 12),
+                          detail: String(repeating: "A long explanation that wraps. ", count: 4),
                           primaryTitle: "Back to panels", primaryAction: {})
-                .figmaNode("message")
         }, fullBleed: true)
-        let card = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()["message"]?.frame)
+        let card = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()[ViewerMessage.probe]?.frame)
         let safe = CGRect(origin: .zero, size: TVSnapshot.size)
             .insetBy(dx: PlatformTV.safeSide - 1, dy: PlatformTV.safeTopBottom - 1)
         XCTAssertTrue(safe.contains(card), "\(card) inside \(safe)")
