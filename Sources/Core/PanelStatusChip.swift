@@ -32,8 +32,18 @@ public struct HubClock: Equatable, Sendable {
 
     public func now(at local: Date) -> Date { local.addingTimeInterval(offset) }
 
-    /// RED stub: always takes the new reading.
-    public func adopting(_ reading: HubClock) -> HubClock { reading }
+    /// How far a new reading may move before the clock follows it, in seconds.
+    ///
+    /// A whole-second `Date` against a fractional receive time moves the
+    /// offset on every read. The chip counts whole minutes, so holding the
+    /// clock still keeps `PanelSnapshot` equal between unchanged polls, and
+    /// `ViewerModel.apply` skips them (#22 review).
+    public static let tolerance: TimeInterval = 2
+
+    /// `reading` when it differs from this clock by more than `tolerance`, else this clock.
+    public func adopting(_ reading: HubClock) -> HubClock {
+        abs(reading.offset - offset) > Self.tolerance ? reading : self
+    }
 }
 
 /// Whether the TV can reach its hub. Client-side: the status cannot say.
@@ -143,9 +153,12 @@ public enum PanelStatusChip {
         return StatusChipContent(kind: chip.kind, badge: badge, text: text, persistent: chip.persistent)
     }
 
-    /// "2h 42m left": whole minutes rounded up, so the last seconds never read "0m left".
+    /// "2h 43m left". One rule for both TV apps: cut to whole seconds, then
+    /// round up to minutes (Android: `(Duration.seconds + 59) / 60`), so
+    /// 60.5 s reads "1m". A running override never reads "0m left".
     static func left(_ remaining: TimeInterval) -> String {
-        let minutes = max(Int((remaining / 60).rounded(.up)), 0)
+        let seconds = Int(max(remaining, 0).rounded(.towardZero))
+        let minutes = max((seconds + 59) / 60, 1)
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m left" : "\(minutes)m left"
     }
 
@@ -162,8 +175,15 @@ public enum PanelStatusChip {
 }
 
 extension Panel {
-    /// RED stub.
-    public func keepingStatus(of polled: Panel?) -> Panel { self }
+    /// This panel with `polled`'s status. A PATCH reply
+    /// (`PanelUpdateResponse`) carries no `status`, so a caller adopting the
+    /// patched panel keeps the one it polled instead of losing the chip
+    /// until the next config read.
+    public func keepingStatus(of polled: Panel?) -> Panel {
+        var copy = self
+        copy.status = polled?.status
+        return copy
+    }
 }
 
 extension PanelSnapshot {

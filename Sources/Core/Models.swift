@@ -44,7 +44,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     /// What the panel's board is doing, for the viewer's status chip (A6a).
     /// Nil on an old hub (no key), for a removed display (`status: null`), and
     /// for a status that does not decode: the chip is never worth the panel.
-    public let status: PanelStatus?
+    public internal(set) var status: PanelStatus?
     public var matrixSizing: MatrixSizing? { MatrixSizing(serverValue: rawMatrixSizing) }
     public var matrixPresentation: MatrixPresentation? {
         guard renderStyle == .ledMatrix, let mode = MatrixSizing(serverValue: rawMatrixSizing) else { return nil }
@@ -91,11 +91,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         id = try c.decode(String.self, forKey: .id)
         shortCode = try c.decodeIfPresent(Int.self, forKey: .shortCode) ?? 0
         name = try c.decode(String.self, forKey: .name)
-        // Null only in the hub's generated panel-status fixture, whose
-        // board-missing case drops `board_missing` and nulls the id (H2b):
-        // a panel with no board id has no board.
-        let rawBoardId = try c.decodeIfPresent(String.self, forKey: .boardId)
-        boardId = rawBoardId ?? ""
+        boardId = try c.decode(String.self, forKey: .boardId)
         screenDiagonalInches = try c.decodeIfPresent(Double.self, forKey: .screenDiagonalInches) ?? 55
         screenAspectW = try c.decodeIfPresent(Double.self, forKey: .screenAspectW) ?? 16
         screenAspectH = try c.decodeIfPresent(Double.self, forKey: .screenAspectH) ?? 9
@@ -104,7 +100,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         backdrop = try c.decodeIfPresent(String.self, forKey: .backdrop) ?? "wall"
         autoDim = try c.decodeIfPresent(AutoDim.self, forKey: .autoDim) ?? AutoDim()
         deviceType = try c.decodeIfPresent(String.self, forKey: .deviceType)
-        boardMissing = try c.decodeIfPresent(Bool.self, forKey: .boardMissing) ?? (rawBoardId == nil)
+        boardMissing = try c.decodeIfPresent(Bool.self, forKey: .boardMissing) ?? false
         rows = try c.decodeIfPresent(Int.self, forKey: .rows)
         cols = try c.decodeIfPresent(Int.self, forKey: .cols)
         boardColor = try c.decodeIfPresent(String.self, forKey: .boardColor)

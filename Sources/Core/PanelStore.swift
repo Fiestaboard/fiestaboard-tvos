@@ -219,7 +219,9 @@ public final class PanelStore: @unchecked Sendable {
                 do {
                     let reading = try await runner.authorized { try await $0.panelReading(ref: ref) }
                     panel = reading.panel
-                    hubClock = HubClock(hubDate: reading.hubDate, receivedAt: clock())
+                    // Held still within HubClock.tolerance, so an unchanged
+                    // poll stays an equal snapshot.
+                    hubClock = hubClock.adopting(HubClock(hubDate: reading.hubDate, receivedAt: clock()))
                     deleted = false
                 } catch FiestaError.notFound {
                     deleted = true
