@@ -110,8 +110,14 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         boardMissing = try c.decodeIfPresent(Bool.self, forKey: .boardMissing) ?? false
         rows = try c.decodeIfPresent(Int.self, forKey: .rows)
         cols = try c.decodeIfPresent(Int.self, forKey: .cols)
-        notesWide = nil
-        notesTall = nil
+        // Tolerant like `status`: a count the app can't use (a string, a
+        // fraction, a negative) drops to nil and the panel stays one merged
+        // grid. Never a reason to lose the panel on its 10 s poll.
+        func noteCount(_ key: CodingKeys) -> Int? {
+            ((try? c.decodeIfPresent(Int.self, forKey: key)) ?? nil).flatMap { (0...256).contains($0) ? $0 : nil }
+        }
+        notesWide = noteCount(.notesWide)
+        notesTall = noteCount(.notesTall)
         boardColor = try c.decodeIfPresent(String.self, forKey: .boardColor)
         // Decoded as a raw String and mapped, the way `boardColor` above is.
         // `decodeIfPresent` on a RawRepresentable returns nil only for an
@@ -146,6 +152,8 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         try c.encodeIfPresent(deviceType, forKey: .deviceType)
         try c.encodeIfPresent(rows, forKey: .rows)
         try c.encodeIfPresent(cols, forKey: .cols)
+        try c.encodeIfPresent(notesWide, forKey: .notesWide)
+        try c.encodeIfPresent(notesTall, forKey: .notesTall)
         try c.encodeIfPresent(boardColor, forKey: .boardColor)
         try c.encodeIfPresent(code62Glyph, forKey: .code62Glyph)
         try c.encodeIfPresent(rawRenderStyle, forKey: .rawRenderStyle)
@@ -166,7 +174,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
 
     /// A note array from a hub that sends its Note counts draws as separate
     /// Notes (DD5); everything else is one merged grid.
-    public var isNoteArray: Bool { false }
+    public var isNoteArray: Bool { deviceType == "note_array" && notesWide != nil && notesTall != nil }
 
     /// Board pigment behind the flaps. Anything unrecognised is black.
     public var backgroundColor: BoardColor {

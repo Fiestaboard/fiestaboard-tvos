@@ -65,6 +65,10 @@ public struct BoardLayout: Sendable {
     public static func size(rows: Int, cols: Int, tileHeight: Double,
                             noteArray: Bool = false) -> (width: Double, height: Double) {
         guard rows > 0, cols > 0, tileHeight > 0 else { return (0, 0) }
+        if noteArray {
+            return (NoteArray.extent(count: cols, per: NoteArray.cols, tile: BoardGeometry.tileWidthRatio) * tileHeight,
+                    NoteArray.extent(count: rows, per: NoteArray.rows, tile: 1) * tileHeight)
+        }
         let gutter = tileHeight * BoardGeometry.tileGutterRatio
         let colPitch = tileHeight * BoardGeometry.tileWidthRatio + gutter
         let rowPitch = tileHeight + gutter
@@ -83,6 +87,8 @@ public struct BoardLayout: Sendable {
               rows <= PanelFrame.maxDimension, cols <= PanelFrame.maxDimension else {
             return BoardLayout(tiles: [], width: 0, height: 0, tileHeight: max(tileHeight, 0))
         }
+
+        if noteArray { return makeNotes(rows: rows, cols: cols, cells: cells, tileHeight: tileHeight) }
 
         let h = tileHeight
         let tileWidth = h * BoardGeometry.tileWidthRatio
@@ -114,6 +120,43 @@ public struct BoardLayout: Sendable {
                            tileHeight: h)
     }
 
+    /// A10 (DD5): a note array as separate Notes. Every cell is drawn; seams
+    /// fall every 15 columns and 3 rows; each Note gets its own bezel, and
+    /// a trailing partial Note's is cut open on its free side.
+    private static func makeNotes(rows: Int, cols: Int, cells: [[BoardCell]], tileHeight h: Double) -> BoardLayout {
+        let tileWidth = h * BoardGeometry.tileWidthRatio
+        let radius = h * BoardGeometry.tileRadiusRatio
+        let xs = (0..<cols).map { NoteArray.offset($0, per: NoteArray.cols, tile: BoardGeometry.tileWidthRatio) * h }
+        let ys = (0..<rows).map { NoteArray.offset($0, per: NoteArray.rows, tile: 1) * h }
+
+        var tiles: [TileRect] = []
+        tiles.reserveCapacity(rows * cols)
+        for row in 0..<rows {
+            for col in 0..<cols {
+                let cell: BoardCell = (row < cells.count && col < cells[row].count)
+                    ? cells[row][col] : .blank
+                tiles.append(TileRect(row: row, col: col, x: xs[col], y: ys[row],
+                                      width: tileWidth, height: h, radius: radius, cell: cell))
+            }
+        }
+
+        let across = NoteArray.edges(count: cols, per: NoteArray.cols, tile: BoardGeometry.tileWidthRatio)
+        let down = NoteArray.edges(count: rows, per: NoteArray.rows, tile: 1)
+        let notes = down.flatMap { y in
+            across.map { x in
+                NoteBezel(rect: CGRect(x: x.start * h, y: y.start * h,
+                                       width: (x.end - x.start) * h, height: (y.end - y.start) * h),
+                          openRight: x.open, openBottom: y.open)
+            }
+        }
+        return BoardLayout(tiles: tiles,
+                           width: (across.last?.end ?? 0) * h,
+                           height: (down.last?.end ?? 0) * h,
+                           tileHeight: h, notes: notes,
+                           bezelBorder: NoteArray.borderRatio * h,
+                           bezelRadius: NoteArray.radiusRatio * h)
+    }
+
     /// Lay the board out at whatever tile height makes it meet the screen
     /// the way `mode` asks for.
     public static func fitting(rows: Int, cols: Int, cells: [[BoardCell]],
@@ -131,7 +174,7 @@ public struct BoardLayout: Sendable {
         // same two-pass shape the web viewer uses (render, measure the grid,
         // apply a transform) without needing a real measurement.
         let reference = 100.0
-        let base = size(rows: rows, cols: cols, tileHeight: reference)
+        let base = size(rows: rows, cols: cols, tileHeight: reference, noteArray: noteArray)
 
         let scale: Double
         switch mode {
@@ -149,6 +192,6 @@ public struct BoardLayout: Sendable {
                                   calibration: calibration, colPitchIn: colPitchIn))
         }
 
-        return make(rows: rows, cols: cols, cells: cells, tileHeight: reference * scale)
+        return make(rows: rows, cols: cols, cells: cells, tileHeight: reference * scale, noteArray: noteArray)
     }
 }

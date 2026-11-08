@@ -152,7 +152,14 @@ public struct NoteBezel: Equatable, Sendable {
 }
 
 /// A note array drawn as separate physical Notes (A10, DD5; the Android twin
-/// is androidtv G9's `NoteArray`).
+/// is androidtv G9's `NoteArray`): 15 × 3 cells each (hub `src/devices.py`).
+///
+/// The metrics are 07b `149:184613`'s at a tile height of 46: tiles start 28
+/// in from the bezel's edge (24 padding inside a 4 border), the corner radius
+/// is 18, and Notes stand 40 apart. Inside a Note the tile pitch is the merged
+/// grid's. A trailing partial Note (the hub fits the grid per character, so
+/// it "is generally not a whole number of Notes") ends one in-Note gutter past
+/// its last tile, where it is cut open.
 public enum NoteArray {
     public static let cols = BoardGeometry.noteCols
     public static let rows = BoardGeometry.noteRows
@@ -161,5 +168,43 @@ public enum NoteArray {
     public static let radiusRatio = 18.0 / 46
     public static let gapRatio = 40.0 / 46
 
-    public static func spans(_ count: Int, per: Int) -> [Int] { [] }
+    /// Cells per Note along one axis: whole Notes, then the trailing partial
+    /// (34 at 15 → 15, 15, 4).
+    public static func spans(_ count: Int, per: Int) -> [Int] {
+        guard count > 0, per > 0 else { return [] }
+        return stride(from: 0, to: count, by: per).map { min(per, count - $0) }
+    }
+
+    /// One Note along an axis, in tile heights. `tile` is the tile's extent
+    /// on that axis (0.70 across, 1 down).
+    static func span(cells: Int, per: Int, tile: Double) -> Double {
+        let gutter = BoardGeometry.tileGutterRatio
+        return cells == per
+            ? 2 * paddingRatio + Double(cells) * tile + Double(cells - 1) * gutter
+            : paddingRatio + Double(cells) * (tile + gutter)
+    }
+
+    /// Each Note's (start, end, open) along an axis, in tile heights.
+    static func edges(count: Int, per: Int, tile: Double) -> [(start: Double, end: Double, open: Bool)] {
+        var at = 0.0
+        return spans(count, per: per).map { cells in
+            let start = at
+            let end = start + span(cells: cells, per: per, tile: tile)
+            at = end + gapRatio
+            return (start, end, cells < per)
+        }
+    }
+
+    /// The whole array along an axis, in tile heights.
+    static func extent(count: Int, per: Int, tile: Double) -> Double {
+        edges(count: count, per: per, tile: tile).last?.end ?? 0
+    }
+
+    /// A tile's leading edge along an axis, in tile heights: the in-Note pitch,
+    /// plus padding, gap and padding at each seam it crosses.
+    static func offset(_ index: Int, per: Int, tile: Double) -> Double {
+        let gutter = BoardGeometry.tileGutterRatio
+        return paddingRatio + Double(index) * (tile + gutter)
+            + Double(index / per) * (2 * paddingRatio + gapRatio - gutter)
+    }
 }

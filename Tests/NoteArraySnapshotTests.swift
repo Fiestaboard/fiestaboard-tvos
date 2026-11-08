@@ -211,7 +211,7 @@ final class NoteArraySnapshotTests: XCTestCase {
             BoardCanvas(layout: layout, background: .black, code62: panel.effectiveCode62)
                 .frame(width: layout.width, height: layout.height)
         }, fullBleed: true)
-        try require(layout, notes: 2)
+        try require(layout, notes: 6)
         let shot = Shot(image: image, layout: layout,
                         origin: CGPoint(x: (1920 - layout.width) / 2, y: (1080 - layout.height) / 2))
         let partial = shot.screen(layout.notes[1].rect)
@@ -245,5 +245,25 @@ final class NoteArraySnapshotTests: XCTestCase {
                                              diagonalInches: 55, calibration: 1, colPitchIn: BoardGeometry.colPitchIn)
         XCTAssertEqual(shot.layout.tiles, merged.tiles)
         XCTAssertTrue(try viewer(case: "non-array", cells: []).layout.notes.isEmpty)
+    }
+
+    /// The "Resize for this TV" offer measures the array, not a merged grid:
+    /// 9 × 30 as Notes is 1.86 : 1 (suits 16 : 9), merged it is 2.48 : 1.
+    func testTheResizeOfferMeasuresTheArray() throws {
+        var body = try XCTUnwrap(NoteArrayTests.cases()["note-array-2x2"]?["body"] as? [String: Any])
+        body["rows"] = 9
+        body["notes_tall"] = 3
+        for (notes, suits) in [(true, true), (false, false)] {
+            if !notes { body["notes_wide"] = NSNull() }
+            let panel = try NoteArrayTests.panel(body)
+            XCTAssertEqual(panel.isNoteArray, notes)
+            let app = AppModel(connection: ConnectionStore(defaults: UserDefaults(suiteName: "a10.\(UUID().uuidString)")!,
+                                                           credentials: InMemoryCredentialStore()))
+            let model = ViewerModel(app: app, ref: panel.id,
+                                    signage: SignageSettings(defaults: UserDefaults(suiteName: "a10.\(UUID().uuidString)")!))
+            model.apply(PanelSnapshot(panel: panel, cells: [], rows: 9, cols: 30,
+                                      connection: .live, dimmed: false, deleted: false))
+            XCTAssertEqual(model.gridSuitsScreen(TVSnapshot.size), suits, "notes: \(notes)")
+        }
     }
 }
