@@ -136,6 +136,23 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    /// A7: the carousel's More Info (`displayAction`) opens Panels, under
+    /// the same signed-in guard as a panel link.
+    func testTheMoreInfoLinkOpensPanelsOnlyForAConnectedBoard() async throws {
+        let model = makeModel()
+        let link = URL(string: "fiestaboard://panels")!
+        model.openTopShelfURL(link)
+        XCTAssertEqual(model.route, .connecting)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await model.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        model.openTopShelfURL(URL(string: "fiestaboard://panel/abc123def456")!)
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+        model.openTopShelfURL(link)
+        XCTAssertEqual(model.route, .panels)
+        model.openTopShelfURL(URL(string: "fiestaboard://panels/extra")!)
+        XCTAssertEqual(model.route, .panels)
+    }
+
     /// The carousel outlives the session it was built from. Home keeps
     /// vending an item after someone signs out of the board, and the link it
     /// sends must not walk straight past the sign-in screen into a panel this

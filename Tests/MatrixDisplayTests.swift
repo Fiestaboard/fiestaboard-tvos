@@ -17,9 +17,12 @@ final class MatrixDisplayTests: XCTestCase {
         let card = RenderHarness.image(PanelPreviewBoard(panel: panel, preview: preview))
         let settings = RenderHarness.image(SettingsPanelPreview(panel: panel, state: .ready(preview)))
         let viewer = RenderHarness.image(ViewerScreen(ref: panel.id, model: model).environment(app))
-        let shelf = UIImage(cgImage: try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview)))
-        for image in [card, settings, viewer, shelf] {
-            let pixel = try XCTUnwrap(image.pixel(x: 960, y: 540))
+        let shelf = UIImage(cgImage: try XCTUnwrap(TopShelfPreviewRenderer.hero(panel: panel, preview: preview)?.oneX))
+        // A7: the Top Shelf board sits in 07b's hero slot, not the centre.
+        let slot = TopShelfPreviewRenderer.boardSlot
+        for (image, point) in [(card, CGPoint(x: 960, y: 540)), (settings, CGPoint(x: 960, y: 540)),
+                               (viewer, CGPoint(x: 960, y: 540)), (shelf, CGPoint(x: slot.midX, y: slot.midY))] {
+            let pixel = try XCTUnwrap(image.pixel(x: Int(point.x), y: Int(point.y)))
             XCTAssertGreaterThan(pixel.r, 200)
             XCTAssertLessThan(pixel.g, 50)
             XCTAssertLessThan(pixel.b, 50)
