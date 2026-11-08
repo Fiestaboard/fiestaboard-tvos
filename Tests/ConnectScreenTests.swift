@@ -374,11 +374,12 @@ final class ConnectScreenTests: XCTestCase {
 
     // MARK: Board labels
 
-    /// The address is the only thing on a card that tells a real board from
-    /// something else on the network wearing its name, so it is always shown
-    /// in full rather than only when two cards would otherwise match.
-    func testBoardAddressAlwaysIncludesThePort() {
-        XCTAssertEqual(BoardAddressLabel.text(for: board), "192.168.1.50:4420")
+    /// The address is the only thing on a card that tells a real hub from
+    /// something else on the network wearing its name, so it is always
+    /// shown. DD12 (#18 review): the default port 4420 is noise and hidden;
+    /// any other port is kept, so two instances on one Pi still differ.
+    func testBoardAddressHidesOnlyTheDefaultPort() {
+        XCTAssertEqual(BoardAddressLabel.text(for: board), "192.168.1.50", "DD12: the default port 4420 is hidden")
     }
 
     /// Two instances on one Pi differ only by port.
