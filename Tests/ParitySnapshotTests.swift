@@ -40,6 +40,30 @@ final class ParitySnapshotTests: XCTestCase {
         XCTAssertEqual(cg.height, 2160)
     }
 
+    /// Goldens are 8-bit sRGB. The renderer's default on the P3 4K simulator
+    /// is the extended range — 16 bits per channel — which nothing reads and
+    /// which doubles every golden (review #15, 6.1).
+    func testAShotIsEightBitStandardRange() throws {
+        let cg = try XCTUnwrap(TVSnapshot.image(Color.red).cgImage)
+        XCTAssertEqual(cg.bitsPerComponent, 8)
+        XCTAssertEqual(cg.bitsPerPixel, 32)
+    }
+
+    /// The parity artifact names the exact simulator runtime (review #15,
+    /// 6.4): goldens are split only by OS major, so a runner image moving
+    /// 26.2 → 26.x must be visible in the evidence.
+    func testParityOutputRecordsTheSimulatorRuntime() throws {
+        try ParityOutput.writeRuntime()
+        let data = try Data(contentsOf: ParityOutput.directory.appendingPathComponent("runtime.json"))
+        let runtime = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let os = try XCTUnwrap(runtime["osVersion"] as? String)
+        XCTAssertTrue(os.hasPrefix("\(TVSnapshot.osMajor)."), os)
+        XCTAssertEqual(runtime["goldenDirectory"] as? String, "tvOS\(TVSnapshot.osMajor)")
+        XCTAssertNotNil(runtime["runtimeBuild"] as? String, "SIMULATOR_RUNTIME_BUILD_VERSION")
+        XCTAssertNotNil(runtime["deviceModel"] as? String)
+        XCTAssertEqual(runtime["scale"] as? Double, 2)
+    }
+
     // MARK: Geometry registry (M8)
 
     func testFigmaNodeRecordsItsGlobalFrameAndLabel() throws {
