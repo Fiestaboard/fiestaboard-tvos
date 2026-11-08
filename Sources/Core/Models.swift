@@ -34,6 +34,11 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     public let boardMissing: Bool
     public let rows: Int?
     public let cols: Int?
+    /// A10 (DD5): the board in whole Notes, hub `notes_wide` / `notes_tall`
+    /// (`cols // 15`, `rows // 3`). Nil unless the hub sends them for a
+    /// note array; an old hub sends neither.
+    public let notesWide: Int?
+    public let notesTall: Int?
     public let boardColor: String?
     public let code62Glyph: Code62Glyph?
     private let rawRenderStyle: String?
@@ -77,6 +82,8 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         case deviceType = "device_type"
         case boardMissing = "board_missing"
         case rows, cols
+        case notesWide = "notes_wide"
+        case notesTall = "notes_tall"
         case boardColor = "board_color"
         case code62Glyph = "code62_glyph"
         case rawRenderStyle = "render_style"
@@ -103,6 +110,8 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         boardMissing = try c.decodeIfPresent(Bool.self, forKey: .boardMissing) ?? false
         rows = try c.decodeIfPresent(Int.self, forKey: .rows)
         cols = try c.decodeIfPresent(Int.self, forKey: .cols)
+        notesWide = nil
+        notesTall = nil
         boardColor = try c.decodeIfPresent(String.self, forKey: .boardColor)
         // Decoded as a raw String and mapped, the way `boardColor` above is.
         // `decodeIfPresent` on a RawRepresentable returns nil only for an
@@ -154,6 +163,10 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     public var effectiveCode62: Code62Glyph {
         Code62Glyph.effective(deviceType: deviceType, configured: code62Glyph)
     }
+
+    /// A note array from a hub that sends its Note counts draws as separate
+    /// Notes (DD5); everything else is one merged grid.
+    public var isNoteArray: Bool { false }
 
     /// Board pigment behind the flaps. Anything unrecognised is black.
     public var backgroundColor: BoardColor {

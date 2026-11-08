@@ -20,3 +20,10 @@ G10 review round 1; sha256 `dd5d08b7…ec28`): the hub panel and frame (cells an
 three canvas layers) behind 07b `150:7480` "LED pixel canvas 64×36" as redrawn
 to the DD24 hub model (nodes `280:*`), plus what the Figma frame draws. tvOS
 maps it to A6 `I166:195024;149:182603`. Update both apps' copies together.
+
+`panel-notes-v1.json` is byte-identical to the Android TV app's
+`core/src/test/resources/panel-notes-v1.json` (G9, androidtv #28): `GET
+/panel/{id}` bodies for note-array layout (`notes_wide` / `notes_tall`), authored
+from the hub's `routes.py` until the hub generates
+`tests/fixtures/panels/panel-notes-v1.json`. `SOURCE.json` pins its sha256.
+Replace both apps' copies byte for byte then.

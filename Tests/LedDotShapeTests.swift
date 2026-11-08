@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import FiestaBoardTV
 
@@ -182,5 +183,38 @@ final class LedDotShapeTests: XCTestCase {
         XCTAssertEqual([corner.r, corner.g, corner.b], [0, 0, 0], "a surround dot's corner is the gap")
         let middle = pixel(data, width: image.width, x: 50, y: 50)
         XCTAssertEqual([middle.r, middle.g, middle.b], [0x1A, 0x1A, 0x1A], "the surround dot is unlit #1A1A1A")
+    }
+
+    // MARK: The marquee (#27 review S1)
+
+    /// `MatrixMarqueeLayers` paints its own alpha mask for the dots that the
+    /// scrolling colours show through. One 82-point dot (a 100-point pitch,
+    /// inset 9) at scale 1: the mask's true corner is the gap, the edge
+    /// midpoint is lit. A square marquee dot would light the corner.
+    func testTheMarqueeMaskDrawsRoundedDots() throws {
+        let size = CGSize(width: 100, height: 100)
+        let layout = try XCTUnwrap(MatrixLayout.make(width: 1, height: 1, viewportWidth: 100, viewportHeight: 100,
+                                                     presentation: MatrixPresentation()))
+        XCTAssertEqual(layout.pitch, 100, accuracy: 1e-9)
+        let frame = MatrixTransitionFrame(raster: raster(1, 1, lit: [0]), display: try display(),
+                                          presentation: MatrixPresentation(), drift: .zero, lighting: false)
+        let backdrop = UIGraphicsImageRenderer(size: size).image { _ in }
+        let marquee = MatrixMarqueeLayers()
+        marquee.prepare(frame: frame, size: size, scale: 1, layout: layout, backdrop: backdrop)
+        let colors = try XCTUnwrap(marquee.layer.sublayers?.first { $0.mask != nil }, "the colours are masked")
+        let contents = try XCTUnwrap(colors.mask?.contents, "the mask has contents")
+        let mask = contents as! CGImage
+        XCTAssertEqual(mask.width, 100)
+        var data = [UInt8](repeating: 0, count: mask.width * mask.height * 4)
+        let context = try XCTUnwrap(CGContext(data: &data, width: mask.width, height: mask.height, bitsPerComponent: 8,
+            bytesPerRow: mask.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(mask, in: CGRect(x: 0, y: 0, width: mask.width, height: mask.height))
+        func alpha(_ x: Int, _ y: Int) -> UInt8 { data[(y * mask.width + x) * 4 + 3] }
+        XCTAssertEqual(alpha(9, 9), 0, "the marquee dot's true corner is the gap")
+        XCTAssertEqual(alpha(90, 90), 0, "every corner is rounded")
+        XCTAssertEqual(alpha(50, 9), 255, "the edge midpoint is lit")
+        XCTAssertEqual(alpha(9, 50), 255, "the edge midpoint is lit")
+        XCTAssertEqual(alpha(4, 50), 0, "the gap is unmasked")
     }
 }

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Inputs to `BoardGeometry.autofitScale`.
@@ -140,4 +141,25 @@ public enum BoardGeometry {
         }
         return min(screenWidthPx / gridWidthPx, screenHeightPx / gridHeightPx)
     }
+}
+
+/// One Note's bezel in a note array, in layout points (A10, DD5). A trailing
+/// partial Note is cut open on its free side: no border and no corner there.
+public struct NoteBezel: Equatable, Sendable {
+    public let rect: CGRect
+    public let openRight: Bool
+    public let openBottom: Bool
+}
+
+/// A note array drawn as separate physical Notes (A10, DD5; the Android twin
+/// is androidtv G9's `NoteArray`).
+public enum NoteArray {
+    public static let cols = BoardGeometry.noteCols
+    public static let rows = BoardGeometry.noteRows
+    public static let paddingRatio = 28.0 / 46
+    public static let borderRatio = 4.0 / 46
+    public static let radiusRatio = 18.0 / 46
+    public static let gapRatio = 40.0 / 46
+
+    public static func spans(_ count: Int, per: Int) -> [Int] { [] }
 }

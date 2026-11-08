@@ -33,6 +33,22 @@ public struct BoardLayout: Sendable {
     public let width: Double
     public let height: Double
     public let tileHeight: Double
+    /// A10: one bezel per Note for a note array, row by row; empty for a
+    /// merged grid.
+    public let notes: [NoteBezel]
+    public let bezelBorder: Double
+    public let bezelRadius: Double
+
+    public init(tiles: [TileRect], width: Double, height: Double, tileHeight: Double,
+                notes: [NoteBezel] = [], bezelBorder: Double = 0, bezelRadius: Double = 0) {
+        self.tiles = tiles
+        self.width = width
+        self.height = height
+        self.tileHeight = tileHeight
+        self.notes = notes
+        self.bezelBorder = bezelBorder
+        self.bezelRadius = bezelRadius
+    }
 
     /// Glyph size as a fraction of tile height, matching FiestaUI's board
     /// steps (28px tile → 16px text at the lg breakpoint).
@@ -46,8 +62,8 @@ public struct BoardLayout: Sendable {
     /// the tiles; so is asking whether a grid suits a screen. An 85" panel
     /// is 810 tiles, so measuring through `make` allocated a whole board to
     /// read two numbers off it.
-    public static func size(rows: Int, cols: Int,
-                            tileHeight: Double) -> (width: Double, height: Double) {
+    public static func size(rows: Int, cols: Int, tileHeight: Double,
+                            noteArray: Bool = false) -> (width: Double, height: Double) {
         guard rows > 0, cols > 0, tileHeight > 0 else { return (0, 0) }
         let gutter = tileHeight * BoardGeometry.tileGutterRatio
         let colPitch = tileHeight * BoardGeometry.tileWidthRatio + gutter
@@ -56,7 +72,8 @@ public struct BoardLayout: Sendable {
         return (Double(cols) * colPitch - gutter, Double(rows) * rowPitch - gutter)
     }
 
-    public static func make(rows: Int, cols: Int, cells: [[BoardCell]], tileHeight: Double) -> BoardLayout {
+    public static func make(rows: Int, cols: Int, cells: [[BoardCell]], tileHeight: Double,
+                            noteArray: Bool = false) -> BoardLayout {
         // The dimension ceiling is a second belt behind `PanelFrame`'s decode
         // clamp: `rows * cols` below is an unchecked Int multiply feeding
         // `reserveCapacity`, and a grid assembled in code rather than decoded
@@ -102,7 +119,7 @@ public struct BoardLayout: Sendable {
     public static func fitting(rows: Int, cols: Int, cells: [[BoardCell]],
                                in screen: CGSize, mode: BoardSizing,
                                diagonalInches: Double, calibration: Double,
-                               colPitchIn: Double) throws -> BoardLayout {
+                               colPitchIn: Double, noteArray: Bool = false) throws -> BoardLayout {
         guard screen.width > 0, screen.height > 0 else {
             throw BoardGeometry.Error.nonPositive("screen \(screen.width)×\(screen.height)")
         }
