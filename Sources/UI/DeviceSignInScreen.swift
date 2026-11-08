@@ -41,10 +41,9 @@ struct DeviceSignInScreen: View {
                             + Text(timerInterval: Date.now...max(expiry, Date.now), countsDown: true))
                             .foregroundStyle(Fiesta.Colors.mutedForeground)
                     }
-                    HStack(spacing: 16) {
-                        if model?.statusMessage == TVCopy.DeviceSignIn.waiting {
-                            TacoLoader(size: .small).accessibilityHidden(true)
-                        }
+                    if model?.statusMessage == TVCopy.DeviceSignIn.waiting {
+                        DeviceSignInWaitingRow(message: TVCopy.DeviceSignIn.waiting)
+                    } else {
                         Text(model?.statusMessage ?? "Creating your code…")
                     }
                     // The corrected scope line (TV-APPS §4 item 4). A3 puts
@@ -75,4 +74,24 @@ struct DeviceSignInScreen: View {
         }
     }
     private func backToPassword() { model?.cancel(); app.route = .signIn }
+}
+
+/// A2 `166:147643` "Waiting": the static 44 pt Taco mark (`166:147644`)
+/// beside one line. Static, as A1's "still looking" row: the animated loader
+/// drew at ~95 pt here and covered the lines below (#18 review, 4.1).
+struct DeviceSignInWaitingRow: View {
+    static let markNode = "I166:147391;149:182603;166:147644"
+
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 16) {
+            TacoMarkView()
+                .frame(width: 44, height: 44)
+                .figmaNode(Self.markNode)
+                .accessibilityHidden(true)
+            Text(message)
+                .lineLimit(1)
+        }
+    }
 }

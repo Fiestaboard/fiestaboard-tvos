@@ -85,9 +85,23 @@ private struct TacoAnimationView: UIViewRepresentable {
         view.isAccessibilityElement = false
         view.layer.magnificationFilter = .nearest
         view.layer.minificationFilter = .nearest
+        // The GIF's intrinsic size must not beat the SwiftUI frame: without
+        // these the image view drew at its natural ~95 pt inside a 36 pt
+        // `.small` frame, over whatever sat beside it (#18 review).
+        view.clipsToBounds = true
+        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        view.setContentHuggingPriority(.defaultLow, for: .vertical)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         view.animationImages = TacoAnimation.shared?.timedImages
         view.animationDuration = TacoAnimation.shared?.duration ?? 0
         return view
+    }
+
+    /// Exactly the size SwiftUI proposes; the artwork scales to fit.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIImageView, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height else { return nil }
+        return CGSize(width: width, height: height)
     }
 
     func updateUIView(_ view: UIImageView, context: Context) {
