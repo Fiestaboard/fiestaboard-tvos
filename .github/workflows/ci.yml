@@ -286,11 +286,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Home's icon placement/focus makes this informational. Run after merges
-  # and optionally by hand, avoiding a second simulator job on every PR.
+  # Home's icon placement/focus makes this informational, so it never
+  # blocks (continue-on-error). A7 made it meaningful: it drives the real
+  # Top Shelf carousel (07b A9), opens a panel with Play and Panels with
+  # More Info, and attaches the XCUIScreen shots — so it now runs on PRs
+  # too, where the carousel is reviewed.
   ui-tests:
     name: Home Top Shelf screenshot (informational, not required)
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.home_ui)
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.home_ui)
+    continue-on-error: true
     runs-on: macos-26
     timeout-minutes: 15
     steps:
