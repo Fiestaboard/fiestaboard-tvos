@@ -134,14 +134,14 @@ final class SettingsPresentationTests: XCTestCase {
         for category in ["This Apple TV", "Panel appearance", "Connection", "About & help"] {
             XCTAssertTrue(app.buttons[category].exists)
         }
-        XCTAssertTrue(app.staticTexts["Applies only to this Apple TV."].exists)
+        XCTAssertTrue(app.staticTexts["Change what’s showing from the FiestaBoard app on your phone."].exists)
         attachScreenshot("Settings — This Apple TV", app: app)
         // Merely focusing a category must not swap the controls beneath the user.
         XCUIRemote.shared.press(.down)
         XCTAssertTrue(rowHasFocus("Panel appearance", in: app))
-        XCTAssertTrue(app.staticTexts["Applies only to this Apple TV."].exists)
+        XCTAssertTrue(app.staticTexts["Change what’s showing from the FiestaBoard app on your phone."].exists)
         XCUIRemote.shared.press(.select)
-        XCTAssertTrue(app.staticTexts["Applies to every viewer of this panel."].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Shared: changes")).firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.otherElements["settings.panelPreview"].exists)
         let message = NSPredicate(format: "value == %@", "FIESTABOARD")
         expectation(for: message, evaluatedWith: app.otherElements["settings.panelPreview"])
@@ -151,7 +151,7 @@ final class SettingsPresentationTests: XCTestCase {
 
     func testCurrentPanelHasCompleteSharedDisplayControls() {
         let app = launchSettings(matrixPanel: true, localSettings: false)
-        XCTAssertTrue(app.staticTexts["Applies to every viewer of this panel."].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Shared: changes")).firstMatch.waitForExistence(timeout: 3))
         XCUIRemote.shared.press(.right)
         openRow("All display settings", in: app)
         XCTAssertTrue(app.textFields["panelSettings.name"].waitForExistence(timeout: 5))
@@ -252,6 +252,8 @@ final class SettingsPresentationTests: XCTestCase {
         for _ in 0..<3 { XCUIRemote.shared.press(.up) }
         openRow("True LED size", in: app)
         XCTAssertTrue(app.buttons["TV size"].waitForExistence(timeout: 3))
+        // DD19: the rows appear below, and focus stays on Matrix size.
+        waitForRowFocus("settings.matrixSizing", in: app)
         openRow("TV size", in: app)
         openRow("55 inches", in: app)
         XCTAssertEqual(app.buttons["TV size"].value as? String, "55 inches")
@@ -377,7 +379,14 @@ final class SettingsPresentationTests: XCTestCase {
         let app = launchSettings()
         openCategory("About & help", in: app)
         openRow("Privacy", in: app)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "FiestaBoard's servers")).firstMatch.waitForExistence(timeout: 3))
+        // DD19 / A8f: the body is one focus target the remote scrolls.
+        let body = app.descendants(matching: .any).matching(identifier: "settings.detail.body").firstMatch
+        XCTAssertTrue(body.waitForExistence(timeout: 3))
+        XCTAssertTrue(body.label.contains("FiestaBoard’s servers"), body.label)
+        XCTAssertTrue(body.hasFocus, "the scroll body takes focus")
+        for _ in 0..<4 { XCUIRemote.shared.press(.down) }
+        XCTAssertTrue(body.hasFocus, "Down scrolls the text; it does not leave the page")
+        attachScreenshot("About — Privacy (A8f)", app: app)
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.buttons["Privacy"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["About & help"].waitForExistence(timeout: 3))
