@@ -100,10 +100,6 @@ enum TVCopy {
     }
 
     enum Viewer {
-        /// web/messages/en.json → `fiestaPanels.offline` (TV-APPS §4 item 7).
-        static let disconnected = "Connection to FiestaBoard lost — showing the last update"
-        static let reconnected = "Reconnected to FiestaBoard."
-        static let reconnecting = "Reconnecting"
         static let boardMissingTitle = "This panel’s virtual board was removed"
     }
 }

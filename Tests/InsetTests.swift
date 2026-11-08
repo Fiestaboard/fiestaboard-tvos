@@ -90,14 +90,17 @@ final class InsetTests: XCTestCase {
         XCTAssertEqual(bar.width, 1760, accuracy: 1)
     }
 
-    func testTheStatusPillSitsInsideTitleSafe() throws {
+    /// A6b: the standalone status chip replaced the "Reconnecting" pill; A7
+    /// puts it top-trailing, inside title-safe.
+    func testTheStandaloneStatusChipSitsInsideTitleSafe() throws {
         _ = TVSnapshot.image(ZStack {
             Color.black
-            BoardStatusPill(title: "Reconnecting", systemImage: "wifi.exclamationmark", tint: .orange, spoken: "x")
+            StandaloneStatusChip(content: StatusChipContent(kind: .hubUnreachable, badge: nil,
+                                                            text: "Hub unreachable · showing the last update", persistent: true))
         }, fullBleed: true)
-        let pill = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()[BoardStatusPill.probe]?.frame)
-        XCTAssertEqual(pill.maxX, TVSnapshot.size.width - PlatformTV.safeSide, accuracy: 1)
-        XCTAssertEqual(pill.maxY, TVSnapshot.size.height - PlatformTV.safeTopBottom, accuracy: 1)
+        let chip = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()[StandaloneStatusChip.probe]?.frame)
+        XCTAssertEqual(chip.maxX, TVSnapshot.size.width - PlatformTV.safeSide, accuracy: 1)
+        XCTAssertEqual(chip.minY, PlatformTV.safeTopBottom, accuracy: 1)
     }
 
     func testTheViewerMessageStaysInsideTitleSafe() throws {

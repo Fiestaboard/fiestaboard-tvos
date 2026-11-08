@@ -24,6 +24,12 @@ final class FixtureHTTPServer {
     private var discoveryBody: Data?
     private var heldDiscoveryConnection: NWConnection?
     private var sawFrame = false
+    /// A6b: `status` for the default panel (`/api/panel/1`), as JSON; nil
+    /// leaves the key out (an old hub).
+    private var panelStatus: String?
+    /// A6b: while true, panel and frame reads are dropped unanswered, the
+    /// way an unplugged hub drops them.
+    private var dropped = false
     private var sawPanels = false
 
     var port: UInt16 { listener.port!.rawValue }
@@ -98,6 +104,18 @@ final class FixtureHTTPServer {
         return heldPanelUpdates.count
     }
 
+    func setPanelStatus(_ status: String?) {
+        lock.lock()
+        panelStatus = status
+        lock.unlock()
+    }
+
+    func setDropped(_ drop: Bool) {
+        lock.lock()
+        dropped = drop
+        lock.unlock()
+    }
+
     func updatePanels(_ body: String) {
         lock.lock()
         panelsBody = body
@@ -132,6 +150,14 @@ final class FixtureHTTPServer {
                !request.lowercased().contains("authorization: bearer fb_tv_ui-settings") {
                 connection.send(content: Data("HTTP/1.1 401 Unauthorized\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}".utf8),
                                 completion: .contentProcessed { _ in connection.cancel() })
+                return
+            }
+            lock.lock()
+            let drop = dropped && path.hasPrefix("/api/panel/")
+            let statusJSON = panelStatus
+            lock.unlock()
+            if drop {
+                connection.cancel()
                 return
             }
             if path == "/__fixtures/discovery" {
@@ -178,7 +204,13 @@ final class FixtureHTTPServer {
                 self.lock.lock()
                 body = chatResponses.isEmpty ? "event: done\ndata: {\"reason\":\"complete\"}\n\n" : chatResponses.removeFirst()
                 self.lock.unlock()
-            case "/api/panel/1", "/api/panel/abc123def456": body = Fixtures.panelJSON
+            case "/api/panel/1", "/api/panel/abc123def456":
+                if let statusJSON {
+                    let base: String = String(Fixtures.panelJSON.dropLast())
+                    body = base + ",\"status\":" + statusJSON + "}"
+                } else {
+                    body = Fixtures.panelJSON
+                }
             case "/api/panel/1/frame", "/api/panel/abc123def456/frame":
                 body = frameProvider?() ?? frameBody
                 self.lock.lock()

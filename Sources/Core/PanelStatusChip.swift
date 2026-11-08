@@ -112,7 +112,10 @@ public enum PanelStatusChip {
             return StatusChip(kind: .override, persistent: false, overrideEndsAt: ends,
                               remaining: ends.map { $0.timeIntervalSince(hubNow) })
         }
-        if status.silenced {
+        // Silence ends on the hub's clock too (A6b N1, Jev check_fallthrough;
+        // Android G6b matches): past `silenced_until` the chip falls through
+        // rather than naming a time already gone.
+        if status.silenced, status.silencedUntil.map({ $0 > hubNow }) ?? true {
             return StatusChip(kind: .silenced, persistent: status.silenceMode == .indicator,
                               silencedUntil: status.silencedUntil, silenceMode: status.silenceMode)
         }
@@ -175,13 +178,13 @@ public enum PanelStatusChip {
 }
 
 extension Panel {
-    /// This panel with `polled`'s status. A PATCH reply
+    /// This panel, with `polled`'s status when it has none of its own. A PATCH reply
     /// (`PanelUpdateResponse`) carries no `status`, so a caller adopting the
     /// patched panel keeps the one it polled instead of losing the chip
     /// until the next config read.
     public func keepingStatus(of polled: Panel?) -> Panel {
         var copy = self
-        copy.status = polled?.status
+        copy.status = status ?? polled?.status
         return copy
     }
 }
@@ -190,10 +193,12 @@ extension PanelSnapshot {
     /// The chip for this snapshot at `localNow` (the TV's clock), counted on
     /// the hub's clock. A stale connection reads "Hub unreachable"; the
     /// viewer passes `reconnected` for the moment after it comes back.
+    /// `includingStatus: false` keeps only the connection chips (hub
+    /// unreachable, reconnected), for a panel whose status means nothing.
     public func statusChip(localNow: Date, reconnected: Bool = false,
-                           timeZone: TimeZone = .current) -> StatusChipContent? {
+                           timeZone: TimeZone = .current, includingStatus: Bool = true) -> StatusChipContent? {
         let connection: HubConnection = connection == .stale ? .unreachable : (reconnected ? .reconnected : .reachable)
-        return PanelStatusChip.chip(status: panel?.status, hubNow: hubClock.now(at: localNow), connection: connection)
+        return PanelStatusChip.chip(status: includingStatus ? panel?.status : nil, hubNow: hubClock.now(at: localNow), connection: connection)
             .map { PanelStatusChip.content($0, timeZone: timeZone) }
     }
 }

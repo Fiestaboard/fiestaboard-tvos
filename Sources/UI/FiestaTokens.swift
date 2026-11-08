@@ -58,6 +58,12 @@ public enum Fiesta {
         public static var border: Color { Color(token: palette.border) }
         public static var destructive: Color { Color(token: palette.destructive) }
         public static var offline: Color { Color(token: palette.offline) }
+        /// --primary-foreground: text on a --primary fill (the chip's Override badge).
+        public static var brandForeground: Color { Color(token: FiestaTokenValues.Dark.primaryForeground) }
+        /// --success: the status chip's dot (Schedule, Reconnected).
+        public static var success: Color { Color(token: FiestaTokenValues.Dark.success) }
+        /// --warning: the status chip's wifi-off icon (Hub unreachable).
+        public static var warning: Color { Color(token: FiestaTokenValues.Dark.warning) }
     }
 
     public enum Metrics {
@@ -79,6 +85,8 @@ public enum Fiesta {
         public static let caption = Font.system(size: 24, weight: .regular)
         /// 07b tvOS/Caption 1 (25 medium): the viewer overlay's subtitle.
         public static let caption1 = Font.system(size: 25, weight: .medium)
+        /// 07b tvOS/Callout (31 medium): the status chip's line.
+        public static let callout = Font.system(size: 31, weight: .medium)
     }
 }
 

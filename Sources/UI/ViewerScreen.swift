@@ -38,8 +38,13 @@ struct ViewerScreen: View {
                     } else {
                         boardLayer(in: proxy.size)
                     }
-                    if model?.snapshot.connection == .stale {
-                        offlineIndicator.opacity(app.oledOutput.brightness)
+                    // A6b: the status chip on its own, with the overlay down.
+                    // It replaced the "Reconnecting" pill: an outage reads
+                    // "Hub unreachable · showing the last update".
+                    if model?.chipStandaloneVisible == true, let chip = model?.statusChip {
+                        StandaloneStatusChip(content: chip)
+                            .opacity(app.oledOutput.brightness)
+                            .transition(.opacity)
                     }
                     if model?.resizeOfferVisible == true { resizeOffer }
                     if model?.overlayVisible == true { overlay }
@@ -53,6 +58,8 @@ struct ViewerScreen: View {
             // app declares never ran at all.
             .animation(.easeInOut(duration: 0.22), value: model?.overlayVisible)
             .animation(.easeOut(duration: 0.28), value: model?.resizeOfferVisible)
+            // Strip `166:206938`: the chip fades over 0.3 s, instantly under Reduce Motion.
+            .animation(Self.chipFade(reduceMotion: reduceMotion), value: model?.chipStandaloneVisible)
             .onChange(of: [model?.snapshot.rows ?? 0, model?.snapshot.cols ?? 0]) { _, _ in
                 model?.considerResizeOffer(for: proxy.size)
             }
@@ -82,9 +89,11 @@ struct ViewerScreen: View {
         .onMoveCommand { _ in remoteInteraction() }
         .onPlayPauseCommand { remoteInteraction() }
         .onExitCommand { back() }
-        // The indicators are the only sign the board stopped answering, and a
-        // sign is no use to VoiceOver: nothing about them takes focus.
-        .onChange(of: model?.snapshot.connection) { old, new in announce(from: old, to: new) }
+    }
+
+    /// Strip `166:206938`: the chip fades over 0.3 s, instantly under Reduce Motion.
+    static func chipFade(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.3)
     }
 
     /// A4b: Back wakes a resting screen, then takes the overlay down, and
@@ -103,20 +112,6 @@ struct ViewerScreen: View {
                              panelDimmed: fresh.snapshot.dimmed)
         fresh.start()
         onModel?(fresh)
-    }
-
-    private func announce(from old: ConnectionState?, to new: ConnectionState?) {
-        switch (old, new) {
-        case (.stale?, .live?):
-            Announce.say(TVCopy.Viewer.reconnected)
-        case (_, .stale?):
-            Announce.say(TVCopy.Viewer.disconnected)
-        // No arm for `.unauthorized`: see the chrome stack in `body`. This
-        // view is gone in the same update that sets the state, so the arm
-        // that used to be here announced from a view nobody was on.
-        default:
-            break
-        }
     }
 
     // MARK: Layers
@@ -226,6 +221,8 @@ struct ViewerScreen: View {
     private var overlay: some View {
         ViewerOverlay(panelName: model?.snapshot.panel?.name ?? "Panel",
                       subtitle: overlaySubtitle,
+                      // DD25: plain content in the bar, which is the glass.
+                      chip: model?.statusChip.map { AnyView(StatusChipView(content: $0, placement: .inBar)) },
                       onInteraction: { model?.keepOverlayAlive() },
                       onPanels: { model?.stop(); app.showPanels() },
                       onSettings: { model?.stop(); app.showSettings() },
@@ -240,15 +237,6 @@ struct ViewerScreen: View {
         let kind = panel.renderStyle == .ledMatrix ? "LED matrix" : "Split-flap"
         guard let hub = app.connection.saved?.displayName, !hub.isEmpty else { return kind }
         return "\(kind) · \(hub)"
-    }
-
-    /// Amber, and the words say the app is still trying: the frame on the
-    /// flaps is still true, it is only out of date.
-    private var offlineIndicator: some View {
-        BoardStatusPill(title: TVCopy.Viewer.reconnecting,
-                        systemImage: "wifi.exclamationmark",
-                        tint: Fiesta.Colors.offline,
-                        spoken: TVCopy.Viewer.disconnected)
     }
 
     /// Whether the board is the only thing a press could be aimed at.

@@ -15,6 +15,12 @@ final class ViewerModel {
     var matrixPresentation: MatrixPresentation { snapshot.panel?.effectiveMatrixPresentation(fallback: localMatrixPresentation) ?? localMatrixPresentation }
     var boardMissing: Bool { snapshot.panel?.boardMissing == true }
 
+    /// The read-only status chip (A6b), recomputed on every snapshot so its
+    /// countdown ticks; stored only when it changes.
+    private(set) var statusChip: StatusChipContent?
+    /// Whether the chip shows on its own, with the overlay down.
+    private(set) var chipStandaloneVisible = false
+
     /// Which panel this model is bound to.
     ///
     /// Readable, rather than private as it used to be: `.viewer(a)` and
@@ -31,6 +37,10 @@ final class ViewerModel {
     @ObservationIgnored private var pump: Task<Void, Never>?
     @ObservationIgnored private var overlayTimer: Task<Void, Never>?
     @ObservationIgnored private var preparedLayout: (key: LayoutKey, layout: BoardLayout)?
+    @ObservationIgnored private var chipPresenter = StatusChipPresenter()
+    @ObservationIgnored private var reconnectedUntil: Date?
+    @ObservationIgnored private var chipTimer: Task<Void, Never>?
+    private let now: () -> Date
 
     private struct LayoutKey: Equatable {
         let rows: Int
@@ -57,8 +67,10 @@ final class ViewerModel {
     init(app: AppModel,
          ref: String,
          signage: SignageSettings = .shared,
-         isVoiceOverRunning: @escaping @MainActor () -> Bool = { Announce.isVoiceOverRunning }) {
+         isVoiceOverRunning: @escaping @MainActor () -> Bool = { Announce.isVoiceOverRunning },
+         now: @escaping () -> Date = Date.init) {
         self.app = app
+        self.now = now
         self.ref = ref
         localMatrixPresentation = signage.matrixPresentation
         matrixTransitionStyle = signage.matrixTransitionStyle
@@ -92,9 +104,14 @@ final class ViewerModel {
     func apply(_ snapshot: PanelSnapshot) {
         app.updateOLEDViewer(unavailable: snapshot.connection != .live || snapshot.deleted || snapshot.panel?.boardMissing == true,
                              panelDimmed: snapshot.dimmed)
+        // Back from an outage: the chip says "Reconnected" for a moment (DD22).
+        if self.snapshot.connection == .stale, snapshot.connection == .live {
+            reconnectedUntil = now().addingTimeInterval(StatusChipPresenter.reconnectedFor)
+        }
         // The server routinely repeats the same frame. Observation otherwise
         // invalidates the entire viewer, including its canvases, every poll.
         if self.snapshot != snapshot { self.snapshot = snapshot }
+        refreshChip()
         if snapshot.panel?.renderStyle == .ledMatrix, resizeOfferVisible { resizeOfferVisible = false }
 
         // A panel deleted on the server must stop being the panel this TV
@@ -116,6 +133,7 @@ final class ViewerModel {
     }
 
     func stop() {
+        chipTimer?.cancel(); chipTimer = nil
         pump?.cancel(); pump = nil
         store?.stop(); store = nil
         // Chrome must not survive the board it was floating over.
@@ -125,7 +143,45 @@ final class ViewerModel {
     /// A model dropped without `stop()` — which is exactly what a route change
     /// under `ViewerScreen` used to do — must not leave a two-second poll
     /// running against the board for the life of the app.
-    deinit { pump?.cancel() }
+    deinit { pump?.cancel(); chipTimer?.cancel() }
+
+    // MARK: Status chip
+
+    /// Recompute the chip at the model's clock: what it says, whether that is
+    /// news (shown on its own for a while and said once), and whether it shows
+    /// on its own now. Called on every snapshot and at the chip's deadlines.
+    func refreshChip() {
+        let at = now()
+        let reconnected = reconnectedUntil.map { at < $0 } ?? false
+        // A deleted panel or a removed board has no hub status worth naming,
+        // but an outage still shows and is said (#25 review must-fix).
+        let content = snapshot.statusChip(localNow: at, reconnected: reconnected, timeZone: .current,
+                                          includingStatus: !(snapshot.deleted || boardMissing))
+        if chipPresenter.update(content, at: at), let content {
+            Announce.say(StatusChipPresenter.spoken(content, panelName: snapshot.panel?.name ?? "Panel"))
+        }
+        if statusChip != content { statusChip = content }
+        updateChipVisibility(at: at)
+        scheduleChipRefresh(after: at, reconnected: reconnected)
+    }
+
+    private func updateChipVisibility(at: Date) {
+        let visible = chipPresenter.standaloneVisible(at: at, overlayVisible: overlayVisible)
+        if chipStandaloneVisible != visible { chipStandaloneVisible = visible }
+    }
+
+    /// Wake for the 6 s window or the end of "Reconnected", whichever is next.
+    private func scheduleChipRefresh(after at: Date, reconnected: Bool) {
+        chipTimer?.cancel(); chipTimer = nil
+        let deadlines = [chipPresenter.nextDeadline, reconnected ? reconnectedUntil : nil].compactMap { $0 }.filter { $0 > at }
+        guard let next = deadlines.min() else { return }
+        let delay = next.timeIntervalSince(at)
+        chipTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.refreshChip()
+        }
+    }
 
     // MARK: Overlay
 
@@ -136,6 +192,7 @@ final class ViewerModel {
         // the toolbar here would compete with its secondary Later action.
         guard !resizeOfferVisible else { return }
         overlayVisible = true
+        updateChipVisibility(at: now())
         restartOverlayTimer()
     }
 
@@ -153,6 +210,7 @@ final class ViewerModel {
     func hideOverlay() {
         overlayTimer?.cancel(); overlayTimer = nil
         overlayVisible = false
+        updateChipVisibility(at: now())
     }
 
     /// How long the chrome has left. Internal so a test can pin both values.
