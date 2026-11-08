@@ -43,6 +43,25 @@ final class A8SettingsTests: XCTestCase {
 
     // MARK: Copy
 
+    /// 07b `290:139071`: the Accessibility note, word for word.
+    func testTheAccessibilityNoteIsThe07bText() {
+        XCTAssertEqual(SettingsCopy.accessibilityNote,
+                       "Follows your Apple TV’s Reduce Motion and Increase Contrast settings (Settings › Accessibility).")
+    }
+
+    /// A8d / DD13: the hub address drops what a browser fills in itself
+    /// (`http://`, :80, :443) and keeps any other port, as Android's
+    /// `hubDisplayAddress` and the activation address do.
+    func testTheHubAddressUsesTheDD13DisplayRule() {
+        XCTAssertEqual(TVCopy.displayAddress(URL(string: "http://fiestapi.local:4420")!), "fiestapi.local:4420")
+        XCTAssertEqual(TVCopy.displayAddress(URL(string: "http://fiestapi.local:80")!), "fiestapi.local")
+        XCTAssertEqual(TVCopy.displayAddress(URL(string: "http://192.168.1.30:4420")!), "192.168.1.30:4420")
+        XCTAssertEqual(TVCopy.displayAddress(URL(string: "https://hub.example.com:443")!), "https://hub.example.com",
+                       "https stays visible: it is not what a browser assumes")
+        XCTAssertEqual(TVCopy.DeviceSignIn.activationAddress(URL(string: "http://fiestapi.local:4420/activate")!),
+                       "fiestapi.local:4420/activate", "the activation address keeps the same rule")
+    }
+
     func testPhoneFirstFooters() {
         XCTAssertEqual(SettingsCopy.thisTVFooter, "Change what’s showing from the FiestaBoard app on your phone.")
         XCTAssertEqual(SettingsCopy.aboutFooter, "Change what’s showing from the FiestaBoard app on your phone, or on your hub’s web page.")
