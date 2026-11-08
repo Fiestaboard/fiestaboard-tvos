@@ -4,7 +4,7 @@
     "repo": "Fiestaboard/FiestaBoard",
     "path": "tests/fixtures/panels/panel-status-v1.json",
     "ref": "origin/feat/panel-next-change-h2b (H2b #2454, v11 stack #2447, unmerged)",
-    "commit": "9d0be4b5c2bfcadd3b682f09142a86906f5ed04e",
-    "sha256": "2393b87e790efd929853f0eea39d6259c6415874620029bf194743354fc92386"
+    "commit": "a53903c2ffd507d0645524ca7bab2afbfa19729c",
+    "sha256": "6a4a9fa47165944be312dd39eb48d926a7d44b9c8cb795157d54fe375103601e"
   }
 }

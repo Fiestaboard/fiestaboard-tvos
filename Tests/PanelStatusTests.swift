@@ -136,9 +136,9 @@ final class PanelStatusTests: XCTestCase {
         XCTAssertEqual(override.mode, .override)
         XCTAssertTrue(override.overrideActive)
         XCTAssertFalse(override.scheduleEnabled)
-        XCTAssertEqual(override.overrideExpiresAt, Self.instant("2026-11-08T05:00:00Z"))
+        XCTAssertEqual(override.overrideExpiresAt, Self.instant("2026-11-08T05:00:37Z"))
         XCTAssertEqual(override.overrideStartedAt, Self.instant("2026-11-08T02:18:00Z"))
-        XCTAssertEqual(override.nextChangeAt, Self.instant("2026-11-08T05:00:00Z"))
+        XCTAssertEqual(override.nextChangeAt, Self.instant("2026-11-08T05:00:37Z"))
         XCTAssertEqual(override.nextChangeReason, "override_ends")
         let silencedReading = try await read(hubCase: "silenced-indicator")
         let silenced = try XCTUnwrap(silencedReading.panel.status)
@@ -159,18 +159,43 @@ final class PanelStatusTests: XCTestCase {
         let old = try await read(body: ["id": "lobby", "name": "Lobby TV", "board_id": "b1"], headers: [:])
         XCTAssertNil(old.panel.status)
         XCTAssertNil(old.hubDate)
+        // The real wire (H2b a53903c2f): the board id stays, `board_missing` says so.
         let removed = try await read(hubCase: "board-missing").panel
         XCTAssertNil(removed.status)
-        // The hub fixture drops `board_missing` and nulls `board_id`: no board id is no board.
         XCTAssertTrue(removed.boardMissing)
-        XCTAssertEqual(removed.boardId, "")
+        XCTAssertEqual(removed.boardId, "b1")
         XCTAssertNil(removed.rows)
-        // A real orphaned panel keeps its id and says so.
-        let real = try await read(body: ["id": "lobby", "name": "Lobby TV", "board_id": "b1",
-                                         "board_missing": true, "status": NSNull()], headers: [:]).panel
-        XCTAssertTrue(real.boardMissing)
-        XCTAssertEqual(real.boardId, "b1")
-        XCTAssertNil(real.status)
+        let healthy = try await read(hubCase: "manual").panel
+        XCTAssertFalse(healthy.boardMissing)
+    }
+
+    /// No inference from a null board id: the hub always sends one, so a
+    /// panel without one is malformed, exactly as before A6a.
+    func testANullBoardIdIsStillMalformed() async {
+        do {
+            _ = try await read(body: ["id": "lobby", "name": "Lobby TV", "board_id": NSNull()], headers: [:])
+            XCTFail("expected a decoding error")
+        } catch FiestaError.decoding {
+            // expected
+        } catch {
+            XCTFail("expected .decoding, got \(error)")
+        }
+    }
+
+    /// A PATCH reply (`PanelUpdateResponse`) carries no `status`: a caller that
+    /// adopts the patched panel keeps the status it polled.
+    func testAPatchReplyKeepsThePolledStatus() async throws {
+        let polled = try await read(hubCase: "override-with-expiry").panel
+        StubURLProtocol.reset()
+        let patched = #"{"id":"lobby","name":"Lobby TV","board_id":"b1","rows":12,"cols":29,"render_style":"split_flap","animations_enabled":true,"incompatible_references":null}"#
+        StubURLProtocol.enqueue(.json(patched), for: "/api/panels/lobby")
+        let client = FiestaClient(baseURL: URL(string: "http://hub:4420")!, session: StubURLProtocol.makeSession())
+        let result = try await client.updatePanel(id: "lobby", animationsEnabled: true)
+        XCTAssertNil(result.panel.status, "PanelUpdateResponse has no status")
+        let kept = result.panel.keepingStatus(of: polled)
+        XCTAssertEqual(kept.status, polled.status)
+        XCTAssertTrue(kept.animationsEnabled, "everything else is the patched panel")
+        XCTAssertNil(result.panel.keepingStatus(of: nil).status)
     }
 
     func testUnknownValuesAndOddInstantsAreTolerated() async throws {
@@ -236,6 +261,12 @@ final class PanelStatusTests: XCTestCase {
         XCTAssertEqual(try text(at: "2026-11-08T04:59:30Z"), "1m left · Holds until 9:00 PM", "never 0m left")
         XCTAssertEqual(try text(at: "2026-11-08T03:59:01Z"), "1h 1m left · Holds until 9:00 PM")
         XCTAssertEqual(try text(at: "2026-11-08T04:00:00Z"), "1h 0m left · Holds until 9:00 PM")
+        // One rule for both TV apps: cut to whole seconds, then round up to minutes.
+        XCTAssertEqual(PanelStatusChip.left(60.5), "1m left", "60.5 s is 60 s: 1m, as on Android")
+        XCTAssertEqual(PanelStatusChip.left(61), "2m left")
+        XCTAssertEqual(PanelStatusChip.left(119.9), "2m left")
+        XCTAssertEqual(PanelStatusChip.left(3600.9), "1h 0m left")
+        XCTAssertEqual(PanelStatusChip.left(0.4), "1m left", "a running override never reads 0m")
         XCTAssertNil(PanelStatusChip.chip(status: status(), hubNow: Self.instant("2026-11-08T05:00:00Z")),
                      "an override ends at its expiry on the hub's clock")
     }
@@ -285,16 +316,57 @@ final class PanelStatusTests: XCTestCase {
         let store = PanelStore(client: FiestaClient(baseURL: URL(string: "http://hub:4420")!, session: StubURLProtocol.makeSession()),
                                ref: "lobby", frameInterval: 0.02, configInterval: 60, clock: { local })
         var found: PanelSnapshot?
-        for await snapshot in store.snapshots() where snapshot.panel != nil { found = snapshot; break }
+        for await snapshot in store.snapshots() where snapshot.panel != nil && !snapshot.cells.isEmpty { found = snapshot; break }
         store.stop()
         let snapshot = try XCTUnwrap(found)
         XCTAssertEqual(snapshot.hubClock.now(at: local), Self.instant("2026-11-08T02:23:00Z"))
         let chip = try XCTUnwrap(snapshot.statusChip(localNow: local, timeZone: zone))
-        XCTAssertEqual(chip.text, "2h 37m left · Holds until 9:00 PM")
+        XCTAssertEqual(chip.text, "2h 38m left · Holds until 9:00 PM")
         XCTAssertEqual(snapshot.statusChip(localNow: local, reconnected: true, timeZone: zone)?.kind, .reconnected)
         let stale = PanelSnapshot(panel: snapshot.panel, cells: [], rows: 0, cols: 0, connection: .stale,
                                   dimmed: false, deleted: false)
         XCTAssertEqual(stale.statusChip(localNow: local, timeZone: zone)?.kind, .hubUnreachable)
         XCTAssertEqual(PanelSnapshot.empty.hubClock, .local)
+    }
+
+    /// Review must-fix: the offset of a whole-second `Date` against a
+    /// fractional local clock moves on every config read. Unless it moves by
+    /// more than `HubClock.tolerance`, the store keeps the clock it has, so
+    /// `ViewerModel.apply`'s `!=` still skips an unchanged snapshot.
+    func testTheHubClockDoesNotChurnTheSnapshot() async throws {
+        let body = try JSONSerialization.data(withJSONObject: XCTUnwrap(
+            hubCases.first { $0["name"] as? String == "override-with-expiry" }?["body"]))
+        for date in ["Sun, 08 Nov 2026 02:18:00 GMT", "Sun, 08 Nov 2026 02:18:10 GMT", "Sun, 08 Nov 2026 02:18:20 GMT"] {
+            StubURLProtocol.enqueue(.init(status: 200, body: body, headers: ["Content-Type": "application/json", "Date": date]),
+                                    for: "/api/panel/lobby")
+        }
+        // Longer than "/api/panel/lobby", so frames never take a config body.
+        for _ in 0..<200 { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/api/panel/lobby/frame") }
+        let base = Self.instant("2026-11-08T02:18:00Z").addingTimeInterval(0.2)
+        // The local clock runs 10.3 s per config read while the hub's Date runs 10 s.
+        let clock: @Sendable () -> Date = {
+            let reads = StubURLProtocol.requests.filter { !$0.url.path.hasSuffix("/frame") }.count
+            return base.addingTimeInterval(10.3 * Double(max(reads - 1, 0)))
+        }
+        let suite = "a6a-hub-clock-\(UUID().uuidString)"
+        let signage = SignageSettings(defaults: UserDefaults(suiteName: suite)!)
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let store = PanelStore(client: FiestaClient(baseURL: URL(string: "http://hub:4420")!, session: StubURLProtocol.makeSession()),
+                               ref: "lobby", frameInterval: 0.01, configInterval: 0.03, clock: clock, signage: signage)
+        var byRead: [Int: PanelSnapshot] = [:]
+        let deadline = Date().addingTimeInterval(5)
+        for await snapshot in store.snapshots() where snapshot.panel != nil && !snapshot.cells.isEmpty {
+            let reads = StubURLProtocol.requests.filter { !$0.url.path.hasSuffix("/frame") }.count
+            if byRead[reads] == nil { byRead[reads] = snapshot }
+            if byRead[2] != nil || Date() > deadline { break }
+        }
+        store.stop()
+        let first = try XCTUnwrap(byRead[1], "a snapshot after the first config read")
+        let second = try XCTUnwrap(byRead[2], "a snapshot after the second config read")
+        XCTAssertEqual(first, second, "0.3 s of drift between reads is not a new snapshot")
+        // A real jump (the hub's clock moved by minutes) is taken.
+        let moved = HubClock(hubDate: base.addingTimeInterval(300), receivedAt: base)
+        XCTAssertEqual(first.hubClock.adopting(moved), moved)
+        XCTAssertEqual(first.hubClock.adopting(HubClock(hubDate: base.addingTimeInterval(1.5), receivedAt: base)), first.hubClock)
     }
 }

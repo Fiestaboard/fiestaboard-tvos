@@ -31,6 +31,9 @@ public struct HubClock: Equatable, Sendable {
     public static let local = HubClock(offset: 0)
 
     public func now(at local: Date) -> Date { local.addingTimeInterval(offset) }
+
+    /// RED stub: always takes the new reading.
+    public func adopting(_ reading: HubClock) -> HubClock { reading }
 }
 
 /// Whether the TV can reach its hub. Client-side: the status cannot say.
@@ -156,6 +159,11 @@ public enum PanelStatusChip {
             .replacingOccurrences(of: "\u{202F}", with: " ")
             .replacingOccurrences(of: "\u{00A0}", with: " ")
     }
+}
+
+extension Panel {
+    /// RED stub.
+    public func keepingStatus(of polled: Panel?) -> Panel { self }
 }
 
 extension PanelSnapshot {
