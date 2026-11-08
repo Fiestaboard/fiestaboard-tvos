@@ -35,6 +35,8 @@ public struct PanelSnapshot: Equatable, Sendable {
     public let message: String?
     public let richCells: [[MatrixCell]]?
     public let layers: [CanvasLayer]
+    /// The hub's clock from the last config read (A6a), for the status chip.
+    public let hubClock: HubClock
 
     /// Spelled out rather than synthesised so `drift` can default: it is a
     /// late arrival and every existing caller predates it. `message` is a
@@ -44,7 +46,8 @@ public struct PanelSnapshot: Equatable, Sendable {
     public init(panel: Panel?, cells: [[BoardCell]], rows: Int, cols: Int,
                 connection: ConnectionState, dimmed: Bool, deleted: Bool,
                 drift: BoardOffset = .zero,
-                message: String? = nil, richCells: [[MatrixCell]]? = nil, layers: [CanvasLayer] = []) {
+                message: String? = nil, richCells: [[MatrixCell]]? = nil, layers: [CanvasLayer] = [],
+                hubClock: HubClock = .local) {
         self.panel = panel
         self.cells = cells
         self.rows = rows
@@ -56,6 +59,7 @@ public struct PanelSnapshot: Equatable, Sendable {
         self.message = message
         self.richCells = richCells
         self.layers = layers
+        self.hubClock = hubClock
     }
 
     public static let empty = PanelSnapshot(panel: nil, cells: [], rows: 0, cols: 0,
@@ -207,12 +211,15 @@ public final class PanelStore: @unchecked Sendable {
         var message: String?
         var richCells: [[MatrixCell]]?
         var layers: [CanvasLayer] = []
+        var hubClock = HubClock.local
 
         while !Task.isCancelled {
             if sinceConfig >= configInterval {
                 sinceConfig = 0
                 do {
-                    panel = try await runner.authorized { try await $0.panel(ref: ref) }
+                    let reading = try await runner.authorized { try await $0.panelReading(ref: ref) }
+                    panel = reading.panel
+                    hubClock = HubClock(hubDate: reading.hubDate, receivedAt: clock())
                     deleted = false
                 } catch FiestaError.notFound {
                     deleted = true
@@ -270,7 +277,8 @@ public final class PanelStore: @unchecked Sendable {
             continuation.yield(PanelSnapshot(panel: panel, cells: cells, rows: rows, cols: cols,
                                              connection: connection, dimmed: dimmed, deleted: deleted,
                                              drift: signage.drift(at: now),
-                                             message: message, richCells: richCells, layers: layers))
+                                             message: message, richCells: richCells, layers: layers,
+                                             hubClock: hubClock))
 
             if connection == .unauthorized { break }
 
