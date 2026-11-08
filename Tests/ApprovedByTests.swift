@@ -29,7 +29,7 @@ final class ApprovedByTests: XCTestCase {
         XCTAssertEqual(TVCopy.DeviceSignIn.approvedBy("maya"), "Approved by maya")
     }
 
-    private func approve(statusCase: String) async throws -> (approver: String??, statusRequests: Int) {
+    private func approve(statusJSON: String) async throws -> (approver: String??, statusRequests: Int) {
         StubURLProtocol.reset()
         let store = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
                                     credentials: InMemoryCredentialStore(),
@@ -39,7 +39,7 @@ final class ApprovedByTests: XCTestCase {
         let before = StubURLProtocol.requests.filter { $0.url.path.hasSuffix("/auth/status") }.count
         StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.challenge), for: "/auth/device/authorize")
         StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/token")
-        StubURLProtocol.enqueue(.json(try fixtureCase(statusCase)), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(statusJSON), for: "/auth/status")
         var approver: String?? = .none
         let model = DeviceSignInModel(connection: store, deviceName: .fallback,
                                       sleep: { _ in }, onSuccess: { approver = .some($0) })
@@ -50,15 +50,20 @@ final class ApprovedByTests: XCTestCase {
     }
 
     func testApprovalReadsTheApproverOnceWithTheNewBearer() async throws {
-        let result = try await approve(statusCase: "tv")
+        let result = try await approve(statusJSON: try fixtureCase("tv"))
         XCTAssertEqual(result.approver, .some("maya"))
-        XCTAssertEqual(result.statusRequests, 1, "one /auth/status after approval")
+        XCTAssertEqual(result.statusRequests, 1, "one /auth/status after approval: adoption's own validation read")
         XCTAssertEqual(StubURLProtocol.requests.last { $0.url.path.hasSuffix("/auth/status") }?.authorization,
                        "Bearer fb_tv_test-only")
     }
 
+    /// An authenticated TV bearer whose approver isn't recorded: the `tv`
+    /// case with `username` null. (The fixture's `tv_no_username` case is
+    /// unauthenticated, which adoption rightly rejects.)
     func testANullUsernameShowsNoToast() async throws {
-        let result = try await approve(statusCase: "tv_no_username")
+        let json = try fixtureCase("tv").replacingOccurrences(of: "\"username\":\"maya\"", with: "\"username\":null")
+        XCTAssertTrue(json.contains("\"username\":null"))
+        let result = try await approve(statusJSON: json)
         XCTAssertEqual(result.approver, .some(nil))
     }
 

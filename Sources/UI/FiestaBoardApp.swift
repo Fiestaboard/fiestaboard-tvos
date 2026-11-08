@@ -3,7 +3,8 @@ import SwiftUI
 @main
 struct FiestaBoardApp: App {
     @State private var model = AppModel(connection: ConnectionStore(),
-                                        topShelfStore: TopShelfSnapshotStore.shared())
+                                        topShelfStore: TopShelfSnapshotStore.shared(),
+                                        deviceName: SystemDeviceName.current)
 
     init() {
         // The app always uses a dark background. tvOS's default navigation

@@ -12,8 +12,13 @@ struct DiscoveredBoardCard: View {
     let address: String
     /// Whether this is the board currently being connected to.
     var isConnecting = false
+    #if DEBUG
     /// The 07b node this card's title is probed as (the first card on A1).
+    /// DEBUG only: a stored id would ship its literal in Release.
     var figmaTitle: String? = nil
+    #else
+    private var figmaTitle: String? { nil }
+    #endif
     let action: () -> Void
 
     var body: some View {

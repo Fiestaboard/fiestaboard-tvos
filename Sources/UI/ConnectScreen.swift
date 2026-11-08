@@ -74,10 +74,18 @@ struct ConnectScreen: View {
     // MARK: Pieces
 
     private var header: some View {
+        Group {
+        #if DEBUG
         FiestaScreenHeading(title: TVCopy.Connect.title,
                             subtitle: TVCopy.Connect.subtitle,
                             context: TVCopy.Connect.eyebrow,
                             figma: Self.headingNodes)
+        #else
+        FiestaScreenHeading(title: TVCopy.Connect.title,
+                            subtitle: TVCopy.Connect.subtitle,
+                            context: TVCopy.Connect.eyebrow)
+        #endif
+        }
             .frame(maxWidth: 1200, alignment: .leading)
     }
 
@@ -142,9 +150,6 @@ struct ConnectScreen: View {
     private static let headingNodes: FiestaScreenHeading.FigmaNodes? = .init(
         eyebrow: a1Slot + ";166:147308", title: a1Slot + ";166:147310", subtitle: a1Slot + ";166:147312")
     private static let cardTitleNode: String? = a1Slot + ";166:147327"
-    #else
-    private static let headingNodes: FiestaScreenHeading.FigmaNodes? = nil
-    private static let cardTitleNode: String? = nil
     #endif
 
     /// A1 `166:147340` "Scanning": the taco and one muted line, centred on
@@ -177,15 +182,19 @@ struct ConnectScreen: View {
     private var boardIDs: [String] { model?.boards.map(\.id) ?? [] }
 
     private func card(for board: DiscoveredBoard) -> some View {
-        DiscoveredBoardCard(board: board,
-                            address: BoardAddressLabel.text(for: board),
-                            isConnecting: model?.connectInFlight(for: board.id) ?? false,
-                            figmaTitle: board.id == boardIDs.first ? Self.cardTitleNode : nil) {
+        var card = DiscoveredBoardCard(board: board,
+                                       address: BoardAddressLabel.text(for: board),
+                                       isConnecting: model?.connectInFlight(for: board.id) ?? false) {
             Task { await model?.connect(to: board.host, name: board.name) }
         }
-        .focused($focusedControl, equals: .board(board.id))
-        .prefersDefaultFocus(board.id == boardIDs.first, in: boardScope)
+        #if DEBUG
+        card.figmaTitle = board.id == boardIDs.first ? Self.cardTitleNode : nil
+        #endif
+        return card
+            .focused($focusedControl, equals: .board(board.id))
+            .prefersDefaultFocus(board.id == boardIDs.first, in: boardScope)
     }
+
 
     /// Whether the screen is still entitled to promise a board is coming.
     ///

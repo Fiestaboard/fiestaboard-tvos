@@ -69,6 +69,21 @@ enum TVSnapshot {
         return image
     }
 
+    /// Golden tolerance (A3). Every pixel must match within the perceptual
+    /// threshold: `precision` 1.0 leaves no pixel budget, so a five-glyph
+    /// copy change fails (at 0.995, DD12's dropped ":4420" passed), while
+    /// `perceptualPrecision` 0.98 still absorbs glyph anti-aliasing.
+    /// `SnapshotToleranceTests` proves both halves.
+    static let precision: Float = 1.0
+    static let perceptualPrecision: Float = 0.98
+
+    /// The library's image comparison at the golden tolerance (or another
+    /// `precision`): nil when the two match.
+    static func difference(_ a: UIImage, _ b: UIImage, precision: Float = precision) -> String? {
+        Snapshotting<UIImage, UIImage>.image(precision: precision, perceptualPrecision: perceptualPrecision, scale: scale)
+            .diffing.diff(a, b)?.0
+    }
+
     /// Compare against the golden for this OS major. Perceptual precision
     /// absorbs glyph anti-aliasing noise; a moved or recoloured element
     /// still fails.
@@ -79,7 +94,7 @@ enum TVSnapshot {
         let directory = repoRoot
             .appendingPathComponent("Tests/__Snapshots__/tvOS\(osMajor)/\(testClass)").path
         let failure = verifySnapshot(of: image,
-                                     as: .image(precision: 0.995, perceptualPrecision: 0.98, scale: scale),
+                                     as: .image(precision: precision, perceptualPrecision: perceptualPrecision, scale: scale),
                                      named: name,
                                      snapshotDirectory: directory,
                                      file: file, testName: testName, line: line)

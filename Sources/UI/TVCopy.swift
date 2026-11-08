@@ -48,6 +48,17 @@ enum TVCopy {
         /// 166:147647 without its first sentence, "This TV will appear as …",
         /// which is the device name (A3, DD3).
         static let scope = "It can show your FiestaPanel displays and adjust how they look on this screen. It can’t change pages, messages or settings."
+        /// A2 `166:147647` (user-assigned name) and DD3 fallback
+        /// `249:110266`: the device-name sentence, then `scope`.
+        static func scopeLine(for name: DeviceNameChoice) -> String {
+            switch name {
+            case .assigned(let name): return "This TV will appear as “\(name)”, its Apple TV name. " + scope
+            case .fallback: return "This TV will appear as “\(DeviceName.fallback)”. " + scope
+            }
+        }
+        /// After device-code approval (DD6; no 07b frame for the notice).
+        static func approvedBy(_ username: String) -> String { "Approved by \(username)" }
+        /// Not on the A2 frame yet: proposed as DD15 for the 07b designer.
         static let reachability = "Your phone and this TV must both reach this hub. If the address won’t open, connect your phone to the same network."
         /// DD13: the activation address as A2 draws it
         /// (`fiestapi.local:4420/activate`). Drops only what a browser

@@ -38,6 +38,23 @@ public struct RootView: View {
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+        // "Approved by maya" after device-code sign-in (A3). DD6 records
+        // that 07b has no frame for it; not focusable, it never takes the
+        // remote from the screen underneath.
+        .overlay(alignment: .top) {
+            if let notice = model.notice {
+                Text(notice)
+                    .font(Fiesta.Text.body)
+                    .foregroundStyle(Fiesta.Colors.foreground)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
+                    .background(Fiesta.Colors.surfaceRaised, in: Capsule())
+                    .padding(.top, Fiesta.Metrics.safeInset)
+                    .transition(.opacity)
+                    .accessibilityHidden(true) // announced by showNotice
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: model.notice)
         .preferredColorScheme(.dark)
         .onOpenURL { model.openTopShelfURL($0) }
     }
