@@ -1,0 +1,175 @@
+import SwiftUI
+import XCTest
+@testable import FiestaBoardTV
+
+/// DD24: LED dots are FiestaUI's `traceDot`. A dot of 6 device pixels or more
+/// is a square with corners rounded to 0.15 of the dot; smaller dots stay
+/// square; "round" stays an oval. Every other shape, the hub's "square"
+/// default included, takes the rounded path. Glow and lens follow the dot.
+@MainActor
+final class LedDotShapeTests: XCTestCase {
+
+    private static let red: UInt32 = 0xFF0000
+
+    private func display(shape: String? = "square", dotRatio: Double = 0.82) throws -> MatrixDisplay {
+        var appearance: [String: Any] = ["dotRatio": dotRatio, "offColor": "#1a1a1a", "substrateColor": "#000000"]
+        if let shape { appearance["pixelShape"] = shape }
+        let json = try JSONSerialization.data(withJSONObject: ["appearance": appearance])
+        return try JSONDecoder().decode(MatrixDisplay.self, from: json)
+    }
+
+    private func raster(_ width: Int, _ height: Int, lit: Set<Int> = [], color: UInt32 = red) -> MatrixRaster {
+        MatrixRaster(width: width, height: height,
+                     pixels: (0..<(width * height)).map { lit.contains($0) ? color : 0 }, text: "")
+    }
+
+    /// RGBA bytes of a `size`-point canvas drawn at `scale`.
+    private func bytes(size: CGSize, scale: CGFloat,
+                       _ draw: @escaping (inout GraphicsContext, CGSize) -> Void) throws -> [UInt8] {
+        let renderer = ImageRenderer(content: Canvas { context, size in draw(&context, size) }
+            .frame(width: size.width, height: size.height))
+        renderer.scale = scale
+        let image = try XCTUnwrap(renderer.cgImage)
+        let width = image.width, height = image.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try XCTUnwrap(CGContext(data: &data, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return data
+    }
+
+    private func painted(_ raster: MatrixRaster, _ display: MatrixDisplay, size: CGSize, scale: CGFloat = 1,
+                         lighting: Bool = false) throws -> [UInt8] {
+        try bytes(size: size, scale: scale) { context, size in
+            MatrixCanvas.paint(raster, display: display, size: size, lighting: lighting, in: &context)
+        }
+    }
+
+    /// The panel's black ground with one `color` dot, as a reference painter would draw it.
+    private func reference(size: CGSize, scale: CGFloat = 1, dot: CGRect, color: UInt32 = red,
+                           _ shape: @escaping (CGRect) -> Path) throws -> [UInt8] {
+        try bytes(size: size, scale: scale) { context, size in
+            // The renderer clips to the panel's bounds first; so does this.
+            context.clip(to: Path(CGRect(origin: .zero, size: size)))
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black))
+            context.fill(shape(dot), with: .color(Color(red: Double((color >> 16) & 255) / 255,
+                                                         green: Double((color >> 8) & 255) / 255,
+                                                         blue: Double(color & 255) / 255)))
+        }
+    }
+
+    private func pixel(_ data: [UInt8], width: Int, x: Int, y: Int) -> (r: UInt8, g: UInt8, b: UInt8) {
+        let i = (y * width + x) * 4
+        return (data[i], data[i + 1], data[i + 2])
+    }
+
+    // MARK: The radius
+
+    /// One 82-point lit dot (a 100-point pitch, ratio 0.82, inset 9).
+    func testDotsOfSixPixelsOrMoreAreRoundedToFifteenHundredthsOfTheDot() throws {
+        let size = CGSize(width: 100, height: 100)
+        let dot = CGRect(x: 9, y: 9, width: 82, height: 82)
+        let app = try painted(raster(1, 1, lit: [0]), display(), size: size)
+        XCTAssertEqual(app, try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * 0.15) },
+                       "a lit dot is roundRect(0.15 × dot)")
+        for ratio in [0, 0.10, 0.20] {
+            XCTAssertNotEqual(app, try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * ratio) },
+                              "the corner is 0.15 of the dot, not \(ratio)")
+        }
+        XCTAssertEqual(pixel(app, width: 100, x: 9, y: 9).r, 0, "the true corner is the #000 gap")
+        XCTAssertEqual(pixel(app, width: 100, x: 50, y: 50).r, 255)
+    }
+
+    /// FiestaUI's threshold is in device pixels: `size >= 6`. The dots sit
+    /// on whole device pixels (inset 2 px), so the true corner pixel is the
+    /// dot's own: fully lit when square, partly gap when rounded (a 0.9 px
+    /// radius leaves about 83 % coverage).
+    func testTheSixPixelThresholdRoundsAtSixAndKeepsSmallerDotsSquare() throws {
+        let cases: [(side: CGFloat, scale: CGFloat, ratio: Double, pixels: Int, rounds: Bool)] = [
+            (10, 1, 0.6, 6, true),       // 6 px dot at scale 1
+            (9, 1, 5.0 / 9, 5, false),   // 5 px dot at scale 1
+            (5, 2, 0.6, 6, true),        // 3 pt = 6 px at scale 2
+            (4.5, 2, 5.0 / 9, 5, false)  // 2.5 pt = 5 px at scale 2
+        ]
+        for c in cases {
+            let app = try painted(raster(1, 1, lit: [0]), display(dotRatio: c.ratio),
+                                  size: CGSize(width: c.side, height: c.side), scale: c.scale)
+            let width = Int((c.side * c.scale).rounded())
+            let corner = pixel(app, width: width, x: 2, y: 2).r
+            let middle = pixel(app, width: width, x: 2 + c.pixels / 2, y: 2 + c.pixels / 2).r
+            XCTAssertEqual(middle, 255, "the \(c.pixels) px dot is lit")
+            if c.rounds {
+                XCTAssertLessThan(corner, 240, "a \(c.pixels) px dot at scale \(c.scale) rounds (corner \(corner))")
+                XCTAssertGreaterThan(corner, 150, "…by 0.15 of the dot, not more (corner \(corner))")
+            } else {
+                XCTAssertGreaterThanOrEqual(corner, 250, "a \(c.pixels) px dot at scale \(c.scale) stays square (corner \(corner))")
+            }
+        }
+    }
+
+    // MARK: Shapes
+
+    func testRoundDotsStayOvalAndUnknownShapesTakeTheRoundedSquarePath() throws {
+        let size = CGSize(width: 100, height: 100)
+        let dot = CGRect(x: 9, y: 9, width: 82, height: 82)
+        let rounded = try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * 0.15) }
+        XCTAssertEqual(try painted(raster(1, 1, lit: [0]), display(shape: "round"), size: size),
+                       try reference(size: size, dot: dot) { Path(ellipseIn: $0) }, "round stays an oval")
+        XCTAssertEqual(try painted(raster(1, 1, lit: [0]), display(shape: "hexagon"), size: size), rounded,
+                       "a shape the app doesn't know renders as the hub's square default")
+        XCTAssertEqual(try painted(raster(1, 1, lit: [0]), display(shape: nil), size: size), rounded,
+                       "no shape is the hub's square default")
+    }
+
+    func testUnlitDotsAreRoundedTooAndTheGapStaysBlack() throws {
+        let size = CGSize(width: 100, height: 100)
+        let app = try painted(raster(1, 1), display(), size: size)
+        let dot = CGRect(x: 9, y: 9, width: 82, height: 82)
+        XCTAssertEqual(app, try reference(size: size, dot: dot, color: 0x1A1A1A) {
+            Path(roundedRect: $0, cornerRadius: 82 * 0.15)
+        })
+        let corner = pixel(app, width: 100, x: 9, y: 9)
+        XCTAssertEqual([corner.r, corner.g, corner.b], [0, 0, 0], "unlit corner is the #000 gap")
+        XCTAssertEqual(pixel(app, width: 100, x: 4, y: 50).r, 0, "the gap is #000")
+    }
+
+    // MARK: Glow and lens
+
+    /// The outer glow is the lit dot grown by 0.14 of the pitch, with
+    /// concentric corners. A square glow would tint its corner pixel.
+    func testTheGlowFollowsTheRoundedDot() throws {
+        // 3 × 3 at a 100-point pitch; the middle dot is lit, at (109, 109).
+        let app = try painted(raster(3, 3, lit: [4]), display(), size: CGSize(width: 300, height: 300), lighting: true)
+        let glowCorner = pixel(app, width: 300, x: 95, y: 95)
+        XCTAssertEqual([glowCorner.r, glowCorner.g, glowCorner.b], [0, 0, 0],
+                       "the glow's corner is the gap, not tinted (\(glowCorner))")
+        XCTAssertGreaterThan(pixel(app, width: 300, x: 100, y: 150).r, 0, "the glow's straight edge is tinted")
+        XCTAssertGreaterThan(pixel(app, width: 300, x: 150, y: 150).r, 200, "the dot itself is lit")
+    }
+
+    /// The lens gradient is clipped to the dot: its corner shows no lens.
+    func testTheLensIsClippedToTheRoundedDot() throws {
+        let size = CGSize(width: 100, height: 100)
+        let lit = try painted(raster(1, 1), display(), size: size, lighting: true)
+        let corner = pixel(lit, width: 100, x: 9, y: 9)
+        XCTAssertEqual([corner.r, corner.g, corner.b], [0, 0, 0], "an unlit dot's lens stops at its rounded corner")
+        XCTAssertGreaterThan(pixel(lit, width: 100, x: 50, y: 12).r, 0x1A, "the lens highlight is on the dot's top edge")
+    }
+
+    // MARK: The tiled fill-TV surround
+
+    func testTheSurroundTileDrawsRoundedDots() throws {
+        let tile = try XCTUnwrap(MatrixCanvas.offFieldTile(display: display(), pitch: 100, origin: .zero, scale: 1))
+        let image = tile.image
+        var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let context = try XCTUnwrap(CGContext(data: &data, width: image.width, height: image.height, bitsPerComponent: 8,
+            bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let corner = pixel(data, width: image.width, x: 9, y: 9)
+        XCTAssertEqual([corner.r, corner.g, corner.b], [0, 0, 0], "a surround dot's corner is the gap")
+        let middle = pixel(data, width: image.width, x: 50, y: 50)
+        XCTAssertEqual([middle.r, middle.g, middle.b], [0x1A, 0x1A, 0x1A], "the surround dot is unlit #1A1A1A")
+    }
+}

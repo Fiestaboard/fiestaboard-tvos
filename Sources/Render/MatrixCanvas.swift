@@ -123,7 +123,7 @@ struct MatrixCanvas: View {
     /// Repeat a block whose edges land on physical pixels. A one-LED tile
     /// minified to fractional pitch averages away the visible dot pattern.
     /// Baking the drift's fractional phase into this block avoids that blur.
-    private static func offFieldTile(display: MatrixDisplay, pitch: CGFloat, origin: CGPoint,
+    static func offFieldTile(display: MatrixDisplay, pitch: CGFloat, origin: CGPoint,
                                      scale: CGFloat) -> (image: CGImage, origin: CGPoint, scale: CGFloat)? {
         let scale = max(1, scale)
         let physicalPitch = pitch * scale
