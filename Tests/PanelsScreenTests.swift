@@ -183,7 +183,7 @@ final class PanelsScreenTests: XCTestCase {
         let copy = PanelsScreen.emptyStateDetail
         XCTAssertFalse(copy.contains("FiestaBoard app"),
                        "this IS the FiestaBoard app: \(copy)")
-        XCTAssertTrue(copy.contains("board's web page in a browser on a phone or computer"),
+        XCTAssertTrue(copy.contains("hub's web page in a browser on a phone or computer"),
                       "same wording as every other place that sends people there: \(copy)")
         XCTAssertTrue(copy.contains("Settings → Hardware → FiestaPanel"),
                       "the web page is big; the path is what makes this actionable: \(copy)")
