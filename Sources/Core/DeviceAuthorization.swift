@@ -70,7 +70,7 @@ public struct DevicePollError: Error, Equatable, Sendable {
         case "slow_down", "rate_limited": return "The hub asked this TV to wait. Trying again shortly."
         case "access_denied": return "This sign-in was denied. Choose New code to try again."
         case "expired_token": return "This code expired. Choose New code."
-        case "invalid_grant": return "This code was cancelled or already used. Choose New code."
+        case "invalid_grant": return "This code was canceled or already used. Choose New code."
         case "feature_disabled": return "TV sign-in is disabled. Enable TV sign-in in your hub's Account settings."
         case "session_limit": return "The hub has too many signed-in devices. Revoke one in Account settings, then try again."
         default: return "The hub couldn't complete this sign-in. Try a new code."

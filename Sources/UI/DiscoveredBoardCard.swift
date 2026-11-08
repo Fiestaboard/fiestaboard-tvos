@@ -81,9 +81,12 @@ struct DiscoveredBoardCard: View {
 /// that motivated showing the port at all.
 enum BoardAddressLabel {
 
+    /// DD12: the resolved address, with the default port hidden. A port
+    /// that isn't the default stays, so two instances on one Pi still read
+    /// differently. "hostname · IP" waits for H13 PR 3's TXT `host=`.
     static func text(for board: DiscoveredBoard) -> String {
         let host = board.host.host() ?? board.host.absoluteString
-        guard let port = board.host.port else { return host }
+        guard let port = board.host.port, port != DiscoveryFilter.defaultPort else { return host }
         return "\(host):\(port)"
     }
 }
