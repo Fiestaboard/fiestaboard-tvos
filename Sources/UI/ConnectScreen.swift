@@ -77,9 +77,7 @@ struct ConnectScreen: View {
         FiestaScreenHeading(title: TVCopy.Connect.title,
                             subtitle: TVCopy.Connect.subtitle,
                             context: TVCopy.Connect.eyebrow,
-                            figma: .init(eyebrow: Self.a1Slot + ";166:147308",
-                                         title: Self.a1Slot + ";166:147310",
-                                         subtitle: Self.a1Slot + ";166:147312"))
+                            figma: Self.headingNodes)
             .frame(maxWidth: 1200, alignment: .leading)
     }
 
@@ -137,6 +135,18 @@ struct ConnectScreen: View {
     /// The 07b A1 frame's Screen slot (`I<instance>;149:182603`).
     private static let a1Slot = "I166:147296;149:182603"
 
+    // Probe ids that are *stored* (in the heading and the card) rather than
+    // passed to the inlined `figmaNode` no-op must be DEBUG-only, or their
+    // literals ship: the Release archive's probe check fails on them.
+    #if DEBUG
+    private static let headingNodes: FiestaScreenHeading.FigmaNodes? = .init(
+        eyebrow: a1Slot + ";166:147308", title: a1Slot + ";166:147310", subtitle: a1Slot + ";166:147312")
+    private static let cardTitleNode: String? = a1Slot + ";166:147327"
+    #else
+    private static let headingNodes: FiestaScreenHeading.FigmaNodes? = nil
+    private static let cardTitleNode: String? = nil
+    #endif
+
     /// A1 `166:147340` "Scanning": the taco and one muted line, centred on
     /// the card row. Not focusable; it is status, not a control.
     private var stillLooking: some View {
@@ -170,7 +180,7 @@ struct ConnectScreen: View {
         DiscoveredBoardCard(board: board,
                             address: BoardAddressLabel.text(for: board),
                             isConnecting: model?.connectInFlight(for: board.id) ?? false,
-                            figmaTitle: board.id == boardIDs.first ? Self.a1Slot + ";166:147327" : nil) {
+                            figmaTitle: board.id == boardIDs.first ? Self.cardTitleNode : nil) {
             Task { await model?.connect(to: board.host, name: board.name) }
         }
         .focused($focusedControl, equals: .board(board.id))
