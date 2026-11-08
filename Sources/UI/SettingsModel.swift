@@ -63,7 +63,8 @@ final class SettingsModel {
 
     var boardName: String { app.connection.saved?.displayName ?? "Not connected" }
 
-    var boardAddress: String { app.connection.saved?.host.absoluteString ?? "" }
+    /// A8d / DD13: "fiestapi.local:4420", not "http://fiestapi.local:4420".
+    var boardAddress: String { app.connection.saved.map { TVCopy.displayAddress($0.host) } ?? "" }
 
     /// Protocol v1 TV credentials permit presentation edits only.
     var canEditAllDisplaySettings: Bool { !app.connection.usesDeviceCredential }

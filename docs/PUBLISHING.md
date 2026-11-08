@@ -93,7 +93,8 @@ retain their own records. Siri dictation uses Apple's system keyboard settings.
 The old blanket “no third parties” claim and automatic all-“No” App Privacy
 answers no longer describe the feature. Before publishing, align the App Store
 privacy answers and published policy with the actual provider and server data
-handling. Keep this document, SettingsScreen.privacyBody, the network usage
+handling. Keep this document, `SettingsCopy.privacyBody` (A8; its FiestaBot
+sentence shows only for legacy password sign-ins until A9 retires FiestaBot), the network usage
 text in project.yml, docs/PRIVACY.md and the privacy manifest consistent. The
 server is the **hub** in all of them; "board" means only what a panel shows
 (`scripts/vocabulary/check-vocabulary.mjs` enforces it for the app and
