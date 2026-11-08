@@ -49,6 +49,21 @@ enum TVCopy {
         /// which is the device name (A3, DD3).
         static let scope = "It can show your FiestaPanel displays and adjust how they look on this screen. It can’t change pages, messages or settings."
         static let reachability = "Your phone and this TV must both reach this hub. If the address won’t open, connect your phone to the same network."
+        /// DD13: the activation address as A2 draws it
+        /// (`fiestapi.local:4420/activate`). Drops only what a browser
+        /// fills in itself — `http://`, `:80`, `:443` — and keeps any
+        /// other port, which the person has to type. (DD12, which hides
+        /// 4420 on the hub card, is a different rule for a label.)
+        static func activationAddress(_ url: URL) -> String {
+            guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                return url.absoluteString
+            }
+            if parts.port == 80 || parts.port == 443 { parts.port = nil }
+            var text = parts.string ?? url.absoluteString
+            if text.hasPrefix("http://") { text.removeFirst("http://".count) }
+            return text
+        }
+
         static let newCode = "New code"
         static let usePassword = "Use username and password"
         static let back = "Back"

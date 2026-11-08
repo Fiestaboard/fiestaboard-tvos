@@ -28,9 +28,9 @@ struct DeviceSignInScreen: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 18) {
-                    Text(model?.manualURL?.absoluteString ?? app.connection.saved?.host.absoluteString ?? "")
+                    Text(activationAddress)
                         .font(.title3)
-                        .accessibilityLabel("Browser address: \(model?.manualURL?.absoluteString ?? app.connection.saved?.host.absoluteString ?? "")")
+                        .accessibilityLabel("Browser address: \(activationAddress)")
                     if let challenge = model?.challenge {
                         Text(challenge.userCode).font(.system(size: 60, weight: .bold, design: .monospaced))
                             .accessibilityLabel("Sign-in code: \(challenge.userCode.map(String.init).joined(separator: " "))")
@@ -73,6 +73,12 @@ struct DeviceSignInScreen: View {
             if phase == .active { model?.resume() } else { model?.pause() }
         }
     }
+    /// DD13: what to type in a browser, as A2 draws it.
+    private var activationAddress: String {
+        guard let url = model?.manualURL ?? app.connection.saved?.host else { return "" }
+        return TVCopy.DeviceSignIn.activationAddress(url)
+    }
+
     private func backToPassword() { model?.cancel(); app.route = .signIn }
 }
 
