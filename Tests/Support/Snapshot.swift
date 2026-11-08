@@ -41,11 +41,15 @@ enum TVSnapshot {
     nonisolated static var osMajor: Int { ProcessInfo.processInfo.operatingSystemVersion.majorVersion }
 
     /// Lay `view` out in a real 1920×1080 window and draw it at scale 2.
-    static func image<V: View>(_ view: V, settle: TimeInterval = 0.1) -> UIImage {
+    ///
+    /// The window's safe area is the device's 80/60 title-safe (A4a), and
+    /// screens are laid out inside it, as on the TV. `fullBleed` ignores it,
+    /// for what the device also draws edge to edge (the board, fixtures).
+    static func image<V: View>(_ view: V, settle: TimeInterval = 0.1, fullBleed: Bool = false) -> UIImage {
         let host = UIHostingController(rootView: view
             .environment(\.colorScheme, .dark)
             .preferredColorScheme(.dark)
-            .ignoresSafeArea())
+            .ignoresSafeArea(fullBleed ? .all : []))
         host.view.frame = CGRect(origin: .zero, size: size)
         host.view.backgroundColor = .black
         let window = UIWindow(frame: host.view.frame)

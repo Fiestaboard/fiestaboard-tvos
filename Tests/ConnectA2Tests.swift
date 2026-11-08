@@ -50,7 +50,6 @@ final class ConnectA2Tests: XCTestCase {
         func fieldPixel() throws -> (r: UInt8, g: UInt8, b: UInt8, a: UInt8) {
             FigmaGeometryRegistry.shared.reset()
             let image = TVSnapshot.image(ConnectScreen().environment(makeApp())
-                .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
                 .background(Fiesta.Colors.background))
             let field = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()["I166:147296;149:182603;166:147347"]?.frame,
                                       "the address field is probed as the A1 'Text field (system)' node")
