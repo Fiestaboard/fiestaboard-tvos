@@ -1,169 +1,355 @@
 import SwiftUI
 
-/// Every edit is local and explicit; the OLED answer is informational only.
+/// A8b (`248:110205`): OLED care as one page of summary rows in two columns,
+/// each opening its own page. Every edit is local to this Apple TV.
+///
+/// DD23 removed the OLED yes/no question, the live preview (the TV is the
+/// preview), the burn-in disclaimer (now one sentence on About › Screen
+/// protection) and Done. DD10 keeps two one-line caveats under the rows.
 struct OLEDCareScreen: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    static let subtitle = "Keeps the board bright where it matters and gives the panel rest so it doesn’t burn in."
+    static let keepAwakeCaveat = "Keep-awake: this Apple TV stays on while a board is showing; only Rest (scheduled or disconnected) lets it sleep."
+    static let disconnectedCaveat = "When disconnected = the hub can’t be reached: keep the last frame, dim, or rest after the delay. A remote press wakes it for 5 min."
 
     var body: some View {
-        HStack(alignment: .top, spacing: 40) {
-            VStack(alignment: .leading, spacing: 24) {
-                Text("Preview — app output only").font(.headline)
-                TimelineView(.periodic(from: .now, by: 1)) { time in
-                    let offset = app.oledCare.movement && !reduceMotion
-                        ? BoardDrift.offset(at: time.date, amplitude: Double(app.oledCare.movementRange)) : .zero
-                    ZStack {
-                        Color.black
-                        Text("FIESTA\nBOARD").font(.system(size: 42, weight: .bold, design: .monospaced))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.white)
-                            .opacity(Double(app.oledCare.brightness) / 100)
-                            .offset(x: offset.x, y: offset.y)
+        let summary = OLEDCareSummary(app.oledCare, neverDim: false)
+        VStack(alignment: .leading, spacing: 0) {
+            OLEDCareHeader(title: "OLED care")
+            Text(Self.subtitle)
+                .font(Fiesta.Text.body)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
+                .padding(.top, 16)
+            HStack(alignment: .top, spacing: 40) {
+                List {
+                    row("Board brightness", summary.brightness, id: "oled.brightness") {
+                        OLEDChoicePage(title: "Board brightness", options: [25, 50, 75, 100].map { ($0, "\($0) %") }, key: \.brightness,
+                                       footer: "Scales the app’s output, not the TV’s own brightness.")
                     }
+                    row("Movement", summary.movement, id: "oled.movement") { OLEDMovementPage() }
+                    row("Night dimming", summary.night, id: "oled.night") { NightDimmingScreen() }
+                    row("Scheduled rest", summary.rest, id: "oled.rest") { OLEDRestPage() }
                 }
-                .frame(height: 240)
-                .accessibilityLabel("Brightness and movement preview")
-                Text("These options may reduce OLED wear. They cannot guarantee burn-in prevention or override your TV's protections.")
-                Text("Applies only to this Apple TV. You can change every option regardless of your answer.")
-            }
-            .font(.body)
-            .frame(width: 450)
-            .padding(.top, 30)
-            .accessibilityElement(children: .contain)
-            List {
-                question
-                brightnessAndMovement
-                night
-                scheduledRest
-                breaks
-                rotation
-                disconnect
-                Section {
-                    Toggle("Allow system screensaver", isOn: binding(\.allowScreensaver))
-                        .accessibilityIdentifier("oled.screensaver")
-                } footer: {
-                    Text("Device settings control screensaver timing. Rest releases the keep-awake request. System sleep may return to Home; automatic wake is not promised.").foregroundStyle(Fiesta.Colors.mutedForeground)
+                List {
+                    row("Periodic breaks", summary.breaks, id: "oled.breaks") { OLEDBreaksPage() }
+                    row("Layout rotation", summary.rotation, id: "oled.rotation") { OLEDRotationPage() }
+                    row("When disconnected", summary.disconnected, id: "oled.disconnected") { OLEDDisconnectedPage() }
+                    row("Allow Apple TV screen saver", summary.screensaver, id: "oled.screensaver") {
+                        OLEDChoicePage(title: "Allow Apple TV screen saver", options: [(false, "Off"), (true, "On")], key: \.allowScreensaver,
+                                       footer: "Apple TV’s own settings control the screen saver’s timing.")
+                    }
                 }
             }
             .listStyle(.grouped)
-            .accessibilityIdentifier("oled.controls")
+            .scrollClipDisabled()
+            .frame(height: 440)
+            .padding(.top, 40)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(Self.keepAwakeCaveat)
+                Text(Self.disconnectedCaveat)
+            }
+            .font(Fiesta.Text.caption)
+            .foregroundStyle(Fiesta.Colors.mutedForeground)
+            Spacer(minLength: 0)
         }
-        .navigationTitle("OLED care")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Fiesta.Colors.background)
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            // Opening OLED care is the answer to the optional invitation.
+            guard !app.oledCare.invitationDismissed else { return }
+            var c = app.oledCare; c.invitationDismissed = true; app.saveOLEDCare(c)
+        }
     }
 
-    private var question: some View {
-        Section {
-            ForEach([OLEDAnswer.yes, .no, .unsure, .skip], id: \.self) { answer in
-                Button {
-                    var c = app.oledCare; c.answer = answer; c.invitationDismissed = true
-                    app.saveOLEDCare(c)
-                } label: {
-                    HStack { Text(answerLabel(answer)); Spacer(); if app.oledCare.answer == answer { Image(systemName: "checkmark") } }
-                }
-                .accessibilityLabel(answerLabel(answer))
-                .accessibilityValue(app.oledCare.answer == answer ? "Selected" : "")
+    private func row<Destination: View>(_ title: String, _ value: String, id: String,
+                                        @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack {
+                Text(title).lineLimit(1)
+                Spacer()
+                Text(value).foregroundStyle(Fiesta.Colors.mutedForeground).lineLimit(1)
             }
-        } header: { Text("Will you use this with an OLED TV?").accessibilityIdentifier("oled.question").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Optional. Choosing Yes enables nothing. Configure only the options you want below.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private var brightnessAndMovement: some View {
-        Section {
-            numberChoice("How bright should the board be?", key: \.brightness, values: [25, 50, 75, 100], suffix: "%")
-                .accessibilityIdentifier("oled.brightness")
-            Toggle("Gently move the image?", isOn: binding(\.movement))
-            Picker("Movement range", selection: binding(\.movementRange)) {
-                Text("Gentle").tag(8)
-                Text("Wider").tag(24)
-            }
-        } header: { Text("Brightness & movement").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Brightness scales app output, not TV hardware brightness. Wider movement leaves more space around the board. Reduce Motion pauses continuous movement.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private var night: some View {
-        Section {
-            Picker("When should night dimming apply?", selection: binding(\.nightMode)) {
-                Text("Follow panel schedule").tag(OLEDNightMode.followPanel)
-                Text("Never dim").tag(OLEDNightMode.never)
-                Text("Custom schedule").tag(OLEDNightMode.custom)
-            }
-            if app.oledCare.nightMode == .custom {
-                timeChoice("Night starts", key: \.nightStart)
-                timeChoice("Night ends", key: \.nightEnd)
-            }
-            numberChoice("Night output level", key: \.nightLevel, values: [10, 25, 35, 50], suffix: "%")
-        } header: { Text("Night dimming").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Uses this TV's local time. Equal start and end disables a window. Night level multiplies board brightness. The panel's shared schedule is never edited here.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private var scheduledRest: some View {
-        Section {
-            Toggle("Rest on a daily schedule?", isOn: binding(\.restEnabled))
-            timeChoice("Rest starts", key: \.restStart)
-            timeChoice("Rest ends", key: \.restEnd)
-        } header: { Text("Scheduled rest").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Shows full black, not standby. Normal system sleep may follow. A remote press resumes viewing for 5 minutes. Equal times disable rest.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private var breaks: some View {
-        Section {
-            Toggle("Take periodic viewing breaks?", isOn: binding(\.breaksEnabled))
-            numberChoice("Break every", key: \.breakInterval, values: [30, 60, 120], suffix: " minutes")
-            numberChoice("Break duration", key: \.breakDuration, values: [1, 5, 10], suffix: " minutes")
-        } header: { Text("Periodic breaks").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Counts active foreground viewing. A remote press ends a break and starts a new interval. Leaving the app pauses the interval and ends an active break.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private var rotation: some View {
-        Section {
-            Toggle("Rotate the board's position?", isOn: binding(\.rotationEnabled))
-            ForEach(OLEDPlacement.allCases, id: \.self) { position in
-                Toggle(placementLabel(position), isOn: Binding(get: { app.oledCare.placements.contains(position) }, set: { enabled in
-                    var c = app.oledCare
-                    c.placements.removeAll { $0 == position }
-                    if enabled { c.placements.append(position) }
-                    app.saveOLEDCare(c)
-                }))
-            }
-            numberChoice("Change position every", key: \.rotationInterval, values: [1, 5, 15], suffix: " minutes")
-            if app.oledCare.placements.count < 2 { Text("Select at least two positions to rotate.") }
-        } header: { Text("Board layout / position rotation").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Compacts the same live board to 80% of available width and height, then changes its placement. Shared panel contents stay the same. Positions change without animated travel.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private var disconnect: some View {
-        Section {
-            Picker("When disconnected", selection: binding(\.disconnected)) {
-                Text("Keep last frame").tag(OLEDDisconnect.keep)
-                Text("Dim after delay").tag(OLEDDisconnect.dim)
-                Text("Rest after delay").tag(OLEDDisconnect.rest)
-            }
-            numberChoice("Unavailable for", key: \.disconnectDelay, values: [1, 5, 15], suffix: " minutes")
-        } header: { Text("Unavailable boards").foregroundStyle(Fiesta.Colors.mutedForeground) }
-        footer: { Text("Also applies while connecting or showing missing/deleted boards. Dimming uses the night level. Recovery resumes automatically; a remote press temporarily resumes for 5 minutes.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-    }
-    private func binding<T>(_ key: WritableKeyPath<OLEDCareConfiguration, T>) -> Binding<T> {
-        Binding(get: { app.oledCare[keyPath: key] }, set: { value in
-            var c = app.oledCare; c[keyPath: key] = value; app.saveOLEDCare(c)
-        })
-    }
-    private func numberChoice(_ title: String, key: WritableKeyPath<OLEDCareConfiguration, Int>, values: [Int], suffix: String) -> some View {
-        Picker(title, selection: binding(key)) {
-            ForEach(values, id: \.self) { Text("\($0)\(suffix)").tag($0) }
         }
+        .accessibilityIdentifier(id)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
     }
-    private func timeChoice(_ title: String, key: WritableKeyPath<OLEDCareConfiguration, Int>) -> some View {
+}
+
+/// The OLED care pages' heading: "<hub> · Only this Apple TV" over the title.
+struct OLEDCareHeader: View {
+    @Environment(AppModel.self) private var app
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(app.connection.saved?.displayName ?? "Hub") · Only this Apple TV")
+                .font(Fiesta.Text.caption1)
+                .foregroundStyle(Fiesta.Colors.brand)
+            Text(title)
+                .font(Fiesta.Text.title)
+                .foregroundStyle(Fiesta.Colors.foreground)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .padding(.top, 30)
+    }
+}
+
+/// A8b·1 (`279:139039`): night dimming, which lives only here (DD17).
+struct NightDimmingScreen: View {
+    @Environment(AppModel.self) private var app
+
+    static let footer = "Night dim level multiplies the board brightness. It is also used when disconnected › Dim."
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            OLEDCareHeader(title: "Night dimming")
+            List {
+                Section {
+                    mode(.followPanel, "Follow panel schedule", detail: "Uses the shared schedule set on your phone")
+                    mode(.never, "Never dim", detail: nil)
+                    mode(.custom, "Custom", detail: "Only this TV")
+                }
+                Section {
+                    if app.oledCare.nightMode == .custom {
+                        OLEDTimeRow(title: "Night starts", key: \.nightStart)
+                        OLEDTimeRow(title: "Night ends", key: \.nightEnd)
+                    }
+                    NavigationLink {
+                        OLEDChoicePage(title: "Night dim level", options: [10, 25, 35, 50].map { ($0, "\($0) %") }, key: \.nightLevel, footer: Self.footer)
+                    } label: {
+                        LabeledContent("Night dim level", value: "\(app.oledCare.nightLevel) %")
+                    }
+                } header: {
+                    if app.oledCare.nightMode == .custom {
+                        Text("Custom schedule · Only this Apple TV").foregroundStyle(Fiesta.Colors.mutedForeground)
+                    }
+                } footer: {
+                    Text(Self.footer).foregroundStyle(Fiesta.Colors.mutedForeground)
+                }
+            }
+            .listStyle(.grouped)
+            .scrollClipDisabled()
+            .frame(width: 1200)
+            .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Fiesta.Colors.background)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private func mode(_ value: OLEDNightMode, _ title: String, detail: String?) -> some View {
+        Button {
+            var c = app.oledCare; c.nightMode = value; app.saveOLEDCare(c)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                    if let detail { Text(detail).font(Fiesta.Text.caption).foregroundStyle(Fiesta.Colors.mutedForeground) }
+                }
+                Spacer()
+                if app.oledCare.nightMode == value { Image(systemName: "checkmark") }
+            }
+        }
+        .accessibilityLabel(title)
+        .accessibilityValue(app.oledCare.nightMode == value ? "Selected" : "")
+    }
+}
+
+/// One choice from a list; picking it saves and goes back.
+struct OLEDChoicePage<Value: Hashable>: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let options: [(Value, String)]
+    let key: WritableKeyPath<OLEDCareConfiguration, Value>
+    var footer: String? = nil
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(options.indices, id: \.self) { index in
+                    let option = options[index]
+                    Button {
+                        var c = app.oledCare; c[keyPath: key] = option.0; app.saveOLEDCare(c)
+                        dismiss()
+                    } label: {
+                        HStack { Text(option.1); Spacer(); if app.oledCare[keyPath: key] == option.0 { Image(systemName: "checkmark") } }
+                    }
+                    .accessibilityLabel(option.1)
+                    .accessibilityValue(app.oledCare[keyPath: key] == option.0 ? "Selected" : "")
+                }
+            } footer: {
+                if let footer { Text(footer).foregroundStyle(Fiesta.Colors.mutedForeground) }
+            }
+        }
+        .listStyle(.grouped)
+        .navigationTitle(title)
+    }
+}
+
+/// A 12-hour time on this TV's clock (CANON), chosen by hour and minute.
+struct OLEDTimeRow: View {
+    @Environment(AppModel.self) private var app
+    let title: String
+    let key: WritableKeyPath<OLEDCareConfiguration, Int>
+
+    var body: some View {
         NavigationLink {
             List {
                 Picker("Hour", selection: Binding(get: { app.oledCare[keyPath: key] / 60 }, set: { hour in
                     var c = app.oledCare; c[keyPath: key] = hour * 60 + c[keyPath: key] % 60; app.saveOLEDCare(c)
-                })) { ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) } }
+                })) { ForEach(0..<24, id: \.self) { Text(Clock12.label(minutes: $0 * 60)).tag($0) } }
                 Picker("Minute", selection: Binding(get: { app.oledCare[keyPath: key] % 60 }, set: { minute in
                     var c = app.oledCare; c[keyPath: key] = c[keyPath: key] / 60 * 60 + minute; app.saveOLEDCare(c)
-                })) { ForEach(0..<60, id: \.self) { Text(String(format: "%02d", $0)).tag($0) } }
-            }.navigationTitle(title)
+                })) { ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: ":%02d", $0)).tag($0) } }
+            }
+            .navigationTitle(title)
         } label: {
-            LabeledContent(title, value: String(format: "%02d:%02d", app.oledCare[keyPath: key] / 60, app.oledCare[keyPath: key] % 60))
+            LabeledContent(title, value: Clock12.label(minutes: app.oledCare[keyPath: key]))
         }
     }
-    private func answerLabel(_ answer: OLEDAnswer) -> String {
-        switch answer { case .yes: return "Yes"; case .no: return "No"; case .unsure: return "Not sure"; default: return "Skip" }
+}
+
+private struct OLEDMovementPage: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                choice("Off", selected: !app.oledCare.movement) { $0.movement = false }
+                choice("Gentle", selected: app.oledCare.movement && app.oledCare.movementRange <= 8) { $0.movement = true; $0.movementRange = 8 }
+                choice("Wider", selected: app.oledCare.movement && app.oledCare.movementRange > 8) { $0.movement = true; $0.movementRange = 24 }
+            } footer: {
+                Text("Moves the picture a few points over twenty minutes. Wider leaves more space around it. Reduce Motion pauses movement.")
+                    .foregroundStyle(Fiesta.Colors.mutedForeground)
+            }
+        }
+        .listStyle(.grouped)
+        .navigationTitle("Movement")
     }
-    private func placementLabel(_ position: OLEDPlacement) -> String {
-        switch position { case .center: return "Center"; case .upperLeft: return "Upper left"; case .upperRight: return "Upper right"; case .lowerLeft: return "Lower left"; case .lowerRight: return "Lower right" }
+
+    private func choice(_ title: String, selected: Bool, apply: @escaping (inout OLEDCareConfiguration) -> Void) -> some View {
+        Button {
+            var c = app.oledCare; apply(&c); app.saveOLEDCare(c); dismiss()
+        } label: { HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark") } } }
+        .accessibilityLabel(title)
+        .accessibilityValue(selected ? "Selected" : "")
+    }
+}
+
+private struct OLEDRestPage: View {
+    @Environment(AppModel.self) private var app
+    var body: some View {
+        List {
+            Section {
+                Toggle("Rest on a daily schedule", isOn: OLEDBinding(app: app, key: \.restEnabled).binding)
+                OLEDTimeRow(title: "Rest starts", key: \.restStart)
+                OLEDTimeRow(title: "Rest ends", key: \.restEnd)
+            } footer: {
+                Text("Shows full black, not standby, and lets this Apple TV sleep. A remote press resumes viewing for 5 minutes. Equal times turn rest off.")
+                    .foregroundStyle(Fiesta.Colors.mutedForeground)
+            }
+        }
+        .listStyle(.grouped)
+        .navigationTitle("Scheduled rest")
+    }
+}
+
+private struct OLEDBreaksPage: View {
+    @Environment(AppModel.self) private var app
+    var body: some View {
+        List {
+            Section {
+                Toggle("Take periodic breaks", isOn: OLEDBinding(app: app, key: \.breaksEnabled).binding)
+                Picker("Break every", selection: OLEDBinding(app: app, key: \.breakInterval).binding) {
+                    ForEach([30, 60, 120], id: \.self) { Text("\($0) min").tag($0) }
+                }
+                Picker("Break for", selection: OLEDBinding(app: app, key: \.breakDuration).binding) {
+                    ForEach([1, 5, 10], id: \.self) { Text("\($0) min").tag($0) }
+                }
+            } footer: {
+                Text("Counts time spent viewing. A remote press ends a break and starts a new interval.")
+                    .foregroundStyle(Fiesta.Colors.mutedForeground)
+            }
+        }
+        .listStyle(.grouped)
+        .navigationTitle("Periodic breaks")
+    }
+}
+
+private struct OLEDRotationPage: View {
+    @Environment(AppModel.self) private var app
+    var body: some View {
+        List {
+            Section {
+                Toggle("Rotate the board's position", isOn: OLEDBinding(app: app, key: \.rotationEnabled).binding)
+                ForEach(OLEDPlacement.allCases, id: \.self) { position in
+                    Toggle(Self.label(position), isOn: Binding(get: { app.oledCare.placements.contains(position) }, set: { enabled in
+                        var c = app.oledCare
+                        c.placements.removeAll { $0 == position }
+                        if enabled { c.placements.append(position) }
+                        app.saveOLEDCare(c)
+                    }))
+                }
+                Picker("Change position every", selection: OLEDBinding(app: app, key: \.rotationInterval).binding) {
+                    ForEach([1, 5, 15], id: \.self) { Text("\($0) min").tag($0) }
+                }
+                if app.oledCare.placements.count < 2 { Text("Select at least two positions to rotate.") }
+            } footer: {
+                Text("Shrinks the same live board to 80% and moves it between the positions you choose.")
+                    .foregroundStyle(Fiesta.Colors.mutedForeground)
+            }
+        }
+        .listStyle(.grouped)
+        .navigationTitle("Layout rotation")
+    }
+
+    private static func label(_ position: OLEDPlacement) -> String {
+        switch position {
+        case .center: return "Center"
+        case .upperLeft: return "Upper left"
+        case .upperRight: return "Upper right"
+        case .lowerLeft: return "Lower left"
+        case .lowerRight: return "Lower right"
+        }
+    }
+}
+
+private struct OLEDDisconnectedPage: View {
+    @Environment(AppModel.self) private var app
+    var body: some View {
+        List {
+            Section {
+                Picker("When disconnected", selection: OLEDBinding(app: app, key: \.disconnected).binding) {
+                    Text("Keep last frame").tag(OLEDDisconnect.keep)
+                    Text("Dim after delay").tag(OLEDDisconnect.dim)
+                    Text("Rest after delay").tag(OLEDDisconnect.rest)
+                }
+                Picker("After", selection: OLEDBinding(app: app, key: \.disconnectDelay).binding) {
+                    ForEach([1, 5, 15], id: \.self) { Text("\($0) min").tag($0) }
+                }
+            } footer: {
+                Text(OLEDCareScreen.disconnectedCaveat).foregroundStyle(Fiesta.Colors.mutedForeground)
+            }
+        }
+        .listStyle(.grouped)
+        .navigationTitle("When disconnected")
+    }
+}
+
+/// A binding that saves each change to this TV's OLED care.
+private struct OLEDBinding<T> {
+    let app: AppModel
+    let key: WritableKeyPath<OLEDCareConfiguration, T>
+    @MainActor var binding: Binding<T> {
+        Binding(get: { app.oledCare[keyPath: key] }, set: { value in
+            var c = app.oledCare; c[keyPath: key] = value; app.saveOLEDCare(c)
+        })
     }
 }

@@ -31,6 +31,8 @@ final class A8SettingsSnapshotTests: XCTestCase {
             defaults: UserDefaults(suiteName: "a8.app.\(UUID().uuidString)")!,
             credentials: InMemoryCredentialStore(),
             clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) }),
+            // Its own store: OLED care saved here must not reach other tests' viewers.
+            oledStore: OLEDCareStore(defaults: UserDefaults(suiteName: "a8.oled.\(UUID().uuidString)")!),
             deviceName: .assigned("Living room TV"))
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try? await app.connection.connect(to: URL(string: "http://fiestapi.local:4420")!, displayName: "Maya’s FiestaPi")
@@ -40,9 +42,15 @@ final class A8SettingsSnapshotTests: XCTestCase {
         return app
     }
 
+    /// Rendered from a loaded model, so no golden can catch "Loading panels…".
     private func settings(_ category: SettingsScreen.Category, trueSize: Bool = false) async -> UIImage {
         let app = await app()
-        return TVSnapshot.image(SettingsScreen(initialCategory: category, signage: signage(trueSize: trueSize)).environment(app), settle: 1.0)
+        let signage = signage(trueSize: trueSize)
+        let model = SettingsModel(app: app, signage: signage)
+        await model.load()
+        if let panel = model.panels.first { await model.loadPreview(for: panel) }
+        XCTAssertFalse(model.panels.isEmpty, "the golden shows a loaded panel list")
+        return TVSnapshot.image(SettingsScreen(initialCategory: category, signage: signage, model: model).environment(app), settle: 1.0)
     }
 
     func testThisAppleTVInTheTrueLEDState() async {
@@ -72,7 +80,7 @@ final class A8SettingsSnapshotTests: XCTestCase {
 
     func testOLEDCare() async {
         var c = OLEDCareConfiguration()
-        c.brightness = 80; c.movement = true; c.rotationEnabled = true
+        c.brightness = 75; c.movement = true; c.rotationEnabled = true
         c.restEnabled = true; c.restStart = 22 * 60; c.restEnd = 7 * 60
         c.disconnected = .dim
         let app = await app(oled: c)

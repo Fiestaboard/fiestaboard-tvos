@@ -165,25 +165,16 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Settings"].exists)
     }
 
+    /// DD20: a device-code TV has no "All display settings" (its scope can't
+    /// edit the night schedule or backdrop, which match Android TV); its
+    /// permitted shared edits stay in Panel appearance.
     func testTVSignInOffersOnlyPermittedDisplayEdits() {
         let app = launchSettings(matrixPanel: true, localSettings: false, deviceCredential: true)
         defer { app.terminate() }
-        XCUIRemote.shared.press(.right)
-        openRow("settings.allDisplaySettings", in: app)
-        XCTAssertTrue(app.textFields["panelSettings.diagonal"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.textFields["panelSettings.name"].exists,
-                       "A TV credential cannot rename panels; offering Name makes Save fail with 403")
+        XCTAssertTrue(app.switches["settings.animationToggle"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["settings.allDisplaySettings"].exists, "DD20: legacy password sign-ins only")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Display style")).firstMatch.exists)
-        XCTAssertTrue(app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Animations")).firstMatch.exists)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "hub's web page")).firstMatch.exists)
-        openRow("panelSettings.save", in: app)
-        XCTAssertFalse(app.buttons["panelSettings.matrixSizing"].exists)
-        XCTAssertFalse(app.textFields["LED spacing (1–20 mm)"].exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Web viewer backdrop")).firstMatch.exists)
-        XCTAssertFalse(app.textFields["panelSettings.dimStart"].exists)
-        XCTAssertFalse(app.textFields["panelSettings.dimEnd"].exists)
-        XCTAssertTrue(app.textFields["panelSettings.calibration"].exists)
-        attachScreenshot("TV sign-in — permitted display settings", app: app)
+        attachScreenshot("TV sign-in — Panel appearance without All display settings", app: app)
     }
 
     func testSharedDisplaySaveKeepsFocusDuringFailureAndAllowsRetry() {

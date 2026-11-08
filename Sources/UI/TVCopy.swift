@@ -100,6 +100,8 @@ enum TVCopy {
     }
 
     enum Viewer {
+        /// The panel was deleted on the hub (plan row A8 state copy).
+        static let deletedTitle = "This display was removed on your hub"
         static let boardMissingTitle = "This panel’s virtual board was removed"
     }
 }

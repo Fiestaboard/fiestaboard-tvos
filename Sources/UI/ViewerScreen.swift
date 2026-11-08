@@ -255,7 +255,7 @@ struct ViewerScreen: View {
     /// web page, so that is where the sentence points — see `Models.swift`,
     /// which argues the same rule out for the setup copy.
     private var deletedState: some View {
-        ViewerMessage(title: "This panel no longer exists",
+        ViewerMessage(title: TVCopy.Viewer.deletedTitle,
                       detail: "It was deleted on your hub's web page.",
                       primaryTitle: "Back to panels",
                       primaryAction: { model?.stop(); app.showPanels() })

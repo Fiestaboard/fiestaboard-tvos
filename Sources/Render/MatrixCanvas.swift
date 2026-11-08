@@ -19,17 +19,24 @@ struct MatrixCanvas: View {
     var animated: Bool = false
     var transitionStyle: MatrixTransitionStyle = .characterWipe
 
+    /// The decorative lens lighting on each LED. Off under Reduce Transparency
+    /// and under the system Increase Contrast (DD19: tvOS follows the system
+    /// setting rather than offering a high-contrast row).
+    static func lensLighting(reduceTransparency: Bool, contrast: ColorSchemeContrast) -> Bool {
+        !reduceTransparency && contrast != .increased
+    }
+
     var body: some View {
         Group {
             if animated && !reduceMotion {
                 MatrixTransitionCanvas(frame: MatrixTransitionFrame(raster: raster, display: display,
                     presentation: presentation, drift: drift,
-                    lighting: !reduceTransparency && contrast != .increased,
+                    lighting: Self.lensLighting(reduceTransparency: reduceTransparency, contrast: contrast),
                     transitionStyle: transitionStyle))
             } else {
                 Canvas { context, size in
                     Self.paint(raster, display: display, size: size,
-                               lighting: !reduceTransparency && contrast != .increased,
+                               lighting: Self.lensLighting(reduceTransparency: reduceTransparency, contrast: contrast),
                                presentation: presentation, drift: drift, in: &context)
                 }
             }
