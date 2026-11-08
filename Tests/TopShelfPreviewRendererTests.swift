@@ -167,12 +167,16 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
-        let app = AppModel(connection: connection, topShelfStore: store)
-        app.publishTopShelf(panels: [panel])
-        let panels = PanelsModel(app: app)
-
+        // The frame is queued before publishTopShelf on purpose: publishing
+        // starts A7's async `GET /panel/{id}` status fetch, which used to take
+        // a frame queued under the broad "/api/panel/" key (a CI race).
         StubURLProtocol.enqueue(.json(#"{"characters":[[63]],"message":"RED","rows":1,"cols":1}"#),
                                 for: "/api/panel/")
+        let app = AppModel(connection: connection, topShelfStore: store)
+        app.publishTopShelf(panels: [panel])
+        // Let the status fetch reach the network first, as it did on CI.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let panels = PanelsModel(app: app)
         await panels.refreshPreviews(for: [panel])
         let red = try XCTUnwrap(store.items().first)
         let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: red))))
