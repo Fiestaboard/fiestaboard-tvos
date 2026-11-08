@@ -27,9 +27,11 @@ struct DeviceSignInScreen: View {
                             .accessibilityHidden(true)
                     }
                 }
+                .figmaNode(Self.a2Slot + ";166:147625")
                 VStack(alignment: .leading, spacing: 18) {
                     Text(activationAddress)
                         .font(.title3)
+                        .figmaNode(Self.a2Slot + ";166:147627", label: activationAddress)
                         .accessibilityLabel("Browser address: \(activationAddress)")
                     if let challenge = model?.challenge {
                         Text(challenge.userCode).font(.system(size: 60, weight: .bold, design: .monospaced))
@@ -60,6 +62,7 @@ struct DeviceSignInScreen: View {
                 Button(TVCopy.DeviceSignIn.usePassword) { backToPassword() }
                 Button(TVCopy.DeviceSignIn.back) { backToPassword() }
             }
+            .figmaNode(Self.a2Slot + ";166:147655")
         }
         // A4a: the system safe area is the 07b title-safe (80/60), and the
         // content hangs from the top as A2 draws it (eyebrow at y 110), not
@@ -85,6 +88,9 @@ struct DeviceSignInScreen: View {
     }
 
     private func backToPassword() { model?.cancel(); app.route = .signIn }
+
+    /// The 07b A2 frame's Screen slot (`I166:147391;149:182603`).
+    private static let a2Slot = "I166:147391;149:182603"
 }
 
 /// A2 `166:147643` "Waiting": the static 44 pt Taco mark (`166:147644`)

@@ -192,6 +192,7 @@ struct ConnectScreen: View {
         card.figmaTitle = board.id == boardIDs.first ? Self.cardTitleNode : nil
         #endif
         return card
+            .figmaNode(Self.a1Slot + ";166:147325", enabled: board.id == boardIDs.first)
             .focused($focusedControl, equals: .board(board.id))
             .prefersDefaultFocus(board.id == boardIDs.first, in: boardScope)
     }

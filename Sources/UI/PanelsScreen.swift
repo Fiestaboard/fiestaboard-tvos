@@ -101,6 +101,9 @@ struct PanelsScreen: View {
 
     private var panelIDs: [String] { model?.panels.map(\.id) ?? [] }
 
+    /// The 07b A3 frame's Screen slot (`I166:147702;149:182603`).
+    private static let a3Slot = "I166:147702;149:182603"
+
     /// Restore the panel just watched, falling back to the first available
     /// panel if it was removed. Never restore focus to a disabled card.
     private var defaultFocusID: String? {
@@ -367,6 +370,7 @@ struct PanelsScreen: View {
                   previewImages: previewImages, showsPreview: showsPreview,
                   boardMessages: boardMessages)
         .equatable()
+        .figmaNode(Self.a3Slot + ";166:149713", enabled: panel.id == panelIDs.first)
         .focused($focusedPanel, equals: panel.id)
         .prefersDefaultFocus(panel.id == defaultFocusID, in: gridScope)
     }
