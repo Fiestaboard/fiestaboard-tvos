@@ -23,6 +23,22 @@ final class DeviceNameTests: XCTestCase {
         XCTAssertEqual(DeviceName.choose(system: " \n\t", model: "Apple TV"), .fallback)
     }
 
+    /// Found on the simulator: `UIDevice.current.name` is the hardware name
+    /// "Apple TV 4K (4th generation)" while `model` is "Apple TV". A
+    /// generic hardware name is not a user-assigned one, and DD3 must not
+    /// promise it.
+    func testGenericHardwareNamesAreTheFallback() {
+        for name in ["Apple TV 4K (4th generation)", "Apple TV 4K (3rd generation) (at 1080p)", "Apple TV 4K",
+                     "Apple TV HD", "Apple TV (3rd generation)", "apple tv 4k"] {
+            XCTAssertEqual(DeviceName.choose(system: name, model: "Apple TV"), .fallback, name)
+        }
+    }
+
+    func testANameThatOnlyStartsWithTheModelIsStillAssigned() {
+        XCTAssertEqual(DeviceName.choose(system: "Apple TV Den", model: "Apple TV"), .assigned("Apple TV Den"))
+        XCTAssertEqual(DeviceName.choose(system: "Maya’s Apple TV", model: "Apple TV"), .assigned("Maya’s Apple TV"))
+    }
+
     func testWhatIsSent() {
         XCTAssertEqual(DeviceNameChoice.assigned("Living Room").sent, "Living Room")
         XCTAssertEqual(DeviceNameChoice.fallback.sent, "Apple TV")
@@ -94,7 +110,8 @@ final class DeviceNameOnTheWireTests: XCTestCase {
     func testPasswordSignInSendsTheDeviceName() async throws {
         let store = try await connectedStore(deviceName: "Living Room")
         StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
-        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled), for: "/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.enabled
+            .replacingOccurrences(of: "\"authenticated\":false", with: "\"authenticated\":true")), for: "/auth/status")
         try await store.signIn(username: "user", password: "password")
         XCTAssertEqual(try sentName("/auth/device/login"), "Living Room")
     }
