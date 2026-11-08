@@ -150,7 +150,7 @@ final class ParitySnapshotTests: XCTestCase {
         // Never-ending, so the screen's own `.onAppear` scan is turned away
         // and the board stays. Re-publish until the scan has subscribed.
         Task { await model.startScan(using: discovery, patience: .seconds(60)) }
-        let board = DiscoveredBoard(id: "http://192.168.1.20:4420", name: "Maya’s FiestaPi",
+        let board = DiscoveredBoard(id: "http://192.168.1.20:4420", name: "FiestaBoard",
                                     host: URL(string: "http://192.168.1.20:4420")!)
         for _ in 0..<300 where model.boards.isEmpty {
             discovery.publish([board])

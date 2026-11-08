@@ -183,7 +183,7 @@ struct SignInScreen: View {
     }
 
     private var header: some View {
-        FiestaScreenHeading(title: "Sign in", subtitle: "Use the account you created on your FiestaBoard.",
+        FiestaScreenHeading(title: "Sign in", subtitle: "Use the account you created on your FiestaBoard hub.",
                             context: boardName)
         .padding(.horizontal, Fiesta.Metrics.safeInset)
         .padding(.top, Fiesta.Metrics.safeInset)
@@ -239,7 +239,7 @@ struct SignInScreen: View {
             Text(deviceSignInEnabled ? "Only a revocable TV credential is stored in this Apple TV’s Keychain. Your account password is not saved." : "Your username and password are stored in this Apple TV’s Keychain for this server’s legacy sign-in.")
 
             if isUnencrypted {
-                Text("The connection to this board isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")
+                Text("The connection to this hub isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")
             }
         }
         // One passage, not two rows to swipe through.
@@ -276,10 +276,10 @@ struct SignInScreen: View {
     /// that says what it costs.
     private var anotherBoardSection: some View {
         Section {
-            Button("Use another board", role: .destructive) { model?.useAnotherBoard() }
-                .accessibilityLabel("Use another board")
+            Button(TVCopy.SignIn.useAnother, role: .destructive) { model?.useAnotherBoard() }
+                .accessibilityLabel(TVCopy.SignIn.useAnother)
         } footer: {
-            Text("Forgets \(boardName) on this Apple TV and looks for another board.")
+            Text("Forgets \(boardName) on this Apple TV and looks for another hub.")
         }
     }
 

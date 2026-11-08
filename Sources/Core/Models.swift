@@ -366,7 +366,7 @@ public enum FiestaError: Error, Equatable {
     public var userMessage: String {
         switch self {
         case .transport:
-            return "Couldn't reach your FiestaBoard. Check it's still on and on this network."
+            return "Couldn't reach your FiestaBoard hub. Check it's still on and on this network."
         case .unauthorized:
             return "Your saved sign-in was refused. Sign in again."
         case .setupRequired:
@@ -376,8 +376,8 @@ public enum FiestaError: Error, Equatable {
             // web page. This is the only copy of it: `AppModel` reads it from
             // here, because two spellings of the first sentence a brand-new
             // board's owner ever reads will drift the first time one is edited.
-            return "This FiestaBoard has no account yet. Open your board's web page in a browser "
-                 + "on a phone or computer, create your account there, then choose the board "
+            return "This FiestaBoard hub has no account yet. Open your hub's web page in a browser "
+                 + "on a phone or computer, create your account there, then choose the hub "
                  + "again here."
         case .notFound(let detail):
             return detail
@@ -387,16 +387,16 @@ public enum FiestaError: Error, Equatable {
             // most common failure anyone actually sees, and the 5xx line
             // below sent them to read the logs of a machine that is merely
             // booting.
-            return "Your FiestaBoard is still starting up. This usually takes under a minute."
+            return "Your FiestaBoard hub is still starting up. This usually takes under a minute."
         case .http(429):
-            return "Your FiestaBoard is refusing sign-ins after too many failed attempts. "
+            return "Your FiestaBoard hub is refusing sign-ins after too many failed attempts. "
                  + "Wait a minute, then sign in again."
         case .http(let status) where (500..<600).contains(status):
-            return "Your FiestaBoard answered with an error (HTTP \(status)). Check its logs."
+            return "Your FiestaBoard hub answered with an error (HTTP \(status)). Check its logs."
         case .http(let status):
-            return "Your FiestaBoard refused the request (HTTP \(status))."
+            return "Your FiestaBoard hub refused the request (HTTP \(status))."
         case .decoding:
-            return "Your FiestaBoard replied in a format this app doesn't understand. "
+            return "Your FiestaBoard hub replied in a format this app doesn't understand. "
                  + "It may be running a newer version than this app supports."
         }
     }

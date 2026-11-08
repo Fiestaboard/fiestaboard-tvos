@@ -68,7 +68,7 @@ final class PanelDisplaySettingsTests: XCTestCase {
         object["auto_dim"] = ["enabled": true, "start": "22:00", "end": "07:00"]
         model.panels = [try JSONDecoder().decode(Panel.self, from: JSONSerialization.data(withJSONObject: object))]
         model.hasLoaded = true
-        XCTAssertTrue(model.autoDimSummary.contains("board's web page"), model.autoDimSummary)
+        XCTAssertTrue(model.autoDimSummary.contains("hub's web page"), model.autoDimSummary)
         XCTAssertFalse(model.autoDimSummary.contains("All display settings"), model.autoDimSummary)
     }
 

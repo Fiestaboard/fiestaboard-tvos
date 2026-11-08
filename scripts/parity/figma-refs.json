@@ -1,18 +1,26 @@
 {
-  "$comment": "Consumer half of the refs split (C3) for the tvOS app: per ref id in fiestaboard-design-refs (or a local stand-in), the kind and the Figma ids whose geometry/text the shot's FigmaGeometryRegistry probes are compared on. Ids are the 07b Screen-slot paths (I<instance>;149:182603;<child>). Waivers and tolerance overrides are added per entry with a Fable sign-off.",
+  "$comment": "Consumer half of the refs split (C3) for the tvOS app: per ref id in fiestaboard-design-refs (or a local stand-in), the kind and the Figma ids whose geometry/text the shot's FigmaGeometryRegistry probes are compared on. Ids are the 07b Screen-slot paths (I<instance>;149:182603;<child>). Waivers and tolerance overrides are added per entry with a Fable sign-off. Waivers apply per check, not per node, so DD8's interim card title (\"FiestaBoard\" vs the target \"Maya’s FiestaPi\") is left as a reported text finding rather than waived.",
   "entries": [
     {
       "id": "a1-connect",
       "kind": "screen",
       "probes": {
         "geometry": [
+          "I166:147296;149:182603;166:147308",
           "I166:147296;149:182603;166:147310",
+          "I166:147296;149:182603;166:147312",
           "I166:147296;149:182603;166:147325",
+          "I166:147296;149:182603;166:147342",
           "I166:147296;149:182603;166:147344",
           "I166:147296;149:182603;166:147347",
           "I166:147296;149:182603;166:147351"
         ],
         "text": [
+          "I166:147296;149:182603;166:147308",
+          "I166:147296;149:182603;166:147310",
+          "I166:147296;149:182603;166:147312",
+          "I166:147296;149:182603;166:147327",
+          "I166:147296;149:182603;166:147342",
           "I166:147296;149:182603;166:147344",
           "I166:147296;149:182603;166:147351"
         ]

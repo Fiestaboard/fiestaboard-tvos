@@ -14,12 +14,16 @@ extension View {
     ///     would replace an identifier other UI tests may query.
     ///
     /// Compiled out of Release, where it returns `self` unchanged.
-    func figmaNode(_ id: String, label: String? = nil, identify: Bool = false) -> some View {
-        modifier(FigmaNodeModifier(id: id, label: label, identify: identify))
+    ///   - enabled: `false` records nothing (for shared views tagged only on
+    ///     some screens).
+    func figmaNode(_ id: String, label: String? = nil, identify: Bool = false,
+                   enabled: Bool = true) -> some View {
+        modifier(FigmaNodeModifier(id: id, label: label, identify: identify && enabled, enabled: enabled))
     }
     #else
     @inline(__always)
-    func figmaNode(_ id: String, label: String? = nil, identify: Bool = false) -> Self { self }
+    func figmaNode(_ id: String, label: String? = nil, identify: Bool = false,
+                   enabled: Bool = true) -> Self { self }
     #endif
 }
 
@@ -28,12 +32,13 @@ private struct FigmaNodeModifier: ViewModifier {
     let id: String
     let label: String?
     let identify: Bool
+    let enabled: Bool
 
     func body(content: Content) -> some View {
         let probed = content.onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
         } action: { frame in
-            FigmaGeometryRegistry.shared.record(id, label: label, frame: frame)
+            if enabled { FigmaGeometryRegistry.shared.record(id, label: label, frame: frame) }
         }
         if identify {
             probed.accessibilityIdentifier("figma:\(id)")

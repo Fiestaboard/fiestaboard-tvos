@@ -80,9 +80,17 @@ public enum Fiesta {
 
 /// Shared hierarchy for the app's browsing and connection screens.
 struct FiestaScreenHeading: View {
+    /// The 07b text nodes a heading is measured against (parity probes).
+    struct FigmaNodes {
+        let eyebrow: String
+        let title: String
+        let subtitle: String
+    }
+
     let title: String
     let subtitle: String
     var context: String = "FiestaBoard"
+    var figma: FigmaNodes? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -90,14 +98,17 @@ struct FiestaScreenHeading: View {
                 .font(Fiesta.Text.caption.weight(.medium))
                 .foregroundStyle(Fiesta.Colors.brand)
                 .lineLimit(1)
+                .figmaNode(figma?.eyebrow ?? "", label: context, enabled: figma != nil)
             Text(title)
                 .font(Fiesta.Text.title)
                 .foregroundStyle(Fiesta.Colors.foreground)
                 .accessibilityAddTraits(.isHeader)
+                .figmaNode(figma?.title ?? "", label: title, enabled: figma != nil)
             Text(subtitle)
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
                 .fixedSize(horizontal: false, vertical: true)
+                .figmaNode(figma?.subtitle ?? "", label: subtitle, enabled: figma != nil)
         }
     }
 }

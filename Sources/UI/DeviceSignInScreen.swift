@@ -7,10 +7,11 @@ struct DeviceSignInScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            FiestaScreenHeading(title: "Sign in with a phone or computer",
+            // Eyebrow: the hub's name — its Bonjour name until H13 PR 3 (DD8).
+            FiestaScreenHeading(title: TVCopy.DeviceSignIn.title,
                                 subtitle: model?.completeURL == nil && model?.state != .starting && model != nil
-                                    ? "Choose New code to try again, or use username and password."
-                                    : "Scan the code, or open the address below in a browser.",
+                                    ? TVCopy.DeviceSignIn.retrySubtitle
+                                    : TVCopy.DeviceSignIn.subtitle,
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
             HStack(alignment: .top, spacing: 64) {
                 Group {
@@ -27,28 +28,36 @@ struct DeviceSignInScreen: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 18) {
-                    Text(model?.manualURL?.absoluteString ?? app.connection.saved?.host.absoluteString ?? "")
+                    Text(activationAddress)
                         .font(.title3)
-                        .accessibilityLabel("Browser address: \(model?.manualURL?.absoluteString ?? app.connection.saved?.host.absoluteString ?? "")")
+                        .accessibilityLabel("Browser address: \(activationAddress)")
                     if let challenge = model?.challenge {
                         Text(challenge.userCode).font(.system(size: 60, weight: .bold, design: .monospaced))
                             .accessibilityLabel("Sign-in code: \(challenge.userCode.map(String.init).joined(separator: " "))")
                     }
                     if let expiry = model?.expiresAt {
-                        Text("Code expires \(expiry, style: .relative) from now.")
+                        // A2: "Code expires in 9:57", a minutes:seconds countdown.
+                        (Text(TVCopy.DeviceSignIn.expiresPrefix + " ")
+                            + Text(timerInterval: Date.now...max(expiry, Date.now), countsDown: true))
                             .foregroundStyle(Fiesta.Colors.mutedForeground)
                     }
-                    Text(model?.statusMessage ?? "Creating your code…")
-                    Text("Your browser and TV must both reach this board. If the address won't open, connect your phone or computer to the same network.")
+                    if model?.statusMessage == TVCopy.DeviceSignIn.waiting {
+                        DeviceSignInWaitingRow(message: TVCopy.DeviceSignIn.waiting)
+                    } else {
+                        Text(model?.statusMessage ?? "Creating your code…")
+                    }
+                    // The corrected scope line (TV-APPS §4 item 4). A3 puts
+                    // the device-name sentence in front of it (DD3).
+                    Text(TVCopy.DeviceSignIn.scope)
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
-                    Text("TV sign-in supports panels. FiestaBot is unavailable.")
+                    Text(TVCopy.DeviceSignIn.reachability)
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }
             HStack(spacing: 24) {
-                Button("New code") { model?.start() }.accessibilityIdentifier("device-new-code")
-                Button("Use username and password") { backToPassword() }
-                Button("Back") { backToPassword() }
+                Button(TVCopy.DeviceSignIn.newCode) { model?.start() }.accessibilityIdentifier("device-new-code")
+                Button(TVCopy.DeviceSignIn.usePassword) { backToPassword() }
+                Button(TVCopy.DeviceSignIn.back) { backToPassword() }
             }
         }
         .padding(Fiesta.Metrics.safeInset)
@@ -64,5 +73,31 @@ struct DeviceSignInScreen: View {
             if phase == .active { model?.resume() } else { model?.pause() }
         }
     }
+    /// DD13: what to type in a browser, as A2 draws it.
+    private var activationAddress: String {
+        guard let url = model?.manualURL ?? app.connection.saved?.host else { return "" }
+        return TVCopy.DeviceSignIn.activationAddress(url)
+    }
+
     private func backToPassword() { model?.cancel(); app.route = .signIn }
+}
+
+/// A2 `166:147643` "Waiting": the static 44 pt Taco mark (`166:147644`)
+/// beside one line. Static, as A1's "still looking" row: the animated loader
+/// drew at ~95 pt here and covered the lines below (#18 review, 4.1).
+struct DeviceSignInWaitingRow: View {
+    static let markNode = "I166:147391;149:182603;166:147644"
+
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 16) {
+            TacoMarkView()
+                .frame(width: 44, height: 44)
+                .figmaNode(Self.markNode)
+                .accessibilityHidden(true)
+            Text(message)
+                .lineLimit(1)
+        }
+    }
 }

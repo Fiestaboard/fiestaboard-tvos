@@ -98,9 +98,9 @@ struct ViewerScreen: View {
     private func announce(from old: ConnectionState?, to new: ConnectionState?) {
         switch (old, new) {
         case (.stale?, .live?):
-            Announce.say("Reconnected to FiestaBoard.")
+            Announce.say(TVCopy.Viewer.reconnected)
         case (_, .stale?):
-            Announce.say("Disconnected from FiestaBoard. Showing the last message.")
+            Announce.say(TVCopy.Viewer.disconnected)
         // No arm for `.unauthorized`: see the chrome stack in `body`. This
         // view is gone in the same update that sets the state, so the arm
         // that used to be here announced from a view nobody was on.
@@ -226,10 +226,10 @@ struct ViewerScreen: View {
     /// Amber, and the words say the app is still trying: the frame on the
     /// flaps is still true, it is only out of date.
     private var offlineIndicator: some View {
-        BoardStatusPill(title: "Reconnecting",
+        BoardStatusPill(title: TVCopy.Viewer.reconnecting,
                         systemImage: "wifi.exclamationmark",
                         tint: Fiesta.Colors.offline,
-                        spoken: "Disconnected from FiestaBoard. Showing the last message.")
+                        spoken: TVCopy.Viewer.disconnected)
     }
 
     /// Whether the board is the only thing a press could be aimed at.
@@ -249,7 +249,7 @@ struct ViewerScreen: View {
     /// which argues the same rule out for the setup copy.
     private var deletedState: some View {
         ViewerMessage(title: "This panel no longer exists",
-                      detail: "It was deleted on your board's web page.",
+                      detail: "It was deleted on your hub's web page.",
                       primaryTitle: "Back to panels",
                       primaryAction: { model?.stop(); app.showPanels() })
     }
@@ -259,9 +259,9 @@ struct ViewerScreen: View {
     /// the recreating happens on the board's web page, not in "the FiestaBoard
     /// app" — which is the icon the person reading this is standing in.
     private var missingBoardState: some View {
-        ViewerMessage(title: "This panel's board was removed",
+        ViewerMessage(title: TVCopy.Viewer.boardMissingTitle,
                       detail: "The virtual board behind this panel was deleted. "
-                            + "Open your board's web page in a browser on a phone or "
+                            + "Open your hub's web page in a browser on a phone or "
                             + "computer to delete and recreate the panel.",
                       primaryTitle: "Back to panels",
                       primaryAction: { model?.stop(); app.showPanels() })

@@ -57,12 +57,12 @@ struct SettingsScreen: View {
             if path.isEmpty { app.dismissSettings() }
             else { path.removeLast() }
         }
-        .confirmationDialog("Forget this board?", isPresented: $confirmingForget,
+        .confirmationDialog(TVCopy.Settings.forgetConfirmTitle, isPresented: $confirmingForget,
                             titleVisibility: .visible) {
-            Button("Forget this board", role: .destructive) { model?.forget() }
+            Button(TVCopy.Settings.forget, role: .destructive) { model?.forget() }
             Button("Keep it", role: .cancel) { }
         } message: {
-            Text("This Apple TV will forget \(model?.boardName ?? "this board") — its address and its saved sign-in — and go back to looking for a board.")
+            Text("This Apple TV will forget \(model?.boardName ?? "this hub") — its address and its saved sign-in — and go back to looking for a hub.")
         }
         .task(id: panelsReload) {
             if model == nil {
@@ -147,17 +147,17 @@ struct SettingsScreen: View {
                 Section {
                     LabeledContent("Name", value: model?.boardName ?? "")
                     LabeledContent("Address", value: model?.boardAddress ?? "")
-                } header: { Text("Connected board").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                } header: { Text(TVCopy.Settings.connectedHeader).foregroundStyle(Fiesta.Colors.mutedForeground) }
                 if app.connection.usesDeviceCredential {
                     Section { Text("TV sign-in supports panels. FiestaBot is unavailable.") }
                 }
                 Section {
                     Button("Sign out") { model?.signOut() }
-                    Button("Forget this board", role: .destructive) { confirmingForget = true }
+                    Button(TVCopy.Settings.forget, role: .destructive) { confirmingForget = true }
                 } footer: {
                     Text(app.connection.usesDeviceCredential
-                         ? "Removes this TV's saved sign-in and revokes its access. If the board is offline, revoke this TV in Account → Signed-in devices."
-                         : "Nothing on the board itself changes.")
+                         ? "Removes this TV's saved sign-in and revokes its access. If the hub is offline, revoke this TV in Account → Signed-in devices."
+                         : "Nothing on the hub itself changes.")
                         .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }
@@ -168,7 +168,7 @@ struct SettingsScreen: View {
                     NavigationLink("Home screen shortcut", value: Destination.topShelf)
                     NavigationLink("Screen protection & dimming", value: Destination.screenProtection)
                     NavigationLink("Privacy", value: Destination.privacy)
-                } footer: { Text("Edit panel display settings in Panel appearance. Manage content on your board's web page.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                } footer: { Text("Edit panel display settings in Panel appearance. Manage content on your hub's web page.").foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
         }
     }
@@ -180,7 +180,7 @@ struct SettingsScreen: View {
             HStack {
                 Text(title)
                 Spacer()
-                Text(value).foregroundStyle(.secondary)
+                Text(value).foregroundStyle(Fiesta.Colors.mutedForeground)
             }
         }
         .accessibilityLabel(title)
@@ -289,7 +289,7 @@ struct SettingsScreen: View {
                             HStack {
                                 Text("Panel")
                                 Spacer()
-                                Text(panel.name).foregroundStyle(.secondary)
+                                Text(panel.name).foregroundStyle(Fiesta.Colors.mutedForeground)
                             }
                         }
                         .accessibilityIdentifier("settings.panelPicker")
@@ -317,7 +317,7 @@ struct SettingsScreen: View {
                             Text(panel.renderStyle == .ledMatrix
                                  ? "Reduce Motion is on. Matrix messages change instantly on this Apple TV."
                                  : "Reduce Motion is on. Flaps change instantly on this Apple TV.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Fiesta.Colors.mutedForeground)
                         }
                     }
                     if panel.renderStyle == .splitFlap {
@@ -330,7 +330,7 @@ struct SettingsScreen: View {
                 } else if model?.hasLoaded == true {
                     Section {
                         Text("No panels yet")
-                        Text("Create a panel on your board's web page, then reload.")
+                        Text("Create a panel on your hub's web page, then reload.")
                         Button("Reload panels") { panelsReload += 1 }
                     }
                 }
@@ -507,7 +507,7 @@ struct SettingsScreen: View {
 
     private static let burnInBody = """
         By default FiestaBoard requests that Apple TV stay awake while a board is showing. \
-        OLED care can allow the system screensaver or schedule black-output rest. Slowly shifting the board moves it a few \
+        OLED care can allow the system screensaver or schedule black-output rest. Slowly shifting the board's position moves it a few \
         pixels over twenty minutes to vary where the image is drawn. \
         Your TV may still reduce brightness to protect its screen; the app \
         cannot turn off those protections.
@@ -522,20 +522,20 @@ struct SettingsScreen: View {
 
     /// Pinned by SettingsScreenTests and aligned with the published policy.
     static let privacyBody = """
-        The app sends your requests to the board you chose, at the address you typed \
+        The app sends your requests to the hub you chose, at the address you typed \
         or selected. FiestaBot also sends conversation and relevant board content \
-        through that board to its configured AI provider, which may be a third party. \
+        through that hub to its configured AI provider, which may be a third party. \
         The provider's data handling applies to those requests. Siri dictation uses \
         Apple's system keyboard and privacy settings. FiestaBoard's servers and the \
-        app developer receive no analytics or tracking from this app. The board's \
+        app developer receive no analytics or tracking from this app. The hub's \
         address and display preferences are kept in this device's app preferences; \
         a revocable TV credential is kept in this device's Keychain on supporting \
-        servers. Your password is sent to that board only to sign in and is not saved \
+        servers. Your password is sent to that hub only to sign in and is not saved \
         after a TV credential is issued. Older servers use a saved Keychain password \
         to reconnect. Sign out removes local credentials and attempts server revocation; \
-        if the board is offline, revoke this TV in Account → Signed-in devices. \
+        if the hub is offline, revoke this TV in Account → Signed-in devices. \
         FiestaBot is unavailable with a scoped TV credential. Chat history stays in app memory until a new chat, \
-        sign-out, or app restart; your board and AI provider may retain their own records.
+        sign-out, or app restart; your hub and AI provider may retain their own records.
         """
 
     private static let privacyFooter = """

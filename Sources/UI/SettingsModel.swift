@@ -344,7 +344,7 @@ final class SettingsModel {
         }
         let scheduled = panels.filter { $0.autoDim.enabled }
         guard !scheduled.isEmpty else {
-            return "No panel on this board is set to dim. If the picture still fades, it is the Apple TV's screen saver or the TV's own panel protection, not FiestaBoard."
+            return "No panel on this hub is set to dim. If the picture still fades, it is the Apple TV's screen saver or the TV's own panel protection, not FiestaBoard."
         }
         var lines = scheduled.map { panel -> String in
             let from = Self.clockLabel(panel.autoDim.start)
@@ -361,14 +361,14 @@ final class SettingsModel {
         // web page, which is the thing that actually does the job.
         lines.append(canEditAllDisplaySettings
                      ? "Change the shared schedule in Panel appearance → All display settings."
-                     : "Change the shared schedule on your board's web page.")
+                     : "Change the shared schedule on your hub's web page.")
         return lines.joined(separator: " ")
     }
 
-    static let dimScheduleLoading = "Checking this board's dim schedule…"
+    static let dimScheduleLoading = "Checking this hub's dim schedule…"
 
     static let dimScheduleUnknown = """
-        Couldn't reach this board, so whether any panel dims on a schedule is \
+        Couldn't reach this hub, so whether any panel dims on a schedule is \
         unknown. If the picture has faded it could be that schedule, the Apple \
         TV's screen saver, or the TV's own panel protection.
         """
@@ -457,7 +457,7 @@ final class SettingsModel {
             if !result.incompatibleReferences.isEmpty {
                 let count = result.incompatibleReferences.count
                 let noun = count == 1 ? "page was" : "pages were"
-                report(warning: "The grid changed. \(count) \(noun) authored for the old size and won't fill this one — edit them on your board's web page.")
+                report(warning: "The grid changed. \(count) \(noun) authored for the old size and won't fill this one — edit them on your hub's web page.")
             }
             // The PATCH already returns the resized panel. A list reload can
             // arrive after another panel's style save and overwrite it with

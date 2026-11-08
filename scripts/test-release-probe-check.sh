@@ -18,11 +18,14 @@ make_archive() { # name, payload
   echo "$tmp/$1.xcarchive"
 }
 
-clean=$(make_archive clean "BoardCanvas")
+# Ordinary strings that look a little like ids must still pass.
+clean=$(make_archive clean "BoardCanvas 1920:1080 16:9 12:30 v1.0:2")
 ./scripts/check-release-probes.sh "$clean" >/dev/null
 
+# Any Figma node id: an instance path (I…;…), a bare page-07b id, or a DEBUG
+# fixture id — stored ids are not optimized away like inlined-call arguments.
 for leak in FigmaGeometryRegistry figmaNode FigmaNodeModifier ParityFixtureView fiestaboard.figmaProbeOut \
-            "I166:147296;149:182603"; do
+            "I166:147296;149:182603" "I252:122495;1:2" "166:147344" "parity:glass"; do
   dirty=$(make_archive "dirty-$RANDOM" "x${leak}y")
   if ./scripts/check-release-probes.sh "$dirty" >/dev/null 2>&1; then
     echo "check-release-probes.sh accepted an archive containing $leak" >&2

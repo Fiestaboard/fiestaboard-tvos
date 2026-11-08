@@ -95,8 +95,8 @@ enum PanelSettingsError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalid(let message): return message
-        case .unsupported: return "This board does not support these shared display settings. Update FiestaBoard to save them."
-        case .notApplied: return "The board did not confirm all requested changes. Some settings may have saved. Your draft is kept; update FiestaBoard if this continues."
+        case .unsupported: return "This hub doesn’t support these shared display settings. Update FiestaBoard to save them."
+        case .notApplied: return "The hub didn’t confirm all requested changes. Some settings may have saved. Your draft is kept; update FiestaBoard if this continues."
         }
     }
 }

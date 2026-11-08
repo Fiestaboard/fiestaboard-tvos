@@ -15,7 +15,13 @@ if [ ! -d "$apps" ]; then
   exit 1
 fi
 
-pattern='FigmaGeometryRegistry|FigmaNodeModifier|figmaNode|ParityFixture|fiestaboard\.figmaProbeOut|fiestaboard\.parityFixture|149:182603'
+# Symbols and launch arguments, then any Figma node id: an instance path
+# (`I166:147296;149:182603…`), a bare page id (`166:147344`: 2–3 digits, a
+# colon, 5–6 digits; ordinary strings like 1920:1080 or 16:9 don't match),
+# or a DEBUG fixture id (`parity:glass`). Ids stored in a view's property
+# survive into Release even though inlined figmaNode arguments do not.
+pattern='FigmaGeometryRegistry|FigmaNodeModifier|figmaNode|ParityFixture|fiestaboard\.figmaProbeOut|fiestaboard\.parityFixture'
+pattern+='|I[0-9]+:[0-9]+;[0-9]+:[0-9]+|(^|[^0-9])[0-9]{2,3}:[0-9]{5,6}([^0-9]|$)|parity:[a-z]+'
 found=0
 while IFS= read -r -d '' binary; do
   if hits=$(strings -a "$binary" | grep -E "$pattern" | sort -u) && [ -n "$hits" ]; then

@@ -34,7 +34,7 @@ struct ViewerMessage: View {
 
             Text(detail)
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
                 .multilineTextAlignment(.center)
 
             actions.padding(.top, 16)

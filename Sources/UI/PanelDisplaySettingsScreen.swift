@@ -18,7 +18,7 @@ struct PanelDisplaySettingsScreen: View {
                 Section {
                     Text("Changes apply to every viewer of this panel. Save after editing.")
                     if !model.canEditAllDisplaySettings {
-                        Text("To edit the panel name, shared matrix sizing or LED spacing, web viewer backdrop, or dim schedule, open your board's web page on a phone or computer.")
+                        Text("To edit the panel name, shared matrix sizing or LED spacing, web viewer backdrop, or dim schedule, open your hub's web page on a phone or computer.")
                         Text(model.boardAddress)
                     }
                 }
@@ -140,7 +140,7 @@ struct PanelDisplaySettingsScreen: View {
     }
 
     private func row(_ title: String, value: String) -> some View {
-        HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
+        HStack { Text(title); Spacer(); Text(value).foregroundStyle(Fiesta.Colors.mutedForeground) }
             .accessibilityElement(children: .combine)
     }
 

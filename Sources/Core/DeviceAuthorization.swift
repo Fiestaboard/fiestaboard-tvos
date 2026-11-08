@@ -66,14 +66,14 @@ public struct DevicePollError: Error, Equatable, Sendable {
     }
     public var userMessage: String {
         switch code {
-        case "authorization_pending": return "Waiting for you to allow this TV in your browser."
-        case "slow_down", "rate_limited": return "The board asked this TV to wait. Trying again shortly."
+        case "authorization_pending": return "Waiting for approval on your phone…"
+        case "slow_down", "rate_limited": return "The hub asked this TV to wait. Trying again shortly."
         case "access_denied": return "This sign-in was denied. Choose New code to try again."
         case "expired_token": return "This code expired. Choose New code."
-        case "invalid_grant": return "This code was cancelled or already used. Choose New code."
-        case "feature_disabled": return "TV sign-in is disabled. Enable TV sign-in in your board's Account settings."
-        case "session_limit": return "The board has too many signed-in devices. Revoke one in Account settings, then try again."
-        default: return "The board couldn't complete this sign-in. Try a new code."
+        case "invalid_grant": return "This code was canceled or already used. Choose New code."
+        case "feature_disabled": return "TV sign-in is disabled. Enable TV sign-in in your hub's Account settings."
+        case "session_limit": return "The hub has too many signed-in devices. Revoke one in Account settings, then try again."
+        default: return "The hub couldn't complete this sign-in. Try a new code."
         }
     }
 }
@@ -83,7 +83,7 @@ public enum DeviceCredentialError: Error, Equatable {
     public var userMessage: String {
         switch self {
         case .storageFailed: return "This Apple TV couldn't securely save your sign-in. Try again."
-        case .invalidResponse: return "The board returned an unsupported TV sign-in response. Update the board and try again."
+        case .invalidResponse: return "The hub returned an unsupported TV sign-in response. Update FiestaBoard on the hub and try again."
         }
     }
 }

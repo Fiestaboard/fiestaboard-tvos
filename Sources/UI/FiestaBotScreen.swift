@@ -41,7 +41,7 @@ struct FiestaBotScreen: View {
                 NavigationLink(value: Destination.panels) {
                     VStack(alignment: .leading) {
                         Text("Panel")
-                        Text(model.selectedPanel?.name ?? "Choose a panel").font(.caption).foregroundStyle(.secondary)
+                        Text(model.selectedPanel?.name ?? "Choose a panel").font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                     }
                 }
                 .disabled(model.isRunning || model.isShowingPage)
@@ -82,8 +82,8 @@ struct FiestaBotScreen: View {
                     Section {
                         Text("Ask FiestaBot to make a page or change what's showing.")
                             .font(.title3).focusable()
-                        Text("Requests go to your board and its configured AI provider. This chat stays here until you start a new chat or sign out.")
-                            .foregroundStyle(.secondary).font(.caption).focusable()
+                        Text("Requests go to your hub and its configured AI provider. This chat stays here until you start a new chat or sign out.")
+                            .foregroundStyle(Fiesta.Colors.mutedForeground).font(.caption).focusable()
                     }
                 }
                 ForEach(model.entries) { entry in
@@ -92,7 +92,7 @@ struct FiestaBotScreen: View {
                         ForEach(entry.tools) { tool in
                             VStack(alignment: .leading, spacing: 8) {
                                 Label(tool.title, systemImage: toolIcon(tool.phase))
-                                if !tool.summary.isEmpty { Text(tool.summary).font(.caption).foregroundStyle(.secondary) }
+                                if !tool.summary.isEmpty { Text(tool.summary).font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground) }
                             }
                             .focusable()
                             ForEach(model.panelsForTool(tool)) { panel in
@@ -173,7 +173,7 @@ struct FiestaBotScreen: View {
                     .disabled(!model.canSend || model.composer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             Text("With the keyboard open, hold the Siri button to dictate where available.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
         }
     }
 
@@ -197,7 +197,7 @@ struct FiestaBotScreen: View {
         List {
             Section {
                 Text("Show a page now on \(model.selectedPanel?.name ?? "this panel"). Its schedule may replace it at the next update.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                 switch model.pageLoadState {
                 case .idle, .loading:
                     TacoLoader("Loading saved pages…")
