@@ -45,13 +45,16 @@ final class MatrixMarqueeLayers {
         let pitch = CGFloat(layout.pitch)
         let dot = pitch * frame.display.dotRatio
         let inset = (pitch - dot) / 2
-        let round = frame.display.appearance?.pixelShape == "round"
+        let round = LedDot.isRound(frame.display)
+        let corner = LedDot.cornerRadius(dot: dot, scale: scale)
         let lighting = frame.lighting && dot >= 3
         func dotRect(_ row: Int, _ column: Int) -> CGRect {
             CGRect(x: source.minX + CGFloat(column) * pitch + inset,
                    y: source.minY + CGFloat(row) * pitch + inset, width: dot, height: dot)
         }
-        func shape(_ rect: CGRect) -> Path { round ? Path(ellipseIn: rect) : Path(rect) }
+        func shape(_ rect: CGRect, grow: CGFloat = 0) -> Path {
+            LedDot.path(rect, round: round, corner: corner, grow: grow)
+        }
         let maskContent = Canvas { context, _ in
             var dots = Path()
             var outer = Path()
@@ -61,8 +64,8 @@ final class MatrixMarqueeLayers {
                     let rect = dotRect(row, column)
                     dots.addPath(shape(rect))
                     if lighting {
-                        outer.addPath(shape(rect.insetBy(dx: -pitch * 0.14, dy: -pitch * 0.14)))
-                        inner.addPath(shape(rect.insetBy(dx: -pitch * 0.07, dy: -pitch * 0.07)))
+                        outer.addPath(shape(rect, grow: pitch * 0.14))
+                        inner.addPath(shape(rect, grow: pitch * 0.07))
                     }
                 }
             }

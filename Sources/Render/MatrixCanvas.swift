@@ -52,14 +52,17 @@ struct MatrixCanvas: View {
         let dot = pitch * display.dotRatio
         let inset = (pitch - dot) / 2
         let off = MatrixRaster.hex(display.appearance?.offColor) ?? 0x1a1a1a
-        let round = display.appearance?.pixelShape == "round"
+        let round = LedDot.isRound(display)
+        let corner = LedDot.cornerRadius(dot: dot, scale: context.environment.displayScale)
         // Below three points the lens is subpixel detail. Keep dense previews crisp.
         let lightsLens = lighting && dot >= 3
         func rect(_ row: Int, _ col: Int) -> CGRect {
             CGRect(x: origin.x + CGFloat(col) * pitch + inset,
                    y: origin.y + CGFloat(row) * pitch + inset, width: dot, height: dot)
         }
-        func shape(_ rect: CGRect) -> Path { round ? Path(ellipseIn: rect) : Path(rect) }
+        func shape(_ rect: CGRect, grow: CGFloat = 0) -> Path {
+            LedDot.path(rect, round: round, corner: corner, grow: grow)
+        }
 
         if lightsLens {
             // Two faint, nested silhouettes approximate a short light falloff.
@@ -71,8 +74,8 @@ struct MatrixCanvas: View {
                     let rgb = raster.pixels[row * raster.width + col]
                     guard rgb != 0 else { continue }
                     let lens = rect(row, col)
-                    outer[rgb, default: Path()].addPath(shape(lens.insetBy(dx: -pitch * 0.14, dy: -pitch * 0.14)))
-                    inner[rgb, default: Path()].addPath(shape(lens.insetBy(dx: -pitch * 0.07, dy: -pitch * 0.07)))
+                    outer[rgb, default: Path()].addPath(shape(lens, grow: pitch * 0.14))
+                    inner[rgb, default: Path()].addPath(shape(lens, grow: pitch * 0.07))
                 }
             }
             // Stable order keeps mixed-color overlaps deterministic.
@@ -149,14 +152,17 @@ struct MatrixCanvas: View {
         let dot = physicalPitch * display.dotRatio
         let inset = (physicalPitch - dot) / 2
         setColor(MatrixRaster.hex(display.appearance?.offColor) ?? 0x1a1a1a)
+        // The tile is in device pixels already.
+        let round = LedDot.isRound(display)
+        let corner = LedDot.cornerRadius(dot: dot, scale: 1)
         for row in -1...count {
             for col in -1...count {
                 let rect = CGRect(x: CGFloat(col) * physicalPitch + phaseX + inset,
                                   y: CGFloat(row) * physicalPitch + phaseY + inset, width: dot, height: dot)
-                if display.appearance?.pixelShape == "round" { bitmap.fillEllipse(in: rect) }
-                else { bitmap.fill(rect) }
+                bitmap.addPath(LedDot.path(rect, round: round, corner: corner).cgPath)
             }
         }
+        bitmap.fillPath()
         guard let image = bitmap.makeImage() else { return nil }
         return (image, CGPoint(x: floor(origin.x * scale) / scale,
                                y: floor(origin.y * scale) / scale), scale)

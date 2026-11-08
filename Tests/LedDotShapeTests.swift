@@ -9,7 +9,7 @@ import XCTest
 @MainActor
 final class LedDotShapeTests: XCTestCase {
 
-    private static let red: UInt32 = 0xFF0000
+    nonisolated private static let red: UInt32 = 0xFF0000
 
     private func display(shape: String? = "square", dotRatio: Double = 0.82) throws -> MatrixDisplay {
         var appearance: [String: Any] = ["dotRatio": dotRatio, "offColor": "#1a1a1a", "substrateColor": "#000000"]
@@ -71,41 +71,52 @@ final class LedDotShapeTests: XCTestCase {
         let size = CGSize(width: 100, height: 100)
         let dot = CGRect(x: 9, y: 9, width: 82, height: 82)
         let app = try painted(raster(1, 1, lit: [0]), display(), size: size)
-        XCTAssertEqual(app, try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * 0.15) },
+        XCTAssertEqual(app, try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * 0.15, style: .circular) },
                        "a lit dot is roundRect(0.15 × dot)")
         for ratio in [0, 0.10, 0.20] {
-            XCTAssertNotEqual(app, try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * ratio) },
+            XCTAssertNotEqual(app, try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * ratio, style: .circular) },
                               "the corner is 0.15 of the dot, not \(ratio)")
         }
         XCTAssertEqual(pixel(app, width: 100, x: 9, y: 9).r, 0, "the true corner is the #000 gap")
         XCTAssertEqual(pixel(app, width: 100, x: 50, y: 50).r, 255)
     }
 
-    /// FiestaUI's threshold is in device pixels: `size >= 6`. The dots sit
-    /// on whole device pixels (inset 2 px), so the true corner pixel is the
-    /// dot's own: fully lit when square, partly gap when rounded (a 0.9 px
-    /// radius leaves about 83 % coverage).
+    /// FiestaUI's threshold is in device pixels: `size >= 6`. Each dot
+    /// sits on whole device pixels (a 2 px inset), so the painter must match
+    /// a reference painter byte for byte: the rounded one at 6 px, the
+    /// square one at 5 px.
     func testTheSixPixelThresholdRoundsAtSixAndKeepsSmallerDotsSquare() throws {
-        let cases: [(side: CGFloat, scale: CGFloat, ratio: Double, pixels: Int, rounds: Bool)] = [
-            (10, 1, 0.6, 6, true),       // 6 px dot at scale 1
-            (9, 1, 5.0 / 9, 5, false),   // 5 px dot at scale 1
-            (5, 2, 0.6, 6, true),        // 3 pt = 6 px at scale 2
-            (4.5, 2, 5.0 / 9, 5, false)  // 2.5 pt = 5 px at scale 2
+        let cases: [(side: CGFloat, scale: CGFloat, ratio: Double, rounds: Bool)] = [
+            (10, 1, 0.6, true),        // 6 px dot at scale 1
+            (9, 1, 5.0 / 9, false),    // 5 px dot at scale 1
+            (5, 2, 0.6, true),         // 3 pt = 6 px at scale 2
+            (4.5, 2, 5.0 / 9, false)   // 2.5 pt = 5 px at scale 2
         ]
         for c in cases {
-            let app = try painted(raster(1, 1, lit: [0]), display(dotRatio: c.ratio),
-                                  size: CGSize(width: c.side, height: c.side), scale: c.scale)
-            let width = Int((c.side * c.scale).rounded())
-            let corner = pixel(app, width: width, x: 2, y: 2).r
-            let middle = pixel(app, width: width, x: 2 + c.pixels / 2, y: 2 + c.pixels / 2).r
-            XCTAssertEqual(middle, 255, "the \(c.pixels) px dot is lit")
+            let size = CGSize(width: c.side, height: c.side)
+            let dot = CGRect(x: 2 / c.scale, y: 2 / c.scale, width: c.side * c.ratio, height: c.side * c.ratio)
+            let pixels = Int((dot.width * c.scale).rounded())
+            let app = try painted(raster(1, 1, lit: [0]), display(dotRatio: c.ratio), size: size, scale: c.scale)
+            let square = try reference(size: size, scale: c.scale, dot: dot) { Path($0) }
+            let rounded = try reference(size: size, scale: c.scale, dot: dot) {
+                Path(roundedRect: $0, cornerRadius: $0.width * 0.15, style: .circular)
+            }
+            XCTAssertNotEqual(square, rounded, "the references must differ, or this proves nothing")
             if c.rounds {
-                XCTAssertLessThan(corner, 240, "a \(c.pixels) px dot at scale \(c.scale) rounds (corner \(corner))")
-                XCTAssertGreaterThan(corner, 150, "…by 0.15 of the dot, not more (corner \(corner))")
+                XCTAssertEqual(app, rounded, "a \(pixels) px dot at scale \(c.scale) rounds")
             } else {
-                XCTAssertGreaterThanOrEqual(corner, 250, "a \(c.pixels) px dot at scale \(c.scale) stays square (corner \(corner))")
+                XCTAssertEqual(app, square, "a \(pixels) px dot at scale \(c.scale) stays square")
             }
         }
+    }
+
+    /// The rule itself, in device pixels (FiestaUI `size >= 6`).
+    func testTheCornerRadiusIsFifteenHundredthsOfADotOfSixPixelsOrMore() {
+        XCTAssertEqual(LedDot.cornerRadius(dot: 24.6, scale: 2), 24.6 * 0.15, accuracy: 1e-9)
+        XCTAssertEqual(LedDot.cornerRadius(dot: 6, scale: 1), 0.9, accuracy: 1e-9)
+        XCTAssertEqual(LedDot.cornerRadius(dot: 3, scale: 2), 0.45, accuracy: 1e-9)
+        XCTAssertEqual(LedDot.cornerRadius(dot: 5.99, scale: 1), 0)
+        XCTAssertEqual(LedDot.cornerRadius(dot: 2.99, scale: 2), 0)
     }
 
     // MARK: Shapes
@@ -113,7 +124,7 @@ final class LedDotShapeTests: XCTestCase {
     func testRoundDotsStayOvalAndUnknownShapesTakeTheRoundedSquarePath() throws {
         let size = CGSize(width: 100, height: 100)
         let dot = CGRect(x: 9, y: 9, width: 82, height: 82)
-        let rounded = try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * 0.15) }
+        let rounded = try reference(size: size, dot: dot) { Path(roundedRect: $0, cornerRadius: 82 * 0.15, style: .circular) }
         XCTAssertEqual(try painted(raster(1, 1, lit: [0]), display(shape: "round"), size: size),
                        try reference(size: size, dot: dot) { Path(ellipseIn: $0) }, "round stays an oval")
         XCTAssertEqual(try painted(raster(1, 1, lit: [0]), display(shape: "hexagon"), size: size), rounded,
@@ -127,7 +138,7 @@ final class LedDotShapeTests: XCTestCase {
         let app = try painted(raster(1, 1), display(), size: size)
         let dot = CGRect(x: 9, y: 9, width: 82, height: 82)
         XCTAssertEqual(app, try reference(size: size, dot: dot, color: 0x1A1A1A) {
-            Path(roundedRect: $0, cornerRadius: 82 * 0.15)
+            Path(roundedRect: $0, cornerRadius: 82 * 0.15, style: .circular)
         })
         let corner = pixel(app, width: 100, x: 9, y: 9)
         XCTAssertEqual([corner.r, corner.g, corner.b], [0, 0, 0], "unlit corner is the #000 gap")

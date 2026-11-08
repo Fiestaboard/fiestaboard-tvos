@@ -320,9 +320,16 @@ final class TopShelfPreviewRendererTests: XCTestCase {
             let centre = pixels.at(Int(dot.midX), Int(dot.midY))
             XCTAssertGreaterThan(centre.r, 180)
             let corner = pixels.at(Int(dot.minX), Int(dot.minY))
-            // The corner pixel is antialiased; a square dot still keeps it lit.
-            if shape == "square" { XCTAssertGreaterThan(corner.r, 150) }
-            else { XCTAssertLessThan(corner.r, 120, "round LEDs must retain their dark corners") }
+            // The block's top-left pixel is one dot's true corner, antialiased.
+            if shape == "square" {
+                // DD24: the hub's square is FiestaUI's rounded square: the
+                // corner is cut (a square kept it above 150), but by 0.15 of
+                // the dot, not into an oval's dark corner.
+                XCTAssertLessThan(corner.r, 150, "square LEDs round their true corner (DD24)")
+                XCTAssertGreaterThan(corner.r, 60, "…by 0.15 of the dot, not into an oval")
+            } else {
+                XCTAssertLessThan(corner.r, 40, "round LEDs must retain their dark corners")
+            }
         }
     }
 
