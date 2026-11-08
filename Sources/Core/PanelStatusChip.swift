@@ -112,7 +112,10 @@ public enum PanelStatusChip {
             return StatusChip(kind: .override, persistent: false, overrideEndsAt: ends,
                               remaining: ends.map { $0.timeIntervalSince(hubNow) })
         }
-        if status.silenced {
+        // Silence ends on the hub's clock too (A6b N1, Jev check_fallthrough;
+        // Android G6b matches): past `silenced_until` the chip falls through
+        // rather than naming a time already gone.
+        if status.silenced, status.silencedUntil.map({ $0 > hubNow }) ?? true {
             return StatusChip(kind: .silenced, persistent: status.silenceMode == .indicator,
                               silencedUntil: status.silencedUntil, silenceMode: status.silenceMode)
         }
@@ -175,13 +178,13 @@ public enum PanelStatusChip {
 }
 
 extension Panel {
-    /// This panel with `polled`'s status. A PATCH reply
+    /// This panel, with `polled`'s status when it has none of its own. A PATCH reply
     /// (`PanelUpdateResponse`) carries no `status`, so a caller adopting the
     /// patched panel keeps the one it polled instead of losing the chip
     /// until the next config read.
     public func keepingStatus(of polled: Panel?) -> Panel {
         var copy = self
-        copy.status = polled?.status
+        copy.status = status ?? polled?.status
         return copy
     }
 }

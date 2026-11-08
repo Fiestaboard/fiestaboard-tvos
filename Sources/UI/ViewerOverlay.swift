@@ -29,9 +29,11 @@ struct ViewerOverlay: View {
     let panelName: String
     /// "Split-flap · Living room hub" (07b `154:8173`).
     var subtitle: String? = nil
-    /// The chip host (07b `154:8174`). A6b's status chip plugs in here and
-    /// reads `\.viewerMaterial` for its own surface; nil until then, and the
-    /// host takes no space.
+    /// The chip host (07b `154:8174`): A6b's `StatusChipView(placement: .inBar)`.
+    /// DD25: the chip is plain content here, because the bar is already the
+    /// glass and glass is not nested. It draws its own surface only on its own
+    /// (`StandaloneStatusChip`). Nil when there is no status; the host then
+    /// takes no space.
     var chip: AnyView? = nil
     /// Called whenever someone is plainly still using the bar.
     ///
@@ -121,50 +123,5 @@ struct ViewerOverlay: View {
         // viewer is full-bleed, so the inset is applied here.
         .padding(.horizontal, PlatformTV.safeSide)
         .padding(.top, PlatformTV.safeTopBottom)
-    }
-}
-
-/// The board's status, bottom-right, where the web viewer puts its dot.
-///
-/// It *was* the web viewer's dot: a bare `Circle` carrying an
-/// `.accessibilityLabel`. A `Shape` is not an accessibility element, so that
-/// label reached nobody, and colour alone was the entire signal — which is
-/// the one thing a roomful of people cannot all be relied on to see. A
-/// labelled pill says the same thing in words, and keeps the tint.
-struct BoardStatusPill: View {
-    /// Registry probe (A4a geometry test).
-    static let probe = "tv:status-pill"
-
-    let title: String
-    let systemImage: String
-    let tint: Color
-    /// What VoiceOver says. Longer than the pill, because the pill has the
-    /// board behind it for context and a spoken label has nothing.
-    let spoken: String
-
-    var body: some View {
-        ViewerGlassContainer { pill }
-    }
-
-    private var pill: some View {
-        VStack {
-            Spacer()
-            HStack {
-                Spacer()
-                Label(title, systemImage: systemImage)
-                    .font(Fiesta.Text.caption)
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .viewerSurface(in: Capsule())
-                    // `.ignore` is what makes this an element at all, rather
-                    // than an icon and a string VoiceOver reads separately.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(spoken)
-                    .figmaNode(Self.probe)
-                    // A4a: inside the full-bleed viewer, title-safe is applied here.
-                    .padding(EdgeInsets(top: PlatformTV.safeTopBottom, leading: PlatformTV.safeSide, bottom: PlatformTV.safeTopBottom, trailing: PlatformTV.safeSide))
-            }
-        }
     }
 }

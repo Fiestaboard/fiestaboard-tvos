@@ -154,7 +154,7 @@ final class FixtureHTTPServer {
             }
             lock.lock()
             let drop = dropped && path.hasPrefix("/api/panel/")
-            let status = panelStatus
+            let statusJSON = panelStatus
             lock.unlock()
             if drop {
                 connection.cancel()
@@ -205,7 +205,12 @@ final class FixtureHTTPServer {
                 body = chatResponses.isEmpty ? "event: done\ndata: {\"reason\":\"complete\"}\n\n" : chatResponses.removeFirst()
                 self.lock.unlock()
             case "/api/panel/1", "/api/panel/abc123def456":
-                body = status.map { String(Fixtures.panelJSON.dropLast()) + #","status":"# + $0 + "}" } ?? Fixtures.panelJSON
+                if let statusJSON {
+                    let base: String = String(Fixtures.panelJSON.dropLast())
+                    body = base + ",\"status\":" + statusJSON + "}"
+                } else {
+                    body = Fixtures.panelJSON
+                }
             case "/api/panel/1/frame", "/api/panel/abc123def456/frame":
                 body = frameProvider?() ?? frameBody
                 self.lock.lock()

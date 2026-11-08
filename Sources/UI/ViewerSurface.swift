@@ -32,7 +32,9 @@ enum ViewerMaterial: Equatable, Sendable {
         return wanted
     }
 
-    /// `-fiestaboard.viewerMaterial glass|regular|opaque`.
+    #if DEBUG
+    /// `-fiestaboard.viewerMaterial glass|regular|opaque`. DEBUG only: nothing
+    /// in Release reads the launch argument.
     init?(launchArgument: String?) {
         switch launchArgument {
         case "glass": self = .liquidGlass
@@ -40,6 +42,14 @@ enum ViewerMaterial: Equatable, Sendable {
         case "opaque": self = .opaque
         default: return nil
         }
+    }
+    #endif
+
+    /// What a surface actually draws. Reduce Transparency wins here as well
+    /// as in `ViewerGlassContainer`, so a surface outside any container (A6b's
+    /// standalone chip) is never glass under it (#23 review S1).
+    static func effective(explicit: ViewerMaterial?, inherited: ViewerMaterial, reduceTransparency: Bool) -> ViewerMaterial {
+        reduceTransparency ? .opaque : (explicit ?? inherited)
     }
 
     /// DEBUG only: neither CI (tvOS 26.2) nor a current Xcode can run the
@@ -54,6 +64,13 @@ enum ViewerMaterial: Equatable, Sendable {
 
     /// The glass tint: 07b's "Dark" glass, from the app ground token.
     static var glassTint: Color { Fiesta.Colors.background.opacity(0.55) }
+
+    /// The pre-26 regular material's dark tint (#23 review S3). Stock
+    /// `.regularMaterial` lets a bright board through; at this opacity the
+    /// muted subtitle keeps 4.5:1 even over white, before the material's own
+    /// darkening (`StatusChipFoldInTests`), which is 07b `250:110532`'s neutral dark.
+    static let regularTintOpacity = 0.82
+    static var regularTint: Color { Fiesta.Colors.background.opacity(regularTintOpacity) }
 
     #if DEBUG
     /// The 07b `tvOS / Viewer overlay` variant this material is drawn as.
@@ -116,9 +133,11 @@ private struct ViewerSurfaceModifier<S: InsettableShape>: ViewModifier {
     let shape: S
     let tagsOverlayVariant: Bool
     @Environment(\.viewerMaterial) private var inherited
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
-        let material = material ?? inherited
+        let material = ViewerMaterial.effective(explicit: material, inherited: inherited,
+                                                reduceTransparency: reduceTransparency)
         surfaced(content, material)
         #if DEBUG
             .figmaNode(material.overlayVariantNode, enabled: tagsOverlayVariant)
@@ -132,15 +151,21 @@ private struct ViewerSurfaceModifier<S: InsettableShape>: ViewModifier {
             if #available(tvOS 26.0, *) {
                 content.glassEffect(.regular.tint(ViewerMaterial.glassTint), in: shape)
             } else {
-                content.background(.regularMaterial, in: shape)
+                regular(content)
             }
         case .regularMaterial:
-            content.background(.regularMaterial, in: shape)
+            regular(content)
         case .opaque:
-            // 07b `250:110540`: --card with a 2 pt --border.
+            // 07b `250:110540` / `250:110504`: --card with a 2 pt --border.
             content
                 .background(Fiesta.Colors.surface, in: shape)
                 .overlay(shape.strokeBorder(Fiesta.Colors.border, lineWidth: 2))
         }
+    }
+
+    private func regular(_ content: Content) -> some View {
+        content
+            .background(ViewerMaterial.regularTint, in: shape)
+            .background(.regularMaterial, in: shape)
     }
 }
