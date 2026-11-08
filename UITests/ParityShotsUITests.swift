@@ -2,8 +2,11 @@ import XCTest
 
 /// A0 — XCUITest half of the D7 parity method (PHASE-4-TV-PLAN §2.1).
 ///
-/// Glass and the focus platter are drawn by the system compositor, which a
-/// `drawHierarchy` snapshot never runs. These shots go through `XCUIScreen`
+/// The focus platter never appears in a `drawHierarchy` snapshot (an
+/// offscreen window takes no focus), and glass there is not guaranteed by
+/// the API — measured, not asserted (`testGlassUnderDrawHierarchyIsMeasured
+/// NotAsserted` found it identical to `XCUIScreen` on tvOS 26.2 and 27.2).
+/// So the gating glass and focus shots go through `XCUIScreen`
 /// against the DEBUG parity fixture (`-fiestaboard.parityFixture glass`):
 /// red/blue stripes under a `.glassEffect` panel, plus two focusable
 /// buttons. The app writes its `FigmaGeometryRegistry` to a path we pass in,

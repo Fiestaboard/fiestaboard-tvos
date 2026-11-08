@@ -31,13 +31,29 @@ import { PNG } from "pngjs";
 
 import { evaluateEntry, loadRefs, renderMarkdown, resolveRefsDir } from "./parity.mjs";
 
-/** FiestaUI scripts/vrt/parity.mjs, PR #378 head. Bump deliberately; the test checks the hash. */
+/**
+ * FiestaUI scripts/vrt/parity.mjs on `alpha` at the #378 merge. The file is
+ * byte-identical to the PR head A0 vendored (same sha256). Bump
+ * deliberately; the test checks the hash.
+ */
 export const PINNED = {
   repo: "Fiestaboard/FiestaUI",
+  ref: "alpha",
   path: "scripts/vrt/parity.mjs",
-  commit: "5a451b7470dfc5e56b27740acd1d065b06bc5c2b",
+  commit: "a84531f5ad3e88095ca001b03aa6d1afe54601f6",
   sha256: "94cd0bb7f918ccdf92d7cbea3ed8868e5c42ef75b16a7d23b12e09479e12dc22",
 };
+
+/** `<shots>/runtime.json` written by the snapshot tests, or null. */
+export function readRuntime(shotsDir) {
+  const file = path.join(shotsDir, "runtime.json");
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+}
+
+function runtimeLine(runtime) {
+  if (!runtime) return "Simulator runtime: not recorded.";
+  return `Simulator: tvOS ${runtime.osVersion} (${runtime.runtimeBuild}) · ${runtime.deviceModel} · scale ${runtime.scale} · goldens \`${runtime.goldenDirectory}\``;
+}
 
 /** @param {string} file */
 export function loadNativeManifest(file) {
@@ -116,9 +132,11 @@ function main(argv) {
   const manifest = loadNativeManifest(args.manifest);
   mkdirSync(args.out, { recursive: true });
 
+  const runtime = readRuntime(args.shots);
   const report = {
     gating: false,
     pinned: PINNED,
+    runtime,
     refsDir: refsDir ?? "(none)",
     refsTag: null,
     manifest: args.manifest,
@@ -132,6 +150,8 @@ function main(argv) {
       "# Figma parity report (tvOS)",
       "",
       "**Report-only.** No refs: `--refs` was not given (fiestaboard-design-refs, O4, does not exist yet).",
+      runtimeLine(runtime),
+      "",
       "Shots and probes found, for a local run with `--refs <dir>`:",
       "",
     ];
@@ -178,7 +198,7 @@ function main(argv) {
 
   const md = renderMarkdown(report).replace(
     /\*\*Report-only \(slice 1\.0b\)\.\*\*[^\n]*/,
-    "**Report-only (tvOS A0).** Nothing here fails CI; gating waits for K2n calibration (PHASE-4-TV-PLAN §2.1).",
+    `**Report-only (tvOS).** Nothing here fails CI; gating waits for K2n calibration (PHASE-4-TV-PLAN §2.1).\n\n${runtimeLine(runtime)}`,
   );
   writeFileSync(path.join(args.out, "report.json"), JSON.stringify(report, null, 2));
   writeFileSync(path.join(args.out, "report.md"), md);

@@ -14,8 +14,9 @@ import XCTest
 ///   `onGeometryChange`, in global points;
 /// - the Connect screen produces parity inputs for the A1 ref.
 ///
-/// What `drawHierarchy` makes of glass is measured and written down, not
-/// asserted: the glass proof is the XCUITest in `ParityShotsUITests`.
+/// What `drawHierarchy` makes of glass is measured, not asserted: it matched
+/// `XCUIScreen` on tvOS 26.2 and 27.2, but the API does not promise it, so
+/// the gating glass proof is the XCUITest in `ParityShotsUITests`.
 @MainActor
 final class ParitySnapshotTests: XCTestCase {
 
@@ -38,6 +39,30 @@ final class ParitySnapshotTests: XCTestCase {
         let cg = try XCTUnwrap(image.cgImage)
         XCTAssertEqual(cg.width, 3840)
         XCTAssertEqual(cg.height, 2160)
+    }
+
+    /// Goldens are 8-bit sRGB. The renderer's default on the P3 4K simulator
+    /// is the extended range — 16 bits per channel — which nothing reads and
+    /// which doubles every golden (review #15, 6.1).
+    func testAShotIsEightBitStandardRange() throws {
+        let cg = try XCTUnwrap(TVSnapshot.image(Color.red).cgImage)
+        XCTAssertEqual(cg.bitsPerComponent, 8)
+        XCTAssertEqual(cg.bitsPerPixel, 32)
+    }
+
+    /// The parity artifact names the exact simulator runtime (review #15,
+    /// 6.4): goldens are split only by OS major, so a runner image moving
+    /// 26.2 → 26.x must be visible in the evidence.
+    func testParityOutputRecordsTheSimulatorRuntime() throws {
+        try ParityOutput.writeRuntime()
+        let data = try Data(contentsOf: ParityOutput.directory.appendingPathComponent("runtime.json"))
+        let runtime = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let os = try XCTUnwrap(runtime["osVersion"] as? String)
+        XCTAssertTrue(os.hasPrefix("\(TVSnapshot.osMajor)."), os)
+        XCTAssertEqual(runtime["goldenDirectory"] as? String, "tvOS\(TVSnapshot.osMajor)")
+        XCTAssertNotNil(runtime["runtimeBuild"] as? String, "SIMULATOR_RUNTIME_BUILD_VERSION")
+        XCTAssertNotNil(runtime["deviceModel"] as? String)
+        XCTAssertEqual(runtime["scale"] as? Double, 2)
     }
 
     // MARK: Geometry registry (M8)
@@ -144,6 +169,7 @@ final class ParitySnapshotTests: XCTestCase {
         XCTAssertEqual(nodes.first { $0.figma == slot }?.rect.size, TVSnapshot.size)
         XCTAssertTrue(nodes.contains { $0.figma.hasSuffix("166:147351") }, "the Connect button is probed")
 
+        try ParityOutput.writeRuntime()
         try ParityOutput.write(png: image, as: "a1-connect")
         try ParityOutput.write(json: ParityProbe.json(ref: "a1-connect", root: slot, scale: TVSnapshot.scale),
                                as: "a1-connect.probes.json")

@@ -88,6 +88,26 @@ test("parity.mjs is the pinned FiestaUI file, unmodified", () => {
   assert.match(PINNED.commit, /^[0-9a-f]{40}$/);
 });
 
+test("the pin is FiestaUI alpha after #378 merged, not the PR head", () => {
+  assert.equal(PINNED.ref, "alpha");
+  assert.equal(PINNED.commit, "a84531f5ad3e88095ca001b03aa6d1afe54601f6");
+});
+
+test("CLI: the report names the simulator runtime the shots came from", () => {
+  const f = fixture();
+  writeFileSync(
+    path.join(f.shots, "runtime.json"),
+    JSON.stringify({ osVersion: "26.2", runtimeBuild: "23K53", deviceModel: "Apple TV 4K (3rd generation)", goldenDirectory: "tvOS26", scale: 2 }),
+  );
+  const r = run(["--refs", f.refs, "--shots", f.shots, "--manifest", f.manifest, "--out", f.out]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(readFileSync(path.join(f.out, "report.json"), "utf8")).runtime.osVersion, "26.2");
+  assert.match(readFileSync(path.join(f.out, "report.md"), "utf8"), /tvOS 26\.2 \(23K53\).*Apple TV 4K/);
+  const bare = run(["--shots", f.shots, "--manifest", f.manifest, "--out", f.out]);
+  assert.match(readFileSync(path.join(f.out, "report.md"), "utf8"), /tvOS 26\.2/);
+  assert.equal(bare.status, 0);
+});
+
 test("downscale box-filters a 2x shot onto a 1x ref grid", () => {
   const src = png(4, 2, (x) => (x % 2 === 0 ? [200, 0, 0] : [0, 0, 100]));
   const out = downscale(src, 2);
