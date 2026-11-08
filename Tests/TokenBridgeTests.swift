@@ -142,11 +142,11 @@ final class TokenBridgeTests: XCTestCase {
                                        address: "192.168.1.20", isConnecting: false) {}
         let image = TVSnapshot.image(ZStack(alignment: .topLeading) {
             Color.black
-            card.frame(width: 520).figmaNode("card")
+            card.figmaNode("card")
         })
         let frame = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()["card"]?.frame)
-        // Inside the card, right of its text and above its bottom edge.
-        try assertSentinel(image.pixel(x: Int((frame.maxX - 30) * 2), y: Int((frame.maxY - 20) * 2)),
+        // In the card's 28 pt padding at the right edge, clear of text and corners.
+        try assertSentinel(image.pixel(x: Int((frame.maxX - 14) * 2), y: Int(frame.midY * 2)),
                            "DiscoveredBoardCard's platter must read Fiesta.palette.surface")
     }
 
@@ -180,7 +180,8 @@ final class TokenBridgeTests: XCTestCase {
         // Colour codes 63–68 round-trip to the same pigments Figma shows.
         for t in colourTiles {
             guard case .color(let c) = t.cell else { continue }
-            let code = 63 + try XCTUnwrap(BoardColor.allCases.firstIndex(of: c))
+            let index = try XCTUnwrap(BoardColor.allCases.firstIndex(of: c))
+            let code = 63 + index
             XCTAssertEqual(BoardColor(code: code), c)
         }
         // Size class lg (32×46) at Figma's tile height.
