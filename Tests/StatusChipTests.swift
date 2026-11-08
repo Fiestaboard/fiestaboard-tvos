@@ -78,10 +78,37 @@ final class StatusChipPresenterTests: XCTestCase {
         XCTAssertFalse(p.standaloneVisible(at: t0.addingTimeInterval(1), overlayVisible: false))
     }
 
+    /// Strip `166:206938`: "Living room TV: override until 9:00 PM". The
+    /// announcement is the strip's phrase, not the chip's countdown line.
     func testWhatVoiceOverSays() {
-        XCTAssertEqual(StatusChipPresenter.spoken(override, panelName: "Living room TV"),
-                       "Living room TV: Override, 2h 43m left · Holds until 9:00 PM")
-        XCTAssertEqual(StatusChipPresenter.spoken(reconnected, panelName: "Living room TV"), "Living room TV: Reconnected")
+        func say(_ c: StatusChipContent) -> String { StatusChipPresenter.spoken(c, panelName: "Living room TV") }
+        XCTAssertEqual(say(override), "Living room TV: override until 9:00 PM")
+        XCTAssertEqual(say(chip(.override, "Holds until canceled", badge: "Override")), "Living room TV: override until canceled")
+        XCTAssertEqual(say(reconnected), "Living room TV: reconnected")
+        XCTAssertEqual(say(unreachable), "Living room TV: hub unreachable, showing the last update")
+        XCTAssertEqual(say(schedule), "Living room TV: schedule, next change 9:00 PM")
+        XCTAssertEqual(StatusChipPresenter.label(override), "Override, 2h 43m left · Holds until 9:00 PM",
+                       "the chip's own element still reads its words")
+    }
+
+    /// The first status on opening the viewer is news (decided, both TVs).
+    func testTheFirstStatusOnOpeningIsNews() {
+        var p = StatusChipPresenter()
+        XCTAssertTrue(p.update(override, at: t0))
+        XCTAssertTrue(p.standaloneVisible(at: t0, overlayVisible: false))
+    }
+
+    /// A schedule hand-off: the next change passes ("Schedule"), then the next
+    /// config read brings the new one. Neither is news: one board on its
+    /// schedule throughout, so no double announcement within 10 s.
+    func testAScheduleHandOffIsNotNews() {
+        var p = StatusChipPresenter()
+        XCTAssertTrue(p.update(schedule, at: t0))
+        XCTAssertFalse(p.update(chip(.schedule, "Schedule"), at: t0.addingTimeInterval(60)))
+        let next = chip(.schedule, "Schedule · next change 1:00 AM")
+        XCTAssertFalse(p.update(next, at: t0.addingTimeInterval(68)))
+        XCTAssertEqual(p.chip, next, "the words still update")
+        XCTAssertFalse(p.standaloneVisible(at: t0.addingTimeInterval(68), overlayVisible: false))
     }
 }
 
@@ -242,12 +269,10 @@ final class ViewerStatusChipTests: XCTestCase {
         m.apply(snapshot(try panel(override)))
         clock += 61
         m.apply(snapshot(try panel(override)))
-        XCTAssertEqual(heard, ["Living room TV: Override, 2h 43m left · Holds until 9:00 PM"].map {
-            $0.replacingOccurrences(of: "9:00 PM", with: Self.time("2026-11-08T05:00:37Z"))
-        })
+        XCTAssertEqual(heard, ["Living room TV: override until " + Self.time("2026-11-08T05:00:37Z")])
         m.apply(snapshot(try panel(schedule)))
         XCTAssertEqual(heard.count, 2)
-        XCTAssertEqual(heard.last, "Living room TV: Schedule")
+        XCTAssertEqual(heard.last, "Living room TV: schedule")
     }
 
     func testAnOutageThenRecoveryReadsReconnected() throws {
@@ -266,8 +291,42 @@ final class ViewerStatusChipTests: XCTestCase {
         m.refreshChip()
         XCTAssertEqual(m.statusChip?.kind, .schedule)
         XCTAssertFalse(m.chipStandaloneVisible, "the status from before the outage is not news")
-        XCTAssertEqual(heard, ["Living room TV: Schedule", "Living room TV: Hub unreachable · showing the last update",
-                               "Living room TV: Reconnected"])
+        XCTAssertEqual(heard, ["Living room TV: schedule", "Living room TV: hub unreachable, showing the last update",
+                               "Living room TV: reconnected"])
+    }
+
+    /// #25 review must-fix: a removed board (or a deleted panel) hides the
+    /// hub's status, never the connection: an outage still shows and says
+    /// "Hub unreachable", and "Reconnected" follows.
+    func testARemovedBoardStillSaysHubUnreachable() throws {
+        let m = model()
+        let missing = try JSONDecoder().decode(Panel.self, from: Data(
+            #"{"id":"p","name":"Living room TV","board_id":"b","board_missing":true,"status":null}"#.utf8))
+        m.apply(snapshot(missing))
+        XCTAssertNil(m.statusChip)
+        m.apply(snapshot(missing, .stale))
+        XCTAssertEqual(m.statusChip?.kind, .hubUnreachable)
+        XCTAssertTrue(m.chipStandaloneVisible)
+        XCTAssertEqual(heard, ["Living room TV: hub unreachable, showing the last update"])
+        m.apply(snapshot(missing))
+        XCTAssertEqual(m.statusChip?.kind, .reconnected)
+        XCTAssertEqual(heard.count, 2)
+    }
+
+    func testADeletedPanelHidesItsStatusButNotAnOutage() throws {
+        let m = model()
+        let p = try panel(override)
+        let deleted = PanelSnapshot(panel: p, cells: [[.blank]], rows: 1, cols: 1, connection: .live, dimmed: false, deleted: true)
+        m.apply(deleted)
+        XCTAssertNil(m.statusChip, "no hub status for a panel that is gone")
+        m.apply(PanelSnapshot(panel: p, cells: [[.blank]], rows: 1, cols: 1, connection: .stale, dimmed: false, deleted: true))
+        XCTAssertEqual(m.statusChip?.kind, .hubUnreachable)
+    }
+
+    /// Strip `166:206938`: the fade is 0.3 s, and instant under Reduce Motion.
+    func testTheChipFadeIsInstantUnderReduceMotion() {
+        XCTAssertNil(ViewerScreen.chipFade(reduceMotion: true))
+        XCTAssertEqual(ViewerScreen.chipFade(reduceMotion: false), .easeInOut(duration: 0.3))
     }
 
     func testAnOldHubShowsNoChip() throws {
