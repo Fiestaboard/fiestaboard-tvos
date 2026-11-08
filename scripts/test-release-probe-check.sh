@@ -14,6 +14,7 @@ make_archive() { # name, payload
   printf 'CFBundleExecutable' > "$app/Info.plist"
   printf '\x00\x01release code\x00%s\x00more\x00' "$2" > "$app/FiestaBoardTV"
   printf '\x00extension\x00' > "$app/PlugIns/FiestaBoardTopShelf.appex/FiestaBoardTopShelf"
+  chmod +x "$app/FiestaBoardTV" "$app/PlugIns/FiestaBoardTopShelf.appex/FiestaBoardTopShelf"
   echo "$tmp/$1.xcarchive"
 }
 

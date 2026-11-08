@@ -78,6 +78,7 @@ final class ParityShotsUITests: XCTestCase {
     func testRegistryFramesAgreeWithXCUIElementFrames() throws {
         let app = launchFixture()
         defer { app.terminate() }
+        continueAfterFailure = true // report every id, not just the first miss
         let ids = ["parity:title", "parity:glass", "parity:second"]
         XCTAssertTrue(element(app, "parity:glass").waitForExistence(timeout: 10))
         let registry = try registry(containing: ids + ["parity:first"])

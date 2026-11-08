@@ -122,14 +122,15 @@ final class ParitySnapshotTests: XCTestCase {
             clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) }))
         let model = ConnectModel(app: app)
         let discovery = NeverEndingDiscovery()
+        // Never-ending, so the screen's own `.onAppear` scan is turned away
+        // and the board stays. Re-publish until the scan has subscribed.
         Task { await model.startScan(using: discovery, patience: .seconds(60)) }
-        for _ in 0..<100 where discovery.stopped == false {
-            await Task.yield()
-            if model.scanState == .looking { break }
+        let board = DiscoveredBoard(id: "http://192.168.1.20:4420", name: "Maya’s FiestaPi",
+                                    host: URL(string: "http://192.168.1.20:4420")!)
+        for _ in 0..<300 where model.boards.isEmpty {
+            discovery.publish([board])
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
-        discovery.publish([DiscoveredBoard(id: "http://192.168.1.20:4420", name: "Maya’s FiestaPi",
-                                           host: URL(string: "http://192.168.1.20:4420")!)])
-        for _ in 0..<300 where model.boards.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
         XCTAssertEqual(model.boards.count, 1)
 
         let image = TVSnapshot.image(ConnectScreen(model: model)
