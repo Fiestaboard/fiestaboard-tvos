@@ -44,6 +44,8 @@ final class InsetTests: XCTestCase {
                                     "\(screen): no heading", file: file, line: line)
         XCTAssertEqual(eyebrow.minX, PlatformTV.safeSide, accuracy: 1, "\(screen): eyebrow x", file: file, line: line)
         XCTAssertGreaterThanOrEqual(eyebrow.minY, PlatformTV.safeTopBottom - 0.5, "\(screen): eyebrow y", file: file, line: line)
+        // 07b A1/A2/A3: the eyebrow sits at y 110 (title-safe 60 + 50).
+        XCTAssertEqual(eyebrow.minY, 110, accuracy: 1, "\(screen): eyebrow at 07b's y 110", file: file, line: line)
     }
 
     func testConnectHeadingSitsAtTitleSafe() throws {
