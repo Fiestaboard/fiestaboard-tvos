@@ -297,7 +297,7 @@ final class FiestaClientTests: XCTestCase {
 
     func testTheStartupMessageNeverSendsAnyoneToTheLogs() {
         XCTAssertEqual(FiestaError.unavailable.userMessage,
-                       "Your FiestaBoard is still starting up. This usually takes under a minute.")
+                       "Your FiestaBoard hub is still starting up. This usually takes under a minute.")
         // 503 must not be reached by the 500-range clause, and 429 must keep
         // matching ahead of it.
         XCTAssertTrue(FiestaError.http(500).userMessage.contains("Check its logs"))

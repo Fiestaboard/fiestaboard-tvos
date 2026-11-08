@@ -7,10 +7,11 @@ struct DeviceSignInScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            FiestaScreenHeading(title: "Sign in with a phone or computer",
+            // Eyebrow: the hub's name — its Bonjour name until H13 PR 3 (DD8).
+            FiestaScreenHeading(title: TVCopy.DeviceSignIn.title,
                                 subtitle: model?.completeURL == nil && model?.state != .starting && model != nil
-                                    ? "Choose New code to try again, or use username and password."
-                                    : "Scan the code, or open the address below in a browser.",
+                                    ? TVCopy.DeviceSignIn.retrySubtitle
+                                    : TVCopy.DeviceSignIn.subtitle,
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
             HStack(alignment: .top, spacing: 64) {
                 Group {
@@ -35,20 +36,29 @@ struct DeviceSignInScreen: View {
                             .accessibilityLabel("Sign-in code: \(challenge.userCode.map(String.init).joined(separator: " "))")
                     }
                     if let expiry = model?.expiresAt {
-                        Text("Code expires \(expiry, style: .relative) from now.")
+                        // A2: "Code expires in 9:57", a minutes:seconds countdown.
+                        (Text(TVCopy.DeviceSignIn.expiresPrefix + " ")
+                            + Text(timerInterval: Date.now...max(expiry, Date.now), countsDown: true))
                             .foregroundStyle(Fiesta.Colors.mutedForeground)
                     }
-                    Text(model?.statusMessage ?? "Creating your code…")
-                    Text("Your browser and TV must both reach this board. If the address won't open, connect your phone or computer to the same network.")
+                    HStack(spacing: 16) {
+                        if model?.statusMessage == TVCopy.DeviceSignIn.waiting {
+                            TacoLoader(size: .small).accessibilityHidden(true)
+                        }
+                        Text(model?.statusMessage ?? "Creating your code…")
+                    }
+                    // The corrected scope line (TV-APPS §4 item 4). A3 puts
+                    // the device-name sentence in front of it (DD3).
+                    Text(TVCopy.DeviceSignIn.scope)
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
-                    Text("TV sign-in supports panels. FiestaBot is unavailable.")
+                    Text(TVCopy.DeviceSignIn.reachability)
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }
             HStack(spacing: 24) {
-                Button("New code") { model?.start() }.accessibilityIdentifier("device-new-code")
-                Button("Use username and password") { backToPassword() }
-                Button("Back") { backToPassword() }
+                Button(TVCopy.DeviceSignIn.newCode) { model?.start() }.accessibilityIdentifier("device-new-code")
+                Button(TVCopy.DeviceSignIn.usePassword) { backToPassword() }
+                Button(TVCopy.DeviceSignIn.back) { backToPassword() }
             }
         }
         .padding(Fiesta.Metrics.safeInset)

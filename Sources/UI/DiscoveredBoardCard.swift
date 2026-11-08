@@ -12,6 +12,8 @@ struct DiscoveredBoardCard: View {
     let address: String
     /// Whether this is the board currently being connected to.
     var isConnecting = false
+    /// The 07b node this card's title is probed as (the first card on A1).
+    var figmaTitle: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -23,10 +25,13 @@ struct DiscoveredBoardCard: View {
 
                 Spacer(minLength: 12)
 
-                Text(board.name)
+                // DD8: the advertised Bonjour name, verbatim.
+                Text(TVCopy.Connect.hubCardTitle(for: board))
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(Fiesta.Colors.foreground)
                     .lineLimit(1)
+                    .figmaNode(figmaTitle ?? "", label: TVCopy.Connect.hubCardTitle(for: board),
+                               enabled: figmaTitle != nil)
 
                 Text(address)
                     .font(.system(size: 24))
@@ -60,8 +65,8 @@ struct DiscoveredBoardCard: View {
                     .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         }
         .buttonStyle(.card)
-        .accessibilityLabel(isConnecting ? "\(board.name), \(address), connecting" : "\(board.name), \(address)")
-        .accessibilityHint("Connects this Apple TV to this FiestaBoard.")
+        .accessibilityLabel(TVCopy.Connect.hubCardAccessibilityLabel(for: board, address: address, connecting: isConnecting))
+        .accessibilityHint(TVCopy.Connect.hubCardHint)
     }
 }
 

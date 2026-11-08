@@ -42,21 +42,33 @@ final class ConnectA2Tests: XCTestCase {
     // MARK: 4.2 — the address field sits on --secondary (surfaceRaised)
 
     /// Sentinel, as in A1: swap surfaceRaised and the field's fill follows.
+    /// tvOS draws a translucent platter over any TextField, so the sampled
+    /// colour is the token *seen through* system chrome: a magenta sentinel
+    /// must come out magenta, and the real token must be lighter than the
+    /// ground it sits on.
     func testTheAddressFieldIsFilledWithSurfaceRaised() throws {
+        func fieldPixel() throws -> (r: UInt8, g: UInt8, b: UInt8, a: UInt8) {
+            FigmaGeometryRegistry.shared.reset()
+            let image = TVSnapshot.image(ConnectScreen().environment(makeApp())
+                .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
+                .background(Fiesta.Colors.background))
+            let field = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()["I166:147296;149:182603;166:147347"]?.frame,
+                                      "the address field is probed as the A1 'Text field (system)' node")
+            // Right of the placeholder text, vertically centred.
+            return try XCTUnwrap(image.pixel(x: Int((field.maxX - 40) * 2), y: Int(field.midY * 2)))
+        }
         let original = Fiesta.palette
         defer { Fiesta.palette = original }
-        Fiesta.palette.surfaceRaised = TokenColor(hex: "#010203", red: 1 / 255, green: 2 / 255, blue: 3 / 255, alpha: 1)
-        let app = makeApp()
-        let image = TVSnapshot.image(ConnectScreen().environment(app)
-            .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height)
-            .background(Fiesta.Colors.background))
-        let field = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()["I166:147296;149:182603;166:147347"]?.frame,
-                                  "the address field is probed as the A1 'Text field (system)' node")
-        // Right of the placeholder text, vertically centred.
-        let pixel = try XCTUnwrap(image.pixel(x: Int((field.maxX - 40) * 2), y: Int(field.midY * 2)))
-        XCTAssertEqual(Int(pixel.r), 1, accuracy: 1)
-        XCTAssertEqual(Int(pixel.g), 2, accuracy: 1)
-        XCTAssertEqual(Int(pixel.b), 3, accuracy: 1)
+
+        let token = try fieldPixel()
+        let ground = FiestaTokenValues.Dark.background
+        XCTAssertGreaterThan(Int(token.r), Int(ground.red * 255) + 8, "the field sits on surfaceRaised, not the ground")
+
+        Fiesta.palette.surfaceRaised = TokenColor(hex: "#ff00ff", red: 1, green: 0, blue: 1, alpha: 1)
+        let sentinel = try fieldPixel()
+        XCTAssertGreaterThan(Int(sentinel.r), 120, "the fill must follow Fiesta.palette.surfaceRaised")
+        XCTAssertGreaterThan(Int(sentinel.b), 120)
+        XCTAssertLessThan(Int(sentinel.g), 60)
     }
 
     // MARK: Text-equality probe inputs (§2.1 check 3)

@@ -175,7 +175,7 @@ final class SettingsPresentationTests: XCTestCase {
                        "A TV credential cannot rename panels; offering Name makes Save fail with 403")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Display style")).firstMatch.exists)
         XCTAssertTrue(app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Animations")).firstMatch.exists)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "board's web page")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "hub's web page")).firstMatch.exists)
         openRow("panelSettings.save", in: app)
         XCTAssertFalse(app.buttons["panelSettings.matrixSizing"].exists)
         XCTAssertFalse(app.textFields["LED spacing (1–20 mm)"].exists)

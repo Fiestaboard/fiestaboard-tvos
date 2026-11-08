@@ -86,15 +86,18 @@ entry, direct password sign-in, restart/revocation and the 24-hour soak against 
 same server build. Simulator tests and an unsigned archive do not replace these
 checks. See `docs/REVOCABLE-SIGN-IN.md`.
 
-FiestaBot changes the data flow: the board forwards conversation and relevant
+FiestaBot changes the data flow: the hub forwards conversation and relevant
 board content to its configured AI provider. Native chat history is held in app
-memory and cleared by New chat, sign-out, or restart; the board/provider can
+memory and cleared by New chat, sign-out, or restart; the hub/provider can
 retain their own records. Siri dictation uses Apple's system keyboard settings.
 The old blanket “no third parties” claim and automatic all-“No” App Privacy
 answers no longer describe the feature. Before publishing, align the App Store
 privacy answers and published policy with the actual provider and server data
 handling. Keep this document, SettingsScreen.privacyBody, the network usage
-text in project.yml, and the privacy manifest consistent. The manifest's
+text in project.yml, docs/PRIVACY.md and the privacy manifest consistent. The
+server is the **hub** in all of them; "board" means only what a panel shows
+(`scripts/vocabulary/check-vocabulary.mjs` enforces it for the app and
+project.yml). The manifest's
 UserDefaults reason and no-tracking declaration still describe the native app;
 no microphone permission or embedded AI SDK was added.
 

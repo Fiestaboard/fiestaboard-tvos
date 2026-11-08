@@ -218,7 +218,7 @@ final class ConnectModel {
         errorMessage = nil
         app.errorMessage = nil
         guard let url = ManualAddress.parse(manualAddress) else {
-            fail(with: "Enter an address like 192.168.1.50, board.local, or https://your-board.example.com")
+            fail(with: TVCopy.Connect.invalidAddress)
             return
         }
         await connect(to: url, name: url.host() ?? "FiestaBoard")

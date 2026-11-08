@@ -103,10 +103,10 @@ final class FiestaBotModel {
             isAvailable = availability.enabled && availability.configured && availability.supportsTV
             availabilityMessage = !availability.supportsTV
                 ? "Update FiestaBoard to use FiestaBot on Apple TV. You can still browse panels and pages."
-                : (isAvailable ? nil : "Enable FiestaBot and configure an AI provider in your board's web settings to chat here. You can still browse panels and pages.")
+                : (isAvailable ? nil : "Enable FiestaBot and configure an AI provider in your hub's web settings to chat here. You can still browse panels and pages.")
         } catch {
             guard loadGeneration == load, isCurrentConnection, !Task.isCancelled else { return }
-            availabilityMessage = "FiestaBot isn't available from this board. Check its connection, version, and AI settings."
+            availabilityMessage = "FiestaBot isn't available from this hub. Check its connection, version, and AI settings."
             report(error)
         }
     }

@@ -91,3 +91,10 @@ test("this repository uses hub vocabulary everywhere (the user-complete rule)", 
   const r = run(["--root", root]);
   assert.equal(r.status, 0, r.stderr);
 });
+
+test("interpolated identifiers and product nouns are not hub-sense copy", () => {
+  assert.deepEqual(checkSwift('let x = "\\(board.name), \\(address)"', "X.swift"), []);
+  assert.deepEqual(checkSwift('let x = "Your FiestaBoard account"', "X.swift"), []);
+  assert.deepEqual(checkSwift('let x = "Hold Select on the FiestaBoard icon"', "X.swift"), []);
+  assert.equal(checkSwift('let x = "\\(name) on this board"', "X.swift").length, 1);
+});

@@ -14,7 +14,7 @@ extension FiestaClient {
         let (bytes, response) = try await session.bytes(for: request, delegate: redirectGuard)
         guard let http = response as? HTTPURLResponse else {
             bytes.task.cancel()
-            throw ChatStreamError.response("The board returned a non-HTTP response.")
+            throw ChatStreamError.response("The hub returned a non-HTTP response.")
         }
         if !(200..<300).contains(http.statusCode) {
             var data = Data()
@@ -27,7 +27,7 @@ extension FiestaClient {
         }
         guard http.value(forHTTPHeaderField: "Content-Type")?.lowercased().contains("text/event-stream") == true else {
             bytes.task.cancel()
-            throw ChatStreamError.response("The board did not return a FiestaBot stream. Update FiestaBoard and try again.")
+            throw ChatStreamError.response("The hub did not return a FiestaBot stream. Update FiestaBoard and try again.")
         }
         return AsyncThrowingStream { continuation in
             let reader = Task {
@@ -96,7 +96,7 @@ extension FiestaClient {
             request.httpBody = try JSONEncoder().encode(body)
         }
         let (data, response) = try await session.data(for: request, delegate: redirectGuard)
-        guard let http = response as? HTTPURLResponse else { throw ChatStreamError.response("Invalid board response.") }
+        guard let http = response as? HTTPURLResponse else { throw ChatStreamError.response("Invalid hub response.") }
         guard (200..<300).contains(http.statusCode) else { throw chatHTTPError(http.statusCode, data: data) }
         return try JSONDecoder().decode(T.self, from: data)
     }

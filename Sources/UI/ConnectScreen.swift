@@ -74,8 +74,12 @@ struct ConnectScreen: View {
     // MARK: Pieces
 
     private var header: some View {
-        FiestaScreenHeading(title: "Find your FiestaBoard",
-                            subtitle: "Bring your split-flap and LED matrix panels to this TV. Choose a FiestaBoard on your network to get started.")
+        FiestaScreenHeading(title: TVCopy.Connect.title,
+                            subtitle: TVCopy.Connect.subtitle,
+                            context: TVCopy.Connect.eyebrow,
+                            figma: .init(eyebrow: Self.a1Slot + ";166:147308",
+                                         title: Self.a1Slot + ";166:147310",
+                                         subtitle: Self.a1Slot + ";166:147312"))
             .frame(maxWidth: 1200, alignment: .leading)
     }
 
@@ -110,6 +114,11 @@ struct ConnectScreen: View {
                     ForEach(found) { board in
                         card(for: board)
                     }
+                    // A1: the scan keeps listening after the first hub, and
+                    // says so beside the cards rather than going quiet.
+                    if isLooking {
+                        stillLooking
+                    }
                 }
                 // Cards lift on focus; without room inside the scroll view
                 // the lift is clipped at the edges.
@@ -128,6 +137,31 @@ struct ConnectScreen: View {
     /// The 07b A1 frame's Screen slot (`I<instance>;149:182603`).
     private static let a1Slot = "I166:147296;149:182603"
 
+    /// A1 `166:147340` "Scanning": the taco and one muted line, centred on
+    /// the card row. Not focusable; it is status, not a control.
+    private var stillLooking: some View {
+        HStack(spacing: 16) {
+            // The static brand mark, as A1 draws it (`Brand / Taco mark`,
+            // 35 pt) — not the hopping loader, which would make this row
+            // pull the eye from the hubs it is listed beside.
+            TacoMarkView()
+                .frame(width: 35, height: 35)
+                .accessibilityHidden(true)
+            Text(TVCopy.Connect.stillLooking)
+                .font(Fiesta.Text.body)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
+                .lineLimit(1)
+                .figmaNode(Self.a1Slot + ";166:147342", label: TVCopy.Connect.stillLooking)
+        }
+        // One line, extending right of its grid cell like A1's row beside
+        // the card, rather than wrapping inside a 400 pt column.
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(minHeight: Self.cardHeight, alignment: .leading)
+    }
+
+    /// `DiscoveredBoardCard`'s height (190 pt content + 2 × 28 pt padding).
+    private static let cardHeight: CGFloat = 246
+
     private static let columns = [GridItem(.adaptive(minimum: 400), spacing: 40, alignment: .topLeading)]
 
     private var boardIDs: [String] { model?.boards.map(\.id) ?? [] }
@@ -135,7 +169,8 @@ struct ConnectScreen: View {
     private func card(for board: DiscoveredBoard) -> some View {
         DiscoveredBoardCard(board: board,
                             address: BoardAddressLabel.text(for: board),
-                            isConnecting: model?.connectInFlight(for: board.id) ?? false) {
+                            isConnecting: model?.connectInFlight(for: board.id) ?? false,
+                            figmaTitle: board.id == boardIDs.first ? Self.a1Slot + ";166:147327" : nil) {
             Task { await model?.connect(to: board.host, name: board.name) }
         }
         .focused($focusedControl, equals: .board(board.id))
@@ -162,7 +197,7 @@ struct ConnectScreen: View {
                 .accessibilityHidden(true)
             emptyStateMessage
             if !isLooking {
-                Button("Search again") { Task { await model?.rescan() } }
+                Button(TVCopy.Connect.searchAgain) { Task { await model?.rescan() } }
                     .focused($focusedControl, equals: .searchAgain)
                     .padding(.top, 12)
             }
@@ -177,14 +212,14 @@ struct ConnectScreen: View {
             if isLooking {
                 TacoLoader(size: .large)
                     .accessibilityHidden(true)
-                Text("Looking for FiestaBoards on this network…")
+                Text(TVCopy.Connect.looking)
                     .font(Fiesta.Text.body)
                     .foregroundStyle(Fiesta.Colors.foreground)
-                Text("This takes a few seconds. Your board needs to be powered on and on the same network as this Apple TV.")
+                Text(TVCopy.Connect.lookingDetail)
                     .font(Fiesta.Text.caption)
                     .foregroundStyle(Fiesta.Colors.mutedForeground)
             } else {
-                Text("No FiestaBoard on this network yet")
+                Text(TVCopy.Connect.foundNothing)
                     .font(Fiesta.Text.body)
                     .foregroundStyle(Fiesta.Colors.foreground)
                 // No mention of Settings › Privacy › Local Network: on
@@ -197,7 +232,7 @@ struct ConnectScreen: View {
                 // denied permission. Offering that path would point the
                 // user at a screen that does not exist; see the
                 // local-network entry in docs/HANDOFF.md before adding it.
-                Text("This Apple TV is still listening; a board appears here within a few seconds of being powered on. If yours is on a different network, enter its address below.")
+                Text(TVCopy.Connect.foundNothingDetail)
                     .font(Fiesta.Text.caption)
                     .foregroundStyle(Fiesta.Colors.mutedForeground)
             }
@@ -216,16 +251,23 @@ struct ConnectScreen: View {
     /// route through this screen for anyone with no board on their network.
     private var manualEntry: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Or enter your board's address")
+            Text(TVCopy.Connect.manualLabel)
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
-                .figmaNode(Self.a1Slot + ";166:147344", label: "Or enter your board's address")
+                .figmaNode(Self.a1Slot + ";166:147344", label: TVCopy.Connect.manualLabel)
 
             HStack(spacing: 20) {
-                TextField("192.168.1.50 or board.local", text: manualAddressBinding)
+                TextField(TVCopy.Connect.addressPlaceholder, text: manualAddressBinding)
                     .textContentType(.URL)
                     .autocorrectionDisabled()
                     .frame(maxWidth: 560)
+                    // A1 "Text field (system)" sits on --secondary
+                    // (`surfaceRaised`), not on the ground (review #16/#17,
+                    // 4.2). tvOS draws its own translucent field platter
+                    // whatever the style, so the token goes behind it, the
+                    // same shape: one pill, the system's focus lift intact.
+                    // The platter itself is system chrome (§2.1 waivers).
+                    .background(Fiesta.Colors.surfaceRaised, in: Capsule())
                     .accessibilityLabel("FiestaBoard address")
                     .focused($focusedControl, equals: .address)
                     .figmaNode(Self.a1Slot + ";166:147347")
@@ -234,7 +276,7 @@ struct ConnectScreen: View {
                 // disabling the focused control moves focus off it and it
                 // does not reliably come back. `guard !isConnecting` in the
                 // model is the re-entry guard; this is only the feedback.
-                Button("Connect") { Task { await model?.connectManually() } }
+                Button(TVCopy.Connect.connect) { Task { await model?.connectManually() } }
                     .accessibilityLabel("Connect to the address you entered")
                     .focused($focusedControl, equals: .connect)
                     .figmaNode(Self.a1Slot + ";166:147351", label: "Connect")

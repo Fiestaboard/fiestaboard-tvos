@@ -25,6 +25,11 @@ final class ConnectPresentationTests: XCTestCase {
 
         let address = app.textFields["FiestaBoard address"]
         XCTAssertTrue(address.waitForExistence(timeout: 10))
+        // A2: hub vocabulary as VoiceOver and the remote meet it.
+        XCTAssertTrue(app.staticTexts["Find your FiestaBoard hub"].exists, "A1 title")
+        XCTAssertTrue(app.staticTexts["Or enter your hub’s address"].exists, "A1 manual-entry label")
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "board's")).firstMatch.exists,
+                       "no hub-sense 'board' on Connect")
         for _ in 0..<4 {
             if address.hasFocus { break }
             XCUIRemote.shared.press(.down)

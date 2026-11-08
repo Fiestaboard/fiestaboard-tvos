@@ -668,7 +668,7 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertFalse(body.lowercased().contains("stays on this apple tv"), body)
         XCTAssertTrue(body.contains("FiestaBoard's servers"), body)
         XCTAssertTrue(body.contains("third party"), body)
-        XCTAssertTrue(body.contains("the board you chose"), body)
+        XCTAssertTrue(body.contains("the hub you chose"), body)
     }
 
     /// The copy and the parser have to agree on what a board can be.
@@ -700,7 +700,7 @@ final class SettingsScreenTests: XCTestCase {
         let body = SettingsScreen.privacyBody
         XCTAssertTrue(body.contains("configured AI provider"), body)
         XCTAssertTrue(body.contains("Siri dictation"), body)
-        XCTAssertFalse(body.contains("the board you chose and to no one else"), body)
+        XCTAssertFalse(body.contains("the hub you chose and to no one else"), body)
         XCTAssertTrue(body.contains("the address you typed"),
                       "the typed-address path is one of the two ways to reach a board: \(body)")
         XCTAssertFalse(body.lowercased().contains("may share"), body)
@@ -713,7 +713,7 @@ final class SettingsScreenTests: XCTestCase {
     func testThePrivacyStatementSaysThePasswordIsSentToTheBoard() {
         let body = SettingsScreen.privacyBody
         XCTAssertTrue(body.contains("Keychain"), body)
-        XCTAssertTrue(body.contains("sent to that board"), body)
+        XCTAssertTrue(body.contains("sent to that hub"), body)
     }
 
     /// The schedule is now editable on Apple TV, so name its controls.
@@ -744,7 +744,7 @@ final class SettingsScreenTests: XCTestCase {
         let warning = try XCTUnwrap(model.warningMessage)
         XCTAssertFalse(warning.contains("in the FiestaBoard app"),
                        "this IS the FiestaBoard app: \(warning)")
-        XCTAssertTrue(warning.contains("board's web page"), warning)
+        XCTAssertTrue(warning.contains("hub's web page"), warning)
     }
 
     private func dimmingPanel(named name: String, start: String, end: String) throws -> Panel {

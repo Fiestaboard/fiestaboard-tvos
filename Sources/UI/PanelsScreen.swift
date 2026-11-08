@@ -134,14 +134,15 @@ struct PanelsScreen: View {
 
     private var header: some View {
         HStack {
-            FiestaScreenHeading(title: "Panels",
+            // Eyebrow: the hub's name — its Bonjour name until H13 PR 3 (DD8).
+            FiestaScreenHeading(title: TVCopy.Panels.title,
                                 subtitle: app.oledCare.invitationDismissed
-                                    ? "Choose a panel to show on this TV."
-                                    : "Choose a panel. OLED TV? Optional setup in Settings → OLED care.",
+                                    ? TVCopy.Panels.subtitle
+                                    : TVCopy.Panels.subtitleWithOLEDInvitation,
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
             Spacer(minLength: 32)
             Button { app.showSettings() } label: {
-                Label("Settings", systemImage: "gearshape")
+                Label(TVCopy.Panels.settings, systemImage: "gearshape")
             }
             .font(Fiesta.Text.body)
             .focused($settingsFocused)
@@ -342,7 +343,7 @@ struct PanelsScreen: View {
     /// looking at. Panels are made on the board's own web page — but the
     /// path to them once you are there still has to be named, so it stays.
     /// Hoisted out of the body so the copy rule can be asserted.
-    static let emptyStateDetail = "Open your board's web page in a browser on a phone or "
+    static let emptyStateDetail = "Open your hub's web page in a browser on a phone or "
         + "computer and create one under Settings → Hardware → FiestaPanel."
 
     private var emptyState: some View {
