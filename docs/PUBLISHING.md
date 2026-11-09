@@ -74,10 +74,11 @@ HTTP connections transmit passwords and bearer credentials without TLS. The boar
 address and display preferences use UserDefaults. Do not claim passwords never
 leave the device. No credential or private activation code goes to Top Shelf.
 
-Sign out/Forget remove local credentials immediately and attempt server self-revocation.
-When offline, remove the TV remotely in Account → Signed-in devices; local removal
-does not prove remote revocation. TV credentials allow panel viewing and the six
-approved display fields; FiestaBot is unavailable with this scope. Disabling new
+Sign out/Forget remove local credentials immediately and attempt hub self-revocation.
+When offline, revoke the TV on the phone in Displays › *your TV* › Shown on, or in
+Account → Signed-in devices on the hub's web page; local removal does not prove
+remote revocation. TV credentials allow panel viewing and the six
+approved display fields. Disabling new
 TV enrollment does not revoke existing credentials. Revoked/expired credentials
 never replay an old password. The QR is generated locally with Core Image.
 
@@ -86,20 +87,16 @@ entry, direct password sign-in, restart/revocation and the 24-hour soak against 
 same server build. Simulator tests and an unsigned archive do not replace these
 checks. See `docs/REVOCABLE-SIGN-IN.md`.
 
-FiestaBot changes the data flow: the hub forwards conversation and relevant
-board content to its configured AI provider. Native chat history is held in app
-memory and cleared by New chat, sign-out, or restart; the hub/provider can
-retain their own records. Siri dictation uses Apple's system keyboard settings.
-The old blanket “no third parties” claim and automatic all-“No” App Privacy
-answers no longer describe the feature. Before publishing, align the App Store
-privacy answers and published policy with the actual provider and server data
-handling. Keep this document, SettingsScreen.privacyBody, the network usage
-text in project.yml, docs/PRIVACY.md and the privacy manifest consistent. The
-server is the **hub** in all of them; "board" means only what a panel shows
+FiestaBot is retired on TV (A9): the app sends nothing to an AI provider and
+holds no chat history. At the next submission, update the App Store privacy
+answers and the age-rating questionnaire to drop the AI-provider data flow.
+Keep this document, `SettingsCopy.privacyBody`, the network usage text in
+project.yml, docs/PRIVACY.md and the privacy manifest consistent. The server is
+the **hub** in all of them; "board" means only what a panel shows
 (`scripts/vocabulary/check-vocabulary.mjs` enforces it for the app and
-project.yml). The manifest's
-UserDefaults reason and no-tracking declaration still describe the native app;
-no microphone permission or embedded AI SDK was added.
+project.yml). The manifest's UserDefaults reason and no-tracking declaration
+still describe the native app; no microphone permission or embedded AI SDK is
+present.
 
 `Resources/PrivacyInfo.xcprivacy` is the privacy manifest and it is required:
 the app reads and writes `UserDefaults` in four places, which is a
@@ -123,9 +120,9 @@ submitted until someone answers the questionnaire by hand.
 
 Before submitting, publish the [privacy policy](PRIVACY.md), set its URL and
 complete App Privacy in App Store Connect. Do not infer those answers solely
-from the native privacy manifest: the server's configured AI provider and
-retention need consideration. Complete the current **age-rating questionnaire**
-against all available features, including FiestaBot and server-supplied content.
+from the native privacy manifest: server-supplied content and the hub's
+own retention need consideration. Complete the current **age-rating questionnaire**
+against all available features, including server-supplied content.
 Do not automatically answer every content-frequency question “None.” Complete
 **Content Rights** based on the actual content and permissions; plugin-supplied
 third-party content cannot be dismissed just because the native code is open
@@ -200,3 +197,26 @@ when visible features change.
 Both app and Top Shelf Info.plist files declare the `arm64` required capability.
 The Release archive job and signed export validate the processed plists before
 upload, catching Apple's ITMS-90502 rejection locally in the build pipeline.
+
+## Release readiness checks (A12)
+
+What CI already proves before an upload, and what still needs a real Apple TV:
+
+- **Listing copy.** `fastlane/metadata/en-US/*.txt` and the Fastfile's release notes go through
+  `scripts/vocabulary/check-vocabulary.mjs` with the app's strings: "hub" (never "server" or
+  hub-sense "board"), "silence" (never "quiet"), US spelling. `A12ReleaseReadinessTests` checks
+  App Store Connect's field limits.
+- **Notices.** `Resources/THIRD_PARTY_NOTICES.txt` is the first page of Settings › About & help ›
+  Licenses. It credits the app code (MIT), the matrix data (MIT), Spline Sans Mono (OFL) and the
+  taco artwork with the owner's wording, "Taco artwork © FiestaBoard. All rights reserved. Used in
+  this app with permission." The taco art is not MIT. `A12ReleaseReadinessTests` fails on any new
+  font, bundled licence or Swift package that isn't credited, and on a package that ships.
+- **Version.** `CHANGELOG.md`'s newest heading matches `MARKETING_VERSION`; the app and its Top
+  Shelf extension carry the same numbers.
+- **Privacy.** `docs/PRIVACY.md`, the in-app Privacy page and `PrivacyInfo.xcprivacy` are checked
+  against each other. The FiestaBot paragraphs leave the policy and the in-app page together (A9).
+- **Release archive.** `scripts/check-release-probes.sh` fails on any DEBUG parity or timing probe,
+  its defaults key, or a 07b node id in the shipped binaries.
+- **Accessibility.** `AccessibilityAuditUITests` runs Apple's audit on every reachable screen.
+- **On a real Apple TV:** [docs/HARDWARE-CHECKLIST.md](HARDWARE-CHECKLIST.md), before TestFlight
+  and before each submission.

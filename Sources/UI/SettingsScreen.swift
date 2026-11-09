@@ -6,14 +6,36 @@ struct SettingsScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model: SettingsModel?
-    @State private var category: Category = .tv
+    @State private var category: Category
+    /// A8e/A8f: a long text page shown in the content column, one focus target.
+    @State private var helpDetail: HelpDetail?
+    /// S1: which This Apple TV row has focus, to bring the captions under the
+    /// last row on screen (they are not focusable, so nothing else scrolls them).
+    @FocusState private var thisTVFocus: SettingsLayout.Row?
+    private let signage: SignageSettings
     @State private var selectedPanelID: String?
     @State private var previewReload = 0
     @State private var panelsReload = 0
     @State private var confirmingForget = false
     @State private var path: [Destination] = []
 
-    private enum Category: String, CaseIterable, Identifiable {
+    /// `model`: a loaded model, for snapshot tests; the screen builds its own otherwise.
+    init(initialCategory: Category = .tv, signage: SignageSettings = .shared, model: SettingsModel? = nil) {
+        _category = State(initialValue: initialCategory)
+        _model = State(initialValue: model)
+        // A loaded model's selection is known now; waiting for the task left
+        // the first frame on "No panels yet" (seen on tvOS 26).
+        _selectedPanelID = State(initialValue: model?.panels.first?.id)
+        self.signage = signage
+        preloaded = model != nil
+    }
+
+    /// A model handed in already loaded is not reloaded on appear.
+    private let preloaded: Bool
+
+    enum HelpDetail: Hashable { case topShelf, screenProtection, privacy, licenses }
+
+    enum Category: String, CaseIterable, Identifiable {
         case tv = "This Apple TV", appearance = "Panel appearance"
         case connection = "Connection", help = "About & help"
         var id: Self { self }
@@ -29,8 +51,8 @@ struct SettingsScreen: View {
 
     private enum Destination: Hashable {
         case oledCare, panelSelection, launchPanel, flapSizing, matrixSizing, matrixTransition
-        case matrixDiagonal, matrixPitch, autoDim, screenDiagonal, displayStyle(String)
-        case displaySettings(String), resize(String), calibration(String), topShelf, privacy, screenProtection
+        case matrixDiagonal, matrixPitch, screenDiagonal, displayStyle(String)
+        case displaySettings(String), resize(String), calibration(String)
     }
 
     /// Registry probe for the content row (A4a geometry test).
@@ -58,7 +80,8 @@ struct SettingsScreen: View {
             .navigationDestination(for: Destination.self) { detail(for: $0) }
         }
         .onExitCommand {
-            if path.isEmpty { app.dismissSettings() }
+            if helpDetail != nil { helpDetail = nil }
+            else if path.isEmpty { app.dismissSettings() }
             else { path.removeLast() }
         }
         .confirmationDialog(TVCopy.Settings.forgetConfirmTitle, isPresented: $confirmingForget,
@@ -69,8 +92,12 @@ struct SettingsScreen: View {
             Text("This Apple TV will forget \(model?.boardName ?? "this hub") — its address and its saved sign-in — and go back to looking for a hub.")
         }
         .task(id: panelsReload) {
+            if preloaded, panelsReload == 0 {
+                reconcilePanelSelection()
+                return
+            }
             if model == nil {
-                model = SettingsModel(app: app)
+                model = SettingsModel(app: app, signage: signage)
                 if app.settingsPanelRef != nil { category = .appearance }
             }
             await model?.load()
@@ -83,7 +110,7 @@ struct SettingsScreen: View {
         List {
             Section {
                 ForEach(Category.allCases) { item in
-                    Button { category = item } label: {
+                    Button { category = item; helpDetail = nil } label: {
                         HStack {
                             Label(item.rawValue, systemImage: item.symbol)
                                 .lineLimit(1)
@@ -106,43 +133,27 @@ struct SettingsScreen: View {
     private var categoryContent: some View {
         switch category {
         case .tv:
-            controlList {
-                Section {
-                    choiceLink("Open at launch", value: model?.panels.first { $0.id == defaultPanelBinding.wrappedValue }?.name ?? "Panel list",
-                               destination: .launchPanel)
-                    .disabled(model?.hasLoaded != true)
-                    choiceLink("Split-flap size", value: sizingBinding.wrappedValue == .fit ? "Fit the screen" : "True flap size",
-                               destination: .flapSizing)
-                } header: { Text("Playback").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                footer: { Text("Applies only to this Apple TV.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                Section {
-                    choiceLink("Matrix size", value: matrixSizeOptions.first { $0.0 == matrixSizingBinding.wrappedValue }?.1 ?? "Fill TV",
-                               destination: .matrixSizing)
-                    .accessibilityIdentifier("settings.matrixSizing")
-                    choiceLink("Transition style", value: matrixTransitionStyleBinding.wrappedValue.label,
-                               destination: .matrixTransition)
-                        .accessibilityIdentifier("settings.matrixTransitionStyle")
-                    if model?.matrixPresentation.sizing == .trueSize {
-                        choiceLink("TV size", value: "\(Int(matrixDiagonalBinding.wrappedValue)) inches",
-                                   destination: .matrixDiagonal)
-                        choiceLink("LED spacing", value: "\(Int(matrixPitchBinding.wrappedValue)) mm",
-                                   destination: .matrixPitch)
+            // DD17 / DD19 (A8 `166:206997`): four sections; TV size and LED
+            // spacing only for True LED size, under Matrix size.
+            ScrollViewReader { proxy in
+                controlList {
+                    let sections = SettingsLayout.thisTV(matrixTrueSize: model?.matrixPresentation.sizing == .trueSize)
+                    ForEach(sections.indices, id: \.self) { index in
+                        let section = sections[index]
+                        Section {
+                            ForEach(section.rows.indices, id: \.self) { thisTVRow(section.rows[$0]) }
+                        } header: { Text(section.title).foregroundStyle(Fiesta.Colors.mutedForeground) }
                     }
-                } header: { Text("LED matrix").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(matrixSizingExplanation + " Shared panel sizing takes priority.")
-                        Text("For effects, enable Matrix transitions in Panel appearance.")
-                        if reduceMotion { Text("Effects pause while Reduce Motion is on.") }
+                    Section {
+                        caption(SettingsCopy.thisTVFooter)
+                            .accessibilityIdentifier("settings.thisTVFooter")
+                            .id(Self.thisTVEnd)
                     }
-                    .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
-                Section {
-                    NavigationLink("OLED care", value: Destination.oledCare)
-                        .accessibilityIdentifier("settings.oledCare")
-                } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                footer: { Text("Optional device-local brightness, movement and rest controls.").foregroundStyle(Fiesta.Colors.mutedForeground) }
-
+                .onChange(of: thisTVFocus) { _, row in
+                    guard row == .oledCare else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.thisTVEnd, anchor: .bottom) }
+                }
             }
         case .appearance:
             appearanceContent
@@ -152,27 +163,34 @@ struct SettingsScreen: View {
                     LabeledContent("Name", value: model?.boardName ?? "")
                     LabeledContent("Address", value: model?.boardAddress ?? "")
                 } header: { Text(TVCopy.Settings.connectedHeader).foregroundStyle(Fiesta.Colors.mutedForeground) }
-                if app.connection.usesDeviceCredential {
-                    Section { Text("TV sign-in supports panels. FiestaBot is unavailable.") }
-                }
+                // A8d `269:131778`.
                 Section {
                     Button("Sign out") { model?.signOut() }
                     Button(TVCopy.Settings.forget, role: .destructive) { confirmingForget = true }
-                } footer: {
-                    Text(app.connection.usesDeviceCredential
-                         ? "Removes this TV's saved sign-in and revokes its access. If the hub is offline, revoke this TV in Account → Signed-in devices."
-                         : "Nothing on the hub itself changes.")
+                } header: { Text("Sign-in").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                footer: {
+                    Text(SettingsCopy.connectionFooter(deviceCredential: app.connection.usesDeviceCredential,
+                                                       tvName: app.deviceName.sent))
                         .foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }
         case .help:
-            controlList {
-                Section {
-                    LabeledContent("FiestaBoard", value: Self.versionLabel)
-                    NavigationLink("Home screen shortcut", value: Destination.topShelf)
-                    NavigationLink("Screen protection & dimming", value: Destination.screenProtection)
-                    NavigationLink("Privacy", value: Destination.privacy)
-                } footer: { Text("Edit panel display settings in Panel appearance. Manage content on your hub's web page.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+            if let helpDetail {
+                helpPage(helpDetail)
+            } else {
+                // A8e `269:131926`.
+                controlList {
+                    Section {
+                        LabeledContent("FiestaBoard", value: "Version \(Self.versionLabel)")
+                        helpRow("Home screen shortcut", .topShelf)
+                        helpRow("Screen protection", .screenProtection)
+                        helpRow("Privacy", .privacy)
+                        helpRow("Licenses", .licenses)
+                    } footer: { Text(SettingsCopy.aboutFooter).foregroundStyle(Fiesta.Colors.mutedForeground) }
+                    Section {
+                        caption(SettingsCopy.screenProtectionCaption)
+                    } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                }
             }
         }
     }
@@ -191,13 +209,81 @@ struct SettingsScreen: View {
         .accessibilityValue(value)
     }
 
+    private static let thisTVEnd = "settings.thisTV.end"
+
+    /// 07b draws these as plain captions, not list cells.
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(Fiesta.Text.caption)
+            .foregroundStyle(Fiesta.Colors.mutedForeground)
+            .listRowBackground(Color.clear)
+    }
+
+    @ViewBuilder
+    private func thisTVRow(_ row: SettingsLayout.Row) -> some View {
+        switch row {
+        case .openAtLaunch:
+            choiceLink("Open at launch", value: model?.panels.first { $0.id == defaultPanelBinding.wrappedValue }?.name ?? "Panel list",
+                       destination: .launchPanel)
+            .disabled(model?.hasLoaded != true)
+        case .splitFlapSize:
+            choiceLink("Split-flap size", value: sizingBinding.wrappedValue == .fit ? "Fit the screen" : "True flap size",
+                       destination: .flapSizing)
+        case .matrixSize:
+            choiceLink("Matrix size", value: matrixSizeOptions.first { $0.0 == matrixSizingBinding.wrappedValue }?.1 ?? "Fill TV",
+                       destination: .matrixSizing)
+            .accessibilityIdentifier("settings.matrixSizing")
+        case .tvSize:
+            choiceLink("TV size", value: "\(Int(matrixDiagonalBinding.wrappedValue)) inches", destination: .matrixDiagonal)
+        case .ledSpacing:
+            choiceLink("LED spacing", value: LEDSpacing.label(matrixPitchBinding.wrappedValue), destination: .matrixPitch)
+        case .transitionStyle:
+            choiceLink("Transition style", value: matrixTransitionStyleBinding.wrappedValue.label, destination: .matrixTransition)
+                .accessibilityIdentifier("settings.matrixTransitionStyle")
+        case .oledCare:
+            choiceLink("OLED care", value: OLEDCareSummary(app.oledCare, neverDim: model?.autoDimOverride == .neverDim).rowValue,
+                       destination: .oledCare)
+            .accessibilityIdentifier("settings.oledCare")
+            .focused($thisTVFocus, equals: .oledCare)
+        case .accessibilityNote:
+            caption(SettingsCopy.accessibilityNote)
+                .accessibilityIdentifier("settings.accessibilityNote")
+        }
+    }
+
+    private func helpRow(_ title: String, _ detail: HelpDetail) -> some View {
+        Button { helpDetail = detail } label: {
+            HStack { Text(title); Spacer(); Image(systemName: "chevron.right").foregroundStyle(Fiesta.Colors.mutedForeground) }
+        }
+        .accessibilityLabel(title)
+    }
+
+    /// DD19: Screen protection, Privacy, Licenses and the shortcut help are
+    /// detail pages in the content column, each one scrollable focus target.
+    @ViewBuilder
+    private func helpPage(_ detail: HelpDetail) -> some View {
+        switch detail {
+        case .topShelf:
+            SettingsDetailPage(title: "Home screen shortcut", body: SettingsCopy.topShelfBody)
+        case .screenProtection:
+            SettingsDetailPage(title: "Screen protection", body: SettingsCopy.screenProtectionBody)
+        case .privacy:
+            SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: app.deviceName.sent),
+                               footer: SettingsCopy.privacyFooter)
+        case .licenses:
+            SettingsDetailPage(title: "Licenses",
+                               body: SettingsCopy.licenses().map { "\($0.name)\n\n\($0.text)" }.joined(separator: "\n\n"))
+        }
+    }
+
     private var matrixSizeOptions: [(MatrixSizing, String)] {
         [(.fillTV, "Fill TV"), (.fitPanel, "Fit panel"), (.trueSize, "True LED size")]
     }
 
     private func choices<Value: Equatable>(_ title: String, options: [(Value, String)],
-                                           selection: Binding<Value>) -> some View {
+                                           selection: Binding<Value>, footer: String? = nil) -> some View {
         controlList {
+            Section {
             ForEach(options.indices, id: \.self) { index in
                 let option = options[index]
                 Button {
@@ -212,6 +298,9 @@ struct SettingsScreen: View {
                 }
                 .accessibilityLabel(option.1)
                 .accessibilityValue(selection.wrappedValue == option.0 ? "Selected" : "")
+            }
+            } footer: {
+                if let footer { Text(footer).foregroundStyle(Fiesta.Colors.mutedForeground) }
             }
         }
         .navigationTitle(title)
@@ -283,6 +372,7 @@ struct SettingsScreen: View {
                 }
                 .padding(.horizontal, 20)
                 .task(id: "\(panel.id):\(panel.rows ?? 0):\(panel.cols ?? 0):\(previewReload)") {
+                    if preloaded, previewReload == 0, case .ready = model.previewState(for: panel) { return }
                     await model.loadPreview(for: panel)
                 }
             }
@@ -302,12 +392,14 @@ struct SettingsScreen: View {
                         if case .unavailable = model?.previewState(for: panel) {
                             Button("Retry preview") { previewReload += 1 }
                         }
-                        NavigationLink(model?.canEditAllDisplaySettings == false ? "Display settings" : "All display settings",
-                                       value: Destination.displaySettings(panel.id))
-                            .accessibilityIdentifier("settings.allDisplaySettings")
-                            .disabled(model?.isSavingPanel(panel) == true)
+                        // DD20: only for legacy password sign-ins.
+                        if SettingsLayout.showsAllDisplaySettings(usesDeviceCredential: app.connection.usesDeviceCredential) {
+                            NavigationLink("All display settings", value: Destination.displaySettings(panel.id))
+                                .accessibilityIdentifier("settings.allDisplaySettings")
+                                .disabled(model?.isSavingPanel(panel) == true)
+                        }
                         if panel.supportsRenderStyle {
-                            choiceLink("Display style", value: panel.renderStyle == .splitFlap ? "Split flap" : "LED matrix",
+                            choiceLink("Display style", value: panel.renderStyle == .splitFlap ? "Split-flap" : "LED matrix",
                                        destination: .displayStyle(panel.id))
                             .disabled(model?.isSavingPanel(panel) == true)
                         }
@@ -315,7 +407,10 @@ struct SettingsScreen: View {
                                isOn: animationBinding(for: panel))
                             .disabled(reduceMotion || model?.isSavingPanel(panel) == true)
                             .accessibilityIdentifier("settings.animationToggle")
-                    } footer: { Text("Applies to every viewer of this panel.").foregroundStyle(Fiesta.Colors.mutedForeground) }
+                    } footer: {
+                        Text(SettingsCopy.appearanceFooter(panelName: panel.name, autoDim: panel.autoDim))
+                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                    }
                     if reduceMotion {
                         Section {
                             Text(panel.renderStyle == .ledMatrix
@@ -354,7 +449,7 @@ struct SettingsScreen: View {
         if panel.renderStyle == .ledMatrix {
             return "\(panel.matrixDisplay.width) × \(panel.matrixDisplay.height) pixels"
         }
-        guard let cols = panel.cols, let rows = panel.rows else { return "Split flap" }
+        guard let cols = panel.cols, let rows = panel.rows else { return "Split-flap" }
         return "\(cols) × \(rows) flaps"
     }
 
@@ -385,21 +480,21 @@ struct SettingsScreen: View {
         case .flapSizing:
             choices("Split-flap size", options: [(BoardSizing.fit, "Fit the screen"), (.trueScale, "True flap size")], selection: sizingBinding)
         case .matrixSizing:
-            choices("Matrix size", options: matrixSizeOptions, selection: matrixSizingBinding)
+            choices("Matrix size", options: matrixSizeOptions, selection: matrixSizingBinding,
+                    footer: matrixSizingExplanation + " Shared panel sizing takes priority.")
         case .matrixTransition:
             choices("Transition style", options: MatrixTransitionStyle.allCases.map { ($0, $0.label) }, selection: matrixTransitionStyleBinding)
         case .matrixDiagonal:
             choices("TV size", options: (SettingsModel.presetDiagonals + [42, 48, 60, 70, 77, 83, 86, 97, 98, 100]).sorted().map { ($0, "\(Int($0)) inches") },
                     selection: matrixDiagonalBinding)
         case .matrixPitch:
-            choices("LED spacing", options: [2.0, 3, 4, 5, 6, 8, 10, 12, 16, 20].map { ($0, "\(Int($0)) mm") }, selection: matrixPitchBinding)
-        case .autoDim:
-            choices("Night dimming", options: [(AutoDimOverride.followPanel, "Follow panel schedule"), (.neverDim, "Never dim")], selection: autoDimBinding)
+            // DD21: the shared presets, in their shortest exact form.
+            choices("LED spacing", options: LEDSpacing.presets.map { ($0, LEDSpacing.label($0)) }, selection: matrixPitchBinding)
         case .screenDiagonal:
             choices("Screen size", options: SettingsModel.presetDiagonals.map { ($0, "\(Int($0)) inches") }, selection: diagonalBinding)
         case .displayStyle(let id):
             if let panel = model?.panels.first(where: { $0.id == id }) {
-                choices("Display style", options: [(PanelRenderStyle.splitFlap, "Split flap"), (.ledMatrix, "LED matrix")], selection: styleBinding(for: panel))
+                choices("Display style", options: [(PanelRenderStyle.splitFlap, "Split-flap"), (.ledMatrix, "LED matrix")], selection: styleBinding(for: panel))
                     .disabled(model?.isSavingPanel(panel) == true)
             }
         case .displaySettings(let id):
@@ -414,24 +509,8 @@ struct SettingsScreen: View {
             if let panel = model?.panels.first(where: { $0.id == id && $0.renderStyle == .splitFlap }) {
                 calibrationScreen(for: panel)
             }
-        case .topShelf:
-            controlList {
-                Section { Text(Self.topShelfBody) } header: { Text("Board shortcut on the Home screen").foregroundStyle(Fiesta.Colors.mutedForeground) }
-            }
-            .navigationTitle("Home screen shortcut")
-        case .privacy:
-            controlList {
-                Section { Text(Self.privacyBody) } footer: { Text(Self.privacyFooter).foregroundStyle(Fiesta.Colors.mutedForeground) }
-            }
-            .navigationTitle("Privacy")
         case .oledCare:
             OLEDCareScreen()
-        case .screenProtection:
-            controlList {
-                Section { Text(model?.autoDimSummary ?? "") } header: { Text("Night dimming").foregroundStyle(Fiesta.Colors.mutedForeground) }
-                Section { Text(Self.burnInBody) } header: { Text("Screen protection").foregroundStyle(Fiesta.Colors.mutedForeground) }
-            }
-            .navigationTitle("Screen protection & dimming")
         }
     }
 
@@ -508,54 +587,12 @@ struct SettingsScreen: View {
         return "\(version) (\(build))"
     }
 
-    private static let burnInBody = """
-        By default FiestaBoard requests that Apple TV stay awake while a board is showing. \
-        OLED care can allow the system screensaver or schedule black-output rest. Slowly shifting the board's position moves it a few \
-        pixels over twenty minutes to vary where the image is drawn. \
-        Your TV may still reduce brightness to protect its screen; the app \
-        cannot turn off those protections.
-        """
-
-    private static let topShelfBody = """
-        Put FiestaBoard in the top row of the Home screen to see previews of \
-        your available panels. Hold Select on the FiestaBoard icon, then move \
-        it into the top row. Open the app to refresh the pictures. Select a \
-        preview to open that panel.
-        """
-
-    /// Pinned by SettingsScreenTests and aligned with the published policy.
-    static let privacyBody = """
-        The app sends your requests to the hub you chose, at the address you typed \
-        or selected. FiestaBot also sends conversation and relevant board content \
-        through that hub to its configured AI provider, which may be a third party. \
-        The provider's data handling applies to those requests. Siri dictation uses \
-        Apple's system keyboard and privacy settings. FiestaBoard's servers and the \
-        app developer receive no analytics or tracking from this app. The hub's \
-        address and display preferences are kept in this device's app preferences; \
-        a revocable TV credential is kept in this device's Keychain on supporting \
-        servers. Your password is sent to that hub only to sign in and is not saved \
-        after a TV credential is issued. Older servers use a saved Keychain password \
-        to reconnect. Sign out removes local credentials and attempts server revocation; \
-        if the hub is offline, revoke this TV in Account → Signed-in devices. \
-        FiestaBot is unavailable with a scoped TV credential. Chat history stays in app memory until a new chat, \
-        sign-out, or app restart; your hub and AI provider may retain their own records.
-        """
-
-    private static let privacyFooter = """
-        The full privacy policy is linked from this app's page in the App \
-        Store. Apple TV has no web browser, so it can't be opened here.
-        """
-
     // Explicitly typed bindings keep the nested native control builders small.
     private var defaultPanelBinding: Binding<String?> {
         Binding(get: {
             guard let ref = model?.defaultPanelRef else { return nil }
             return model?.panels.first { $0.id == ref || String($0.shortCode) == ref }?.id
         }, set: { model?.setDefaultPanel($0) })
-    }
-
-    private var autoDimBinding: Binding<AutoDimOverride> {
-        Binding(get: { model?.autoDimOverride ?? .followPanel }, set: { model?.setAutoDimOverride($0) })
     }
 
     private var sizingBinding: Binding<BoardSizing> {
@@ -593,10 +630,6 @@ struct SettingsScreen: View {
 
     private var customDiagonalBinding: Binding<String> {
         Binding(get: { model?.customDiagonalText ?? "" }, set: { model?.setCustomDiagonal($0) })
-    }
-
-    private var driftBinding: Binding<Bool> {
-        Binding(get: { model?.driftEnabled ?? false }, set: { model?.setDriftEnabled($0) })
     }
 
     private func animationBinding(for panel: Panel) -> Binding<Bool> {

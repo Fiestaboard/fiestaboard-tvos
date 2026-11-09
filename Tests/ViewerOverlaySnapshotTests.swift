@@ -50,7 +50,7 @@ final class ViewerOverlaySnapshotTests: XCTestCase {
 
     private func overlay(chip: AnyView? = nil) -> some View {
         ViewerOverlay(panelName: "Living room TV", subtitle: "Split-flap · Maya’s FiestaPi", chip: chip,
-                      onInteraction: {}, onPanels: {}, onSettings: {}, onFiestaBot: nil)
+                      onInteraction: {}, onPanels: {}, onSettings: {})
     }
 
     private func shot(force: ViewerMaterial? = nil, reduceTransparency: Bool = false,

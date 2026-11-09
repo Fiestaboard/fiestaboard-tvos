@@ -45,12 +45,11 @@ struct ViewerOverlay: View {
     let onInteraction: () -> Void
     let onPanels: () -> Void
     let onSettings: () -> Void
-    let onFiestaBot: (() -> Void)?
 
     /// Chrome that appears with nothing focused strands the user: the board
     /// itself has given up its focus target while this is on screen, so the
     /// first action has to take focus as the bar arrives.
-    private enum Action: Hashable { case panels, settings, bot }
+    private enum Action: Hashable { case panels, settings }
     @FocusState private var focusedAction: Action?
 
     var body: some View {
@@ -76,10 +75,7 @@ struct ViewerOverlay: View {
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
             if let subtitle {
-                Text(subtitle)
-                    .font(Fiesta.Text.caption1)
-                    .foregroundStyle(Fiesta.Colors.mutedForeground)
-                    .lineLimit(1)
+                OverlayCaption(text: subtitle)
             }
         }
         #if DEBUG
@@ -104,10 +100,6 @@ struct ViewerOverlay: View {
                     .focused($focusedAction, equals: .panels)
                 Button("Settings", action: onSettings)
                     .focused($focusedAction, equals: .settings)
-                if let onFiestaBot {
-                    Button("FiestaBot", action: onFiestaBot)
-                        .focused($focusedAction, equals: .bot)
-                }
             }
         }
         .buttonStyle(.bordered)
@@ -123,5 +115,20 @@ struct ViewerOverlay: View {
         // viewer is full-bleed, so the inset is applied here.
         .padding(.horizontal, PlatformTV.safeSide)
         .padding(.top, PlatformTV.safeTopBottom)
+    }
+}
+
+/// The overlay subtitle. A view of its own so it reads the material
+/// `ViewerGlassContainer` resolved (Reduce Transparency included): the
+/// color depends on it (G-1, `ViewerMaterial.captionColor`).
+private struct OverlayCaption: View {
+    let text: String
+    @Environment(\.viewerMaterial) private var material
+
+    var body: some View {
+        Text(text)
+            .font(Fiesta.Text.caption1)
+            .foregroundStyle(material.captionColor)
+            .lineLimit(1)
     }
 }

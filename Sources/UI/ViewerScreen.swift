@@ -225,10 +225,7 @@ struct ViewerScreen: View {
                       chip: model?.statusChip.map { AnyView(StatusChipView(content: $0, placement: .inBar)) },
                       onInteraction: { model?.keepOverlayAlive() },
                       onPanels: { model?.stop(); app.showPanels() },
-                      onSettings: { model?.stop(); app.showSettings() },
-                      onFiestaBot: app.connection.usesDeviceCredential ? nil : {
-                          if app.showFiestaBot() { model?.stop() }
-                      })
+                      onSettings: { model?.stop(); app.showSettings() })
     }
 
     /// 07b `154:8173`: what the panel is, and which hub it is on.
@@ -255,7 +252,7 @@ struct ViewerScreen: View {
     /// web page, so that is where the sentence points — see `Models.swift`,
     /// which argues the same rule out for the setup copy.
     private var deletedState: some View {
-        ViewerMessage(title: "This panel no longer exists",
+        ViewerMessage(title: TVCopy.Viewer.deletedTitle,
                       detail: "It was deleted on your hub's web page.",
                       primaryTitle: "Back to panels",
                       primaryAction: { model?.stop(); app.showPanels() })

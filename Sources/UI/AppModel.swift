@@ -9,7 +9,6 @@ public enum Route: Equatable, Hashable {
     case panels
     case viewer(String)
     case settings
-    case fiestaBot
 }
 
 /// Navigation and app-wide state.
@@ -31,12 +30,7 @@ public final class AppModel {
             return storedRoute
         }
         set {
-            if storedRoute == .fiestaBot && newValue != .fiestaBot { fiestaBot?.stop() }
             withMutation(keyPath: \.route) { storedRoute = newValue }
-            if newValue == .signIn || newValue == .connect {
-                fiestaBot?.stop()
-                fiestaBot = nil
-            }
             applyScreenAwake()
         }
     }
@@ -84,9 +78,6 @@ public final class AppModel {
     var lastViewedPanelRef: String?
     /// Where Settings was opened from, so leaving it goes back there.
     private var routeBeforeSettings: Route?
-    private var routeBeforeBot: Route?
-    var fiestaBot: FiestaBotModel?
-    var botPanelRef: String?
     private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var panelReloadTask: Task<Void, Never>?
     @ObservationIgnored weak var activePanelsModel: PanelsModel?
@@ -225,12 +216,15 @@ public final class AppModel {
     }
 
     public func openPanel(ref: String) {
-        // A7b (#24 review S3): only a reference with the hub's id shape is
-        // opened or remembered.
-        guard PanelRef.isValid(ref) else { return }
         lastViewedPanelRef = ref
         errorMessage = nil
         route = .viewer(ref)
+    }
+
+    /// The hub's panel id or short-code shape (#24 S3): 1–64 ASCII letters,
+    /// digits, `-` or `_`. A decoded `?`, `/`, `%` or `..` never qualifies.
+    static func isPanelRef(_ ref: String) -> Bool {
+        ref.range(of: "\\A[A-Za-z0-9_-]{1,64}\\z", options: .regularExpression) != nil
     }
 
     /// Opens `fiestaboard://panel/<ref>` from a Top Shelf carousel item.
@@ -245,11 +239,16 @@ public final class AppModel {
         guard url.scheme == "fiestaboard",
               connection.saved != nil, connection.client != nil,
               !connection.isSignedOut else { return }
+        // #24 S3: the carousel sends exactly two shapes. Anything else (a
+        // query, a fragment, a user or port, another host) is refused.
+        guard url.query == nil, url.fragment == nil, url.user == nil,
+              url.password == nil, url.port == nil else { return }
         if url.host == "panels" {
             if components.isEmpty { showPanels() }
             return
         }
-        guard url.host == "panel", components.count == 1, PanelRef.isValid(String(components[0])) else { return }
+        guard url.host == "panel", components.count == 1,
+              Self.isPanelRef(String(components[0])) else { return }
         // No republish here. Opening a Top Shelf card brings the app to the
         // foreground, and the foreground hook above already refreshes — doing
         // it again on a cold launch into a default panel fired two panel
@@ -268,25 +267,6 @@ public final class AppModel {
         // Opening Settings twice must not lose the original origin.
         if route != .settings { routeBeforeSettings = route }
         route = .settings
-    }
-
-    @discardableResult
-    func showFiestaBot() -> Bool {
-        guard !connection.usesDeviceCredential else {
-            errorMessage = "FiestaBot is unavailable with this TV sign-in."
-            return false
-        }
-        if route != .fiestaBot { routeBeforeBot = route }
-        if case .viewer(let ref) = route { botPanelRef = ref }
-        else { botPanelRef = lastViewedPanelRef }
-        if fiestaBot?.isCurrentConnection != true { fiestaBot = FiestaBotModel(app: self) }
-        route = .fiestaBot
-        return true
-    }
-
-    func dismissFiestaBot() {
-        route = routeBeforeBot ?? .panels
-        routeBeforeBot = nil
     }
 
     /// Select the panel being watched when Settings opens. References may

@@ -3,8 +3,7 @@ import XCTest
 
 /// A7b — the #24 review follow-ups (`program/reviews/pr-tvos-24-review.md`).
 ///
-/// S3: a panel id from a deep link (or anywhere) never reaches a request
-/// path or `lastViewedPanelRef` unless it has the hub's id shape.
+/// (S3, deep-link hardening, shipped in #32.)
 /// S1: frames and statuses together never put more than four requests on a
 /// hub at once. S2: the status concurrency and the hub-switch clearing are
 /// tested, not just asserted as constants. N1: each panel's `statusAt` is
@@ -25,44 +24,6 @@ final class TopShelfHardeningTests: XCTestCase {
         super.tearDown()
     }
 
-    static let malicious = ["x?y=1", "x#frag", "..", "../auth/status", "a/b", "%2E%2E", "x%3Fy", "", " ",
-                            "a b", "ünï", String(repeating: "a", count: 65), "x\n", "x;y"]
-
-    // MARK: S3 — the id shape
-
-    func testThePanelIdShapeIsTheHubs() {
-        for valid in ["1", "42", "abc123def456", "Xy_-09AbCdEf", String(repeating: "a", count: 64),
-                      "550e8400-e29b-41d4-a716-446655440000"] {
-            XCTAssertTrue(PanelRef.isValid(valid), valid)
-        }
-        for bad in Self.malicious { XCTAssertFalse(PanelRef.isValid(bad), "\(bad.debugDescription)") }
-    }
-
-    /// Every `FiestaClient` path built from an id refuses a malformed one
-    /// before any request is made — under a cookie session too, which has no
-    /// device-token allow-list.
-    func testTheClientRefusesMalformedIdsWithoutARequest() async {
-        let client = FiestaClient(baseURL: URL(string: "http://hub:4420")!, session: StubURLProtocol.makeSession())
-        for bad in Self.malicious {
-            do { _ = try await client.panel(ref: bad); XCTFail("panel \(bad.debugDescription)") }
-            catch FiestaError.notFound {} catch { XCTFail("panel \(bad.debugDescription): \(error)") }
-            do { _ = try await client.panelReading(ref: bad); XCTFail("reading \(bad.debugDescription)") }
-            catch FiestaError.notFound {} catch { XCTFail("reading \(bad.debugDescription): \(error)") }
-            do { _ = try await client.frame(ref: bad); XCTFail("frame \(bad.debugDescription)") }
-            catch FiestaError.notFound {} catch { XCTFail("frame \(bad.debugDescription): \(error)") }
-            do { _ = try await client.updatePanel(id: bad, animationsEnabled: true); XCTFail("patch \(bad.debugDescription)") }
-            catch FiestaError.notFound {} catch { XCTFail("patch \(bad.debugDescription): \(error)") }
-        }
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty, "\(StubURLProtocol.requests.map(\.url))")
-    }
-
-    func testAValidIdIsOneEncodedSegment() async throws {
-        let client = FiestaClient(baseURL: URL(string: "http://hub:4420")!, session: StubURLProtocol.makeSession())
-        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/Xy_-09")
-        _ = try await client.panel(ref: "Xy_-09")
-        XCTAssertEqual(StubURLProtocol.requests.last?.url.absoluteString, "http://hub:4420/api/panel/Xy_-09")
-    }
-
     private func connectedApp(host: String = "http://host:4420") async throws -> (AppModel, TopShelfSnapshotStore) {
         let store = TopShelfSnapshotStore(directory: directory)
         let connection = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
@@ -71,20 +32,6 @@ final class TopShelfHardeningTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: host)!, displayName: "Board")
         return (AppModel(connection: connection, topShelfStore: store), store)
-    }
-
-    /// A crafted Top Shelf link is neither opened nor remembered.
-    func testACraftedDeepLinkIsIgnoredAndNotPersisted() async throws {
-        let (app, _) = try await connectedApp()
-        app.openTopShelfURL(URL(string: "fiestaboard://panel/abc123def456")!)
-        XCTAssertEqual(app.route, .viewer("abc123def456"))
-        app.showPanels()
-        for crafted in ["fiestaboard://panel/x%3Fy=1", "fiestaboard://panel/%2E%2E", "fiestaboard://panel/a%2Fb",
-                        "fiestaboard://panel/x%23f", "fiestaboard://panel/%20"] {
-            app.openTopShelfURL(try XCTUnwrap(URL(string: crafted), crafted))
-            XCTAssertEqual(app.route, .panels, crafted)
-            XCTAssertEqual(app.lastViewedPanelRef, "abc123def456", "\(crafted) must not be persisted")
-        }
     }
 
     // MARK: S1/S2 — the request budget

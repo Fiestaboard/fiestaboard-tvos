@@ -21,8 +21,8 @@ For Home screen previews, put FiestaBoard in the top row and open the app to
 refresh its panel snapshots. The app cannot automatically launch after an
 Apple TV power cycle.
 
-FiestaBot requires a compatible server, a configured AI provider and an
-eligible password-based connection. It is unavailable with scoped TV sign-in.
+FiestaBot is not available on Apple TV. Change what's showing from the
+FiestaBoard app on your phone or the hub's web page.
 
 [Report a problem or ask for help](https://github.com/Fiestaboard/fiestaboard-tvos/issues).
 Include the app/server versions and steps to reproduce the problem. Issues

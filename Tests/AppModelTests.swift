@@ -136,6 +136,39 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    /// Deep-link hardening (#24 S3): only the two routes the carousel sends
+    /// are honoured, and a panel id must have the hub's id / short-code shape.
+    /// A crafted link opens nothing and is not remembered as the last panel.
+    func testCraftedTopShelfLinksAreRefused() async throws {
+        let model = makeModel()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await model.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        model.showSettings()   // a baseline neither route can produce
+        for rejected in ["fiestaboard://panel/x%3Fy=1",                 // decodes to "x?y=1"
+                         "fiestaboard://panel/%2E%2E",                  // decodes to ".."
+                         "fiestaboard://panel/a%2Fb",                   // decodes to "a/b"
+                         "fiestaboard://panel/a%20b",                   // whitespace
+                         "fiestaboard://panel/abc%0A",                  // a trailing newline
+                         "fiestaboard://panel/" + String(repeating: "a", count: 65),
+                         "fiestaboard://panel/abc123def456?x=1",        // a query
+                         "fiestaboard://panel/abc123def456#frag",       // a fragment
+                         "fiestaboard://panels?x=1",
+                         "fiestaboard://user@panel/abc123def456",
+                         "fiestaboard://panel:99/abc123def456",
+                         "fiestaboard://settings"] {                    // unknown route
+            model.openTopShelfURL(URL(string: rejected)!)
+            XCTAssertEqual(model.route, .settings, rejected)
+            XCTAssertNil(model.lastViewedPanelRef, rejected)
+        }
+        XCTAssertTrue(AppModel.isPanelRef("abc123def456"))
+        XCTAssertTrue(AppModel.isPanelRef("1"))
+        XCTAssertTrue(AppModel.isPanelRef("5f0c-uuid_like-ID"))
+        XCTAssertFalse(AppModel.isPanelRef(""))
+        XCTAssertFalse(AppModel.isPanelRef("é"))
+        model.openTopShelfURL(URL(string: "fiestaboard://panel/" + String(repeating: "a", count: 64))!)
+        XCTAssertEqual(model.route, .viewer(String(repeating: "a", count: 64)), "64 characters is the limit, not past it")
+    }
+
     /// A7: the carousel's More Info (`displayAction`) opens Panels, under
     /// the same signed-in guard as a panel link.
     func testTheMoreInfoLinkOpensPanelsOnlyForAConnectedBoard() async throws {

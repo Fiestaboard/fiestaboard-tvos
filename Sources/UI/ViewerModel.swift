@@ -51,6 +51,7 @@ final class ViewerModel {
         let diagonal: Double
         let calibration: Double
         let pitch: Double
+        let noteArray: Bool
     }
 
     /// How long the overlay stays up after a button press.
@@ -242,14 +243,16 @@ final class ViewerModel {
         let key = LayoutKey(rows: snapshot.rows, cols: snapshot.cols, cells: snapshot.cells,
                             screen: screen, sizing: sizing, diagonal: panel.screenDiagonalInches,
                             calibration: panel.calibrationScale,
-                            pitch: BoardGeometry.colPitchIn(deviceType: panel.deviceType))
+                            pitch: BoardGeometry.colPitchIn(deviceType: panel.deviceType),
+                            noteArray: panel.isNoteArray)
         if let preparedLayout, preparedLayout.key == key { return preparedLayout.layout }
         let layout = try BoardLayout.fitting(
             rows: snapshot.rows, cols: snapshot.cols, cells: snapshot.cells,
             in: screen, mode: sizing,
             diagonalInches: panel.screenDiagonalInches,
             calibration: panel.calibrationScale,
-            colPitchIn: key.pitch)
+            colPitchIn: key.pitch,
+            noteArray: key.noteArray)
         preparedLayout = (key, layout)
         return layout
     }
@@ -259,12 +262,9 @@ final class ViewerModel {
     /// what `fit` already absorbs and shape is what it cannot.
     func gridSuitsScreen(_ screen: CGSize) -> Bool {
         guard snapshot.rows > 0, snapshot.cols > 0, screen.height > 0 else { return true }
-        let base = BoardLayout.size(rows: snapshot.rows, cols: snapshot.cols, tileHeight: 100)
-        guard base.height > 0 else { return true }
-        let boardAspect = base.width / base.height
-        let screenAspect = Double(screen.width / screen.height)
         // Within 25% is close enough that fit leaves no distracting margin.
-        return abs(boardAspect - screenAspect) / screenAspect < 0.25
+        return BoardLayout.gridSuits(rows: snapshot.rows, cols: snapshot.cols,
+                                     noteArray: snapshot.panel?.isNoteArray == true, screen: screen)
     }
 
     func considerResizeOffer(for screen: CGSize) {

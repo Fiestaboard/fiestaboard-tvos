@@ -1,5 +1,7 @@
 import XCTest
 
+/// A8b (`248:110205`): OLED care is one page of summary rows, each opening its
+/// own choice page (DD23: no OLED question, preview or disclaimer).
 @MainActor
 final class OLEDCareUITests: XCTestCase {
     private var server: FixtureHTTPServer?
@@ -29,11 +31,11 @@ final class OLEDCareUITests: XCTestCase {
         select("This Apple TV", app: app)
         XCUIRemote.shared.press(.right)
         select("settings.oledCare", app: app)
-        let question = app.staticTexts["oled.question"]
-        XCTAssertTrue(question.waitForExistence(timeout: 5))
-        XCTAssertEqual(question.label.lowercased(), "will you use this with an oled tv?")
+        XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
     }
-    func testQuestionBrightnessPersistenceAndBack() throws {
+    private func brightness(_ app: XCUIApplication) -> String { app.buttons["oled.brightness"].value as? String ?? "" }
+
+    func testSummaryRowsBrightnessPersistenceAndBack() throws {
         continueAfterFailure = false
         server = try FixtureHTTPServer()
         defer { server = nil }
@@ -43,33 +45,31 @@ final class OLEDCareUITests: XCTestCase {
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
         app.launch()
         openCare(app)
-        for label in ["Yes", "No", "Not sure", "Skip"] { XCTAssertTrue(app.buttons[label].exists) }
-        select("Yes", app: app)
-        XCTAssertTrue(app.staticTexts["Preview — app output only"].exists)
+        for row in ["oled.brightness", "oled.movement", "oled.night", "oled.rest", "oled.breaks", "oled.rotation",
+                    "oled.disconnected", "oled.screensaver"] {
+            XCTAssertTrue(app.buttons[row].exists, row)
+        }
+        XCTAssertFalse(app.staticTexts["oled.question"].exists, "DD23: no OLED question")
+        XCTAssertFalse(app.staticTexts["Preview — app output only"].exists, "DD23: no preview")
         select("oled.brightness", app: app)
-        for _ in 0..<5 { XCUIRemote.shared.press(.up) }
-        select("50%", app: app)
-        // Picker selection may remain in its native choice screen until Back.
-        if !app.buttons["oled.brightness"].exists { XCUIRemote.shared.press(.menu) }
+        select("50 %", app: app)
         XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
-        XCTAssertTrue((app.buttons["oled.brightness"].value as? String ?? "").contains("50"))
+        XCTAssertEqual(brightness(app), "50 %")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.staticTexts["Settings"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["settings.oledCare"].value as? String, "On · only this Apple TV")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["Your FiestaPanel displays. OLED TV? Optional setup in Settings → OLED care."].exists, "Answer dismisses the optional invitation")
+        XCTAssertFalse(app.staticTexts["Your FiestaPanel displays. OLED TV? Optional setup in Settings → OLED care."].exists,
+                       "opening OLED care dismisses the optional invitation")
         app.terminate(); app.launch()
         openCare(app)
-        XCTAssertEqual(app.buttons["Yes"].value as? String, "Selected")
-        // Scroll the persisted brightness row into the accessibility viewport.
-        for _ in 0..<8 {
-            if focused("oled.brightness", app: app) { break }
-            XCUIRemote.shared.press(.down)
-        }
-        XCTAssertTrue((app.buttons["oled.brightness"].value as? String ?? "").contains("50"))
+        XCTAssertEqual(brightness(app), "50 %", "persists on this TV")
         // Leave device defaults clean for other native presentation tests.
         select("oled.brightness", app: app)
-        for _ in 0..<5 { XCUIRemote.shared.press(.up) }
-        select("100%", app: app)
+        for _ in 0..<6 { XCUIRemote.shared.press(.down) }
+        select("100 %", app: app)
+        XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
+        XCTAssertEqual(brightness(app), "100 %")
     }
 }

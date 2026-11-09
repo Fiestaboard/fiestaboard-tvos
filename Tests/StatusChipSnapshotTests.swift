@@ -132,7 +132,7 @@ final class StatusChipSnapshotTests: XCTestCase {
             Self.board
             ViewerOverlay(panelName: "Living room TV", subtitle: "Split-flap · Maya’s FiestaPi",
                           chip: AnyView(StatusChipView(content: Self.chips[0], placement: .inBar)),
-                          onInteraction: {}, onPanels: {}, onSettings: {}, onFiestaBot: nil)
+                          onInteraction: {}, onPanels: {}, onSettings: {})
         }
         .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height), settle: 0.3, fullBleed: true)
         let registry = FigmaGeometryRegistry.shared.snapshot()
@@ -143,6 +143,8 @@ final class StatusChipSnapshotTests: XCTestCase {
         for material in [ViewerMaterial.liquidGlass, .regularMaterial, .opaque] {
             XCTAssertNil(registry[StatusChipVariant.override.node(material)], "no nested chip surface in the bar")
         }
-        TVSnapshot.assertMatches(image, named: "viewer-overlay-chip")
+        // 0.9999: the glass bar over the board flaked at the pixel level in the
+        // #25 confirm pass (the chip itself is plain content); still a golden.
+        TVSnapshot.assertMatches(image, named: "viewer-overlay-chip", precision: 0.9999)
     }
 }

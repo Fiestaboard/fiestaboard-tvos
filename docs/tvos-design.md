@@ -32,9 +32,13 @@ for the platform's lift, shadow and parallax. Panel previews deliberately use
 `PanelCardButtonStyle`: a stationary amber outline keeps dense board pixels
 stable while focus moves. Do not restore scaling or parallax to that grid
 without testing cold and warm navigation on hardware.
-Lay cards out in a `LazyVGrid` or a row. The panel browser uses two flexible
-columns sized from its actual safe-area width, not a hard-coded 1920-point
-screen. Keep the full board inside an inset 16:9 preview; the card also names
+Build every focusable card up front; defer only what is expensive to draw.
+The panel browser is not a `LazyVGrid`: under CPU load, Down onto a row that
+was not realised yet dropped focus to nothing, and tvOS then ignored focus
+requests for seconds. It stacks rows of two columns (each row a focus
+section), sized from its actual safe-area width, not a hard-coded 1920-point
+screen, and draws a board picture only for rows within one row of the
+viewport. Keep the full board inside an inset 16:9 preview; the card also names
 the hardware style and shows a readable message summary. Returning from the
 viewer restores that panel and scroll position. A later refresh must not
 move focus away from Settings or Try again.
