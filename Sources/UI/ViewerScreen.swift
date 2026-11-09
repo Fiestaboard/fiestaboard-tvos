@@ -225,10 +225,7 @@ struct ViewerScreen: View {
                       chip: model?.statusChip.map { AnyView(StatusChipView(content: $0, placement: .inBar)) },
                       onInteraction: { model?.keepOverlayAlive() },
                       onPanels: { model?.stop(); app.showPanels() },
-                      onSettings: { model?.stop(); app.showSettings() },
-                      onFiestaBot: app.connection.usesDeviceCredential ? nil : {
-                          if app.showFiestaBot() { model?.stop() }
-                      })
+                      onSettings: { model?.stop(); app.showSettings() })
     }
 
     /// 07b `154:8173`: what the panel is, and which hub it is on.

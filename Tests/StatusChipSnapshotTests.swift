@@ -132,7 +132,7 @@ final class StatusChipSnapshotTests: XCTestCase {
             Self.board
             ViewerOverlay(panelName: "Living room TV", subtitle: "Split-flap · Maya’s FiestaPi",
                           chip: AnyView(StatusChipView(content: Self.chips[0], placement: .inBar)),
-                          onInteraction: {}, onPanels: {}, onSettings: {}, onFiestaBot: nil)
+                          onInteraction: {}, onPanels: {}, onSettings: {})
         }
         .frame(width: TVSnapshot.size.width, height: TVSnapshot.size.height), settle: 0.3, fullBleed: true)
         let registry = FigmaGeometryRegistry.shared.snapshot()

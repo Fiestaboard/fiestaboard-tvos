@@ -10,16 +10,18 @@ is required; scanning alone grants no access. Codes expire after ten minutes.
 
 All three methods create the same revocable TV credential. Direct password entry
 does not retain the password after the credential is stored. Existing saved
-passwords migrate at most once automatically when enrollment is enabled. A failed
-or lost exchange requires explicit sign-in; revoked tokens never replay passwords.
+passwords migrate automatically and quietly when enrollment is enabled (A9). If
+the exchange fails for any reason other than a rejected password, the TV stays
+signed in with its saved password and tries again after six hours; the retry
+time is recorded before each exchange, so a lost reply can't cause a burst.
+A rejected password requires explicit sign-in; revoked tokens never replay passwords.
 Older servers and servers with enrollment off retain legacy password sign-in.
 Existing device credentials remain usable if enrollment is later disabled.
 
 Credentials belong to the selected server scheme/host/port/base path and live in
 device-only Keychain storage. They expire after 365 days. The TV may view panels
 and edit screen size, aspect ratio, calibration, animations and render style.
-FiestaBot is unavailable with these credentials. This limitation is deliberate in
-protocol v1. Settings shows only permitted shared display edits; panel names,
+Settings shows only permitted shared display edits; panel names,
 shared matrix sizing/LED spacing, web viewer backdrops and dim schedules are
 managed on the board's web page. Local Apple TV preferences remain available.
 Credentials are excluded from discovery and Top Shelf. HTTP LAN

@@ -81,8 +81,6 @@ public struct RootView: View {
             ViewerScreen(ref: ref)
         case .settings:
             SettingsScreen()
-        case .fiestaBot:
-            if let bot = model.fiestaBot { FiestaBotScreen(model: bot) }
         }
     }
 }

@@ -22,20 +22,6 @@ a password retained in the Keychain to reconnect. Plain HTTP connections do
 not encrypt passwords, credentials or hub requests in transit; use trusted
 networks and HTTPS where your server supports it.
 
-## Optional AI features
-
-Where supported and available to your connection, FiestaBot sends conversation
-and relevant board content through your FiestaBoard server to the AI provider
-configured on that server. That provider may be a third party and has its own
-privacy and retention policies. Review the server's provider configuration
-before sending personal or sensitive information. The native app does not
-embed an AI provider SDK or supply the developer's AI account.
-
-Scoped TV credentials cannot use FiestaBot. On eligible connections, native
-chat history stays in memory until a new chat, sign-out or app restart; your
-server and AI provider may retain their own records. Siri dictation follows
-Apple's system keyboard settings and privacy policy.
-
 ## Home screen previews
 
 Panel names and static board snapshots are cached on this Apple TV and shared

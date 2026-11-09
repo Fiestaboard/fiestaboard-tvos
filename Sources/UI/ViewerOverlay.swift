@@ -45,12 +45,11 @@ struct ViewerOverlay: View {
     let onInteraction: () -> Void
     let onPanels: () -> Void
     let onSettings: () -> Void
-    let onFiestaBot: (() -> Void)?
 
     /// Chrome that appears with nothing focused strands the user: the board
     /// itself has given up its focus target while this is on screen, so the
     /// first action has to take focus as the bar arrives.
-    private enum Action: Hashable { case panels, settings, bot }
+    private enum Action: Hashable { case panels, settings }
     @FocusState private var focusedAction: Action?
 
     var body: some View {
@@ -104,10 +103,6 @@ struct ViewerOverlay: View {
                     .focused($focusedAction, equals: .panels)
                 Button("Settings", action: onSettings)
                     .focused($focusedAction, equals: .settings)
-                if let onFiestaBot {
-                    Button("FiestaBot", action: onFiestaBot)
-                        .focused($focusedAction, equals: .bot)
-                }
             }
         }
         .buttonStyle(.bordered)

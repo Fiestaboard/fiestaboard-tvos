@@ -97,9 +97,19 @@ public final class ConnectionStore: @unchecked Sendable {
     public var usesDeviceCredential: Bool { client?.deviceToken != nil }
     public static var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1" }
 
-    /// Persisted before a migration request: a lost response must never cause
-    /// another automatic password exchange on the next launch.
-    private func migrationKey(_ host: URL) -> String { "fiestaboard.deviceMigration." + host.absoluteString }
+    /// A9: when a legacy password may next be exchanged for a TV credential.
+    /// Written **before** each exchange, so a lost response can't cause a
+    /// burst of exchanges; cleared once a credential is adopted.
+    private func migrationRetryKey(_ host: URL) -> String { "fiestaboard.deviceMigrationRetryAt." + host.absoluteString }
+    /// The pre-A9 once-only flag. It stranded a TV signed out for good after
+    /// one failed exchange; it is now ignored and removed.
+    private func legacyMigrationFlag(_ host: URL) -> String { "fiestaboard.deviceMigration." + host.absoluteString }
+    /// A9: a failed migration is retried no sooner than this.
+    public static let migrationRetryInterval: TimeInterval = 6 * 3600
+    private func migrationDue(_ host: URL) -> Bool {
+        guard let at = defaults.object(forKey: migrationRetryKey(host)) as? Date else { return true }
+        return clock() >= at
+    }
     private func credentialAllowed(_ host: URL) -> Bool {
         !defaults.bool(forKey: "fiestaboard.credentialBlocked." + host.absoluteString) &&
             (!defaults.bool(forKey: "fiestaboard.credentialsQuarantined") ||
@@ -345,18 +355,39 @@ public final class ConnectionStore: @unchecked Sendable {
             throw FiestaError.unauthorized
         case .legacyPassword(let username, let password):
             if !lock.withLock({ capabilityKnown }) { try await refreshSignInCapability() }
-            if deviceSignInEnabled {
-                try lock.withLock {
-                    try checkCurrentLocked(generation)
-                    guard !defaults.bool(forKey: migrationKey(host)) else { throw FiestaError.unauthorized }
-                    defaults.set(true, forKey: migrationKey(host))
-                    defaults.set(true, forKey: Keys.signedOut)
+            let migrate = try lock.withLock { () -> Bool in
+                try checkCurrentLocked(generation)
+                defaults.removeObject(forKey: legacyMigrationFlag(host))
+                guard deviceSignInEnabled, migrationDue(host) else { return false }
+                defaults.set(clock().addingTimeInterval(Self.migrationRetryInterval), forKey: migrationRetryKey(host))
+                return true
+            }
+            if migrate {
+                do {
+                    let result = try await client.loginDevice(username: username, password: password,
+                                                             deviceName: deviceName, appVersion: Self.appVersion)
+                    try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
+                    lock.withLock { defaults.removeObject(forKey: migrationRetryKey(host)) }
+                    return
+                } catch FiestaError.unauthorized {
+                    // The hub refused the password itself: the legacy login
+                    // would fail too. Sign-in is needed, as before A9.
+                    throw FiestaError.unauthorized
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // A9: any other failure (a booting hub, a full session
+                    // list, a bad reply, Keychain staging) leaves the TV signed
+                    // in on its password. The exchange is retried after
+                    // `migrationRetryInterval`.
+                    try checkCurrent(generation)
                 }
-                let result = try await client.loginDevice(username: username, password: password,
-                                                         deviceName: deviceName, appVersion: Self.appVersion)
-                try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
-            } else {
-                try await client.login(username: username, password: password)
+            }
+            try await client.login(username: username, password: password)
+            try lock.withLock {
+                try checkCurrentLocked(generation)
+                if client.deviceToken != nil { client.setDeviceToken(nil) }
+                defaults.set(false, forKey: Keys.signedOut)
             }
         }
     }
@@ -394,7 +425,7 @@ public final class ConnectionStore: @unchecked Sendable {
             recoveryID = UUID()
             let task = Task {
                 try await self.refreshSignInCapability()
-                if self.deviceSignInEnabled {
+                if self.deviceSignInEnabled, self.lock.withLock({ self.migrationDue(host) }) {
                     try await self.recover(stored, client: client, host: host, generation: generation)
                 }
             }
