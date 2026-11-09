@@ -8,7 +8,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { ALLOW, checkFastfile, checkListing, checkProjectYml, checkSwift, swiftLiterals } from "../check-vocabulary.mjs";
+import { ALLOW, APP_COPY_ALLOW, checkFastfile, checkListing, checkProjectYml, checkSwift, swiftLiterals } from "../check-vocabulary.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
@@ -151,4 +151,46 @@ test("CLI: a seeded listing fails the repo check", () => {
 test("listing: the description names the FiestaBoard hub", () => {
   const description = readFileSync(path.join(root, "fastlane", "metadata", "en-US", "description.txt"), "utf8");
   assert.match(description, /FiestaBoard hub/);
+});
+
+// TV wrap-up M-T1: the listing bans (server, quiet) and US spelling also
+// apply to the app's own copy under Sources/ and TopShelf/. The legacy
+// sign-in footer once read "this server’s legacy sign-in" and the guard
+// missed it because these rules only ran over the listing.
+test("app copy: the hub is never a server, quiet is not a mode, US spelling", () => {
+  for (const s of [
+    "Your username and password are stored in this Apple TV’s Keychain for this server’s legacy sign-in.",
+    "Couldn't reach the server.",
+    "Quiet hours are on.",
+    "Pick a colour.",
+    "Centred on the screen.",
+  ]) {
+    assert.ok(checkSwift(`let x = "${s}"`, "X.swift").length >= 1, s);
+  }
+  assert.deepEqual(
+    checkSwift('let x = "Your username and password are stored in this Apple TV’s Keychain for this hub’s legacy sign-in."', "X.swift"),
+    [],
+  );
+});
+
+test("app copy: the allow-list covers servers that are not the hub", () => {
+  assert.ok(APP_COPY_ALLOW.length > 0);
+  // Privacy: FiestaBoard (the project) runs no servers that see this app.
+  assert.deepEqual(
+    checkSwift('let x = "FiestaBoard’s servers and the app developer receive no analytics or tracking from this app."', "X.swift"),
+    [],
+  );
+  assert.ok(checkSwift('let x = "Your servers and the app developer receive nothing."', "X.swift").length >= 1);
+});
+
+test("CLI: a seeded TopShelf literal with 'server' fails the repo check", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocab-topshelf-"));
+  mkdirSync(path.join(dir, "TopShelf"), { recursive: true });
+  writeFileSync(path.join(dir, "project.yml"), "name: X\n");
+  writeFileSync(path.join(dir, "TopShelf", "A.swift"), 'let a = "Now showing on your hub"\n');
+  assert.equal(run(["--root", dir]).status, 0, run(["--root", dir]).stderr);
+  writeFileSync(path.join(dir, "TopShelf", "B.swift"), 'let b = "Now showing on your server"\n');
+  const r = run(["--root", dir]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /TopShelf\/B\.swift:1/);
 });
