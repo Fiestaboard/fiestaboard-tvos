@@ -26,7 +26,7 @@ different compositions. No production focus behavior was changed.
 ## Whole-app UX pass (2026-10-18)
 
 Reviewed Connect and sign-in, panel browsing and focus restoration, the viewer
-and its controls, local/shared settings, calibration, privacy, FiestaBot, and
+and its controls, local/shared settings, calibration, privacy, FiestaBot (since retired, A9), and
 Home Top Shelf using source review, simulator navigation and screenshot evidence.
 The pass preserves the native layouts and the stationary panel focus treatment.
 
@@ -45,7 +45,8 @@ The pass reproduced these problems:
   Names, numeric units/ranges and schedule fields now retain visible labels.
   Save stays focusable while editable fields are disabled; synchronous guards
   prevent duplicate writes. A remote test exercises failure and retry.
-- FiestaBot retained a stale error after a successful availability retry, allowed
+- *(Retired: FiestaBot was removed from the TV in A9, PR #32; kept as history.)*
+  FiestaBot retained a stale error after a successful availability retry, allowed
   sending with stale availability, and presented a loading/failed page list as
   empty. Availability refresh now blocks sending and rejects stale responses.
   Page loading has distinct loading, failure/retry and loaded-empty states;
@@ -231,8 +232,9 @@ execution. Useful supplemental scripts: `/tmp/settings-preview-checks.py` and
 
 The endorsed product direction is settings first, then a few content controls
 (choose an existing page, resume its schedule, show a short message), then a
-small FiestaBot trial. Content controls and chat are future phases, not shipped
-features. Upstream chat already streams responses and approval events, but has
+small FiestaBot trial. *(Retired: the FiestaBot trial shipped and was then removed
+from the TV in A9, PR #32. The TV has no chat and sends nothing to an AI provider.)*
+Content controls and chat are future phases, not shipped features. Upstream chat already streams responses and approval events, but has
 broad administration tools. A scoped TV trial needs explicit board targeting
 and server-enforced tool restrictions, plus updated privacy wording. Do not
 claim the existing blanket no-third-party statement covers AI-provider traffic.

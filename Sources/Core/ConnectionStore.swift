@@ -362,28 +362,58 @@ public final class ConnectionStore: @unchecked Sendable {
                 defaults.set(clock().addingTimeInterval(Self.migrationRetryInterval), forKey: migrationRetryKey(host))
                 return true
             }
+            // Set when a failed migration un-marks the TV signed out below.
+            var clearedSignOut = false
             if migrate {
+                // Only the exchange's own 401 means the password is wrong
+                // (#32 S1). Everything after it (validating the new token,
+                // a Keychain write, a refusal of the token) is a failed
+                // migration like any other.
+                var issued: DeviceTokenResult?
                 do {
-                    let result = try await client.loginDevice(username: username, password: password,
-                                                             deviceName: deviceName, appVersion: Self.appVersion)
-                    try await adoptDeviceCredential(result, expectedGeneration: generation, issuingClient: client)
-                    lock.withLock { defaults.removeObject(forKey: migrationRetryKey(host)) }
-                    return
+                    issued = try await client.loginDevice(username: username, password: password,
+                                                         deviceName: deviceName, appVersion: Self.appVersion)
                 } catch FiestaError.unauthorized {
                     // The hub refused the password itself: the legacy login
                     // would fail too. Sign-in is needed, as before A9.
                     throw FiestaError.unauthorized
                 } catch is CancellationError {
                     throw CancellationError()
-                } catch {
-                    // A9: any other failure (a booting hub, a full session
-                    // list, a bad reply, Keychain staging) leaves the TV signed
-                    // in on its password. The exchange is retried after
-                    // `migrationRetryInterval`.
-                    try checkCurrent(generation)
+                } catch {}
+                if let issued {
+                    do {
+                        try await adoptDeviceCredential(issued, expectedGeneration: generation, issuingClient: client)
+                        lock.withLock { defaults.removeObject(forKey: migrationRetryKey(host)) }
+                        return
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {}
                 }
+                // A9: any other failure (a booting hub, a full session list,
+                // a bad reply, a refused or unvalidated token, Keychain
+                // staging) leaves the TV signed in on its password. Adoption
+                // marks the TV signed out while it stages (#32 M1); a valid
+                // saved password is not a signed-out TV, so undo that before
+                // the legacy login, whatever that login's fate. The exchange
+                // is retried after `migrationRetryInterval`.
+                try lock.withLock {
+                    try checkCurrentLocked(generation)
+                    defaults.set(false, forKey: Keys.signedOut)
+                }
+                clearedSignOut = true
             }
-            try await client.login(username: username, password: password)
+            do {
+                try await client.login(username: username, password: password)
+            } catch FiestaError.unauthorized where clearedSignOut {
+                // That password really is wrong now: put back the sign-out
+                // the fallback just lifted. (Without a migration this path
+                // is unchanged; `authorized` applies its cooldown instead.)
+                try lock.withLock {
+                    try checkCurrentLocked(generation)
+                    defaults.set(true, forKey: Keys.signedOut)
+                }
+                throw FiestaError.unauthorized
+            }
             try lock.withLock {
                 try checkCurrentLocked(generation)
                 if client.deviceToken != nil { client.setDeviceToken(nil) }
