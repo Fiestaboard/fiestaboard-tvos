@@ -91,6 +91,82 @@ final class LegacyMigrationTests: XCTestCase {
         }
     }
 
+    private var retryKey: String { "fiestaboard.deviceMigrationRetryAt." + host.absoluteString }
+
+    /// #32 review M1: the exchange succeeds, validating the new token fails
+    /// (503) and the legacy login fails too (503). The password is still
+    /// good, so the TV must not be left signed out, now or after a relaunch.
+    private func exchangeThenValidationFails(validation: StubURLProtocol.Stub,
+                                             legacyLogin: StubURLProtocol.Stub) async throws -> (ConnectionStore, ConnectResult) {
+        let store = makeStore()
+        StubURLProtocol.enqueue(.json(signedOutStatus), for: "/api/auth/status")
+        StubURLProtocol.enqueue(validation, for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
+        StubURLProtocol.enqueue(legacyLogin, for: "/api/auth/login")
+        let result = try await store.connect(to: host, displayName: "Board")
+        return (store, result)
+    }
+
+    func testAFailedValidationAndAFailedLegacyLoginLeaveTheTVSignedIn() async throws {
+        try saveLegacy()
+        let (store, _) = try await exchangeThenValidationFails(validation: .json("{}", status: 503),
+                                                               legacyLogin: .json("{}", status: 503))
+        XCTAssertFalse(store.isSignedOut, "a valid saved password is not a signed-out TV")
+        XCTAssertFalse(store.usesDeviceCredential)
+        XCTAssertEqual(credentials.load(for: host.absoluteString)?.password, "secret")
+        XCTAssertNil(credentials.load(for: host.absoluteString + ".pending-device"))
+        XCTAssertNotNil(defaults.object(forKey: retryKey), "retried later")
+
+        // Relaunch: a fresh store over the same defaults and Keychain.
+        let relaunched = makeStore()
+        XCTAssertFalse(relaunched.isSignedOut, "still signed in after a relaunch")
+        now = now.addingTimeInterval(3600)
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(.json(signedOutStatus), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json("{}"), for: "/api/auth/login")
+        let result = try await relaunched.connect(to: host, displayName: "Board")
+        XCTAssertEqual(result, .ready, "the password signs in once the hub is back")
+        XCTAssertFalse(relaunched.isSignedOut)
+        XCTAssertEqual(exchanges, 0, "inside the six hours: no exchange")
+    }
+
+    func testAFailedValidationFallsBackToTheLegacyLogin() async throws {
+        try saveLegacy()
+        let (store, result) = try await exchangeThenValidationFails(validation: .json("{}", status: 503),
+                                                                    legacyLogin: .json("{}"))
+        XCTAssertEqual(result, .ready)
+        XCTAssertFalse(store.isSignedOut)
+        XCTAssertFalse(store.usesDeviceCredential)
+        XCTAssertEqual(credentials.load(for: host.absoluteString)?.password, "secret")
+        XCTAssertEqual(legacyLogins, 1)
+        XCTAssertNotNil(defaults.object(forKey: retryKey))
+        XCTAssertFalse(makeStore().isSignedOut, "and after a relaunch")
+    }
+
+    /// #32 review S1: only the exchange's own 401 means a wrong password. A
+    /// hub that doesn't accept the new token (`authenticated: false`) is a
+    /// failed migration: fall back to the password and retry in six hours.
+    func testARefusedNewTokenIsAFailedMigrationNotAWrongPassword() async throws {
+        try saveLegacy()
+        let (store, result) = try await exchangeThenValidationFails(validation: .json(signedOutStatus),
+                                                                    legacyLogin: .json("{}"))
+        XCTAssertEqual(result, .ready)
+        XCTAssertFalse(store.isSignedOut)
+        XCTAssertEqual(credentials.load(for: host.absoluteString)?.password, "secret")
+        XCTAssertEqual(legacyLogins, 1, "the password still works")
+        XCTAssertEqual(defaults.object(forKey: retryKey) as? Date, now.addingTimeInterval(ConnectionStore.migrationRetryInterval))
+    }
+
+    /// A legacy login the hub refuses after a failed migration still signs
+    /// the TV out: that password really is wrong.
+    func testARefusedLegacyLoginAfterAFailedMigrationSignsOut() async throws {
+        try saveLegacy()
+        let (store, result) = try await exchangeThenValidationFails(validation: .json("{}", status: 503),
+                                                                    legacyLogin: .json("{}", status: 401))
+        XCTAssertEqual(result, .needsSignIn)
+        XCTAssertTrue(store.isSignedOut)
+    }
+
     func testTheRetryWaitsSixHoursThenMigrates() async throws {
         try saveLegacy()
         _ = try await connect(exchange: .json("{}", status: 503), legacyLogin: true)
