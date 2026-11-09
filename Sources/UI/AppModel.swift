@@ -364,6 +364,7 @@ public final class AppModel {
     static let topShelfStatusInterval: TimeInterval = 300
     /// The same four-at-a-time budget the frame fetcher uses.
     static let topShelfStatusConcurrency = 4
+    static let hubRequestBudget = 4
     /// At most this many panels' statuses per refresh: `/panels` carries no
     /// status, so each one is its own `GET /panel/{id}` against a Pi.
     var topShelfStatusLimit = 12

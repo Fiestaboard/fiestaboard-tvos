@@ -153,10 +153,22 @@ final class A12ReleaseReadinessTests: XCTestCase {
             ("revocable TV credential", "revocable TV credential"),
             ("Displays › Living Room › Shown on", "Displays › *your TV* › Shown on"),
             ("not saved after a TV credential is issued", "not retained after that credential is issued"),
+            // #33 T-N4: a current hub with TV sign-in turned off also keeps
+            // the password, so the scope is "without TV sign-in", not "older".
+            ("hubs without TV sign-in use a saved, encrypted password to reconnect",
+             "Hubs without TV sign-in use a saved, encrypted password to reconnect"),
         ]
         for fact in facts {
             XCTAssertTrue(inApp.contains(fact.inApp), "in-app: \(fact.inApp)")
             XCTAssertTrue(policy.contains(fact.policy), "PRIVACY.md: \(fact.policy)")
+        }
+        // The saved-password disclosure is in both places or in neither, and
+        // neither scopes it to older hubs any more.
+        XCTAssertEqual(inApp.contains("saved, encrypted password"), policy.contains("saved, encrypted password"),
+                       "PRIVACY.md and the in-app Privacy page disclose the saved password together")
+        for scoped in ["older hubs", "Older hubs"] {
+            XCTAssertFalse(inApp.contains(scoped), "in-app: \(scoped)")
+            XCTAssertFalse(policy.contains(scoped), "PRIVACY.md: \(scoped)")
         }
         // The hub is "hub" in the policy outside the FiestaBot section, which
         // A9 deletes with the feature.

@@ -5,7 +5,8 @@ import XCTest
 ///
 /// (S3, deep-link hardening, shipped in #32.)
 /// S1: frames and statuses together never put more than four requests on a
-/// hub at once. S2: the status concurrency and the hub-switch clearing are
+/// hub at once; statuses take at most two of them, and a panel listed twice
+/// is asked once. S2: the status concurrency and the hub-switch clearing are
 /// tested, not just asserted as constants. N1: each panel's `statusAt` is
 /// its own answer's time.
 @MainActor
@@ -24,10 +25,12 @@ final class TopShelfHardeningTests: XCTestCase {
         super.tearDown()
     }
 
-    private func connectedApp(host: String = "http://host:4420") async throws -> (AppModel, TopShelfSnapshotStore) {
+    private func connectedApp(host: String = "http://host:4420",
+                              credentials: InMemoryCredentialStore = InMemoryCredentialStore())
+        async throws -> (AppModel, TopShelfSnapshotStore) {
         let store = TopShelfSnapshotStore(directory: directory)
         let connection = ConnectionStore(defaults: UserDefaults(suiteName: UUID().uuidString)!,
-                                         credentials: InMemoryCredentialStore(),
+                                         credentials: credentials,
                                          clientFactory: { FiestaClient(baseURL: $0, session: StubURLProtocol.makeSession()) })
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: host)!, displayName: "Board")
@@ -68,8 +71,9 @@ final class TopShelfHardeningTests: XCTestCase {
         StubURLProtocol.requests.map(\.url).filter { $0.path.hasPrefix("/api/panel/") && !$0.path.hasSuffix("/frame") }
     }
 
-    /// S2 (mutant M6): the status group really holds four at a time.
-    func testStatusFetchesRunFourAtATime() async throws {
+    /// S2 (mutant M6): the status group really holds two at a time, so an
+    /// unbounded group (which the shared budget would cap at four) fails.
+    func testStatusFetchesRunTwoAtATime() async throws {
         let (app, _) = try await connectedApp()
         let ids = ["a", "b", "c", "d", "e", "f", "g"]
         let probe = InFlight()
@@ -77,7 +81,74 @@ final class TopShelfHardeningTests: XCTestCase {
         await app.publishTopShelf(panels: try ids.map(panel))?.value
         await app.topShelfStatusTask?.value
         XCTAssertEqual(statusRequests.count, ids.count)
-        XCTAssertEqual(probe.maximum, AppModel.topShelfStatusConcurrency, "exactly the budget, never more")
+        XCTAssertEqual(AppModel.topShelfStatusConcurrency, 2)
+        XCTAssertEqual(probe.maximum, AppModel.topShelfStatusConcurrency, "exactly the status share, never more")
+    }
+
+    /// S1: the budget is shared, not only sequenced. Statuses already in
+    /// flight when a frame batch starts (a foreground refresh, say) still
+    /// count against the hub's four.
+    func testAFrameBatchStartedDuringStatusFetchesStaysInsideTheBudget() async throws {
+        let (app, _) = try await connectedApp()
+        let ids = ["a", "b", "c", "d", "e", "f"]
+        let probe = InFlight()
+        let frame = #"{"characters":[[1]],"message":"A","rows":1,"cols":1}"#
+        for id in ids {
+            StubURLProtocol.enqueue(probe.held(statusStub(id), for: 0.4), for: "/api/panel/\(id)")
+            StubURLProtocol.enqueue(probe.held(.json(frame)), for: "/api/panel/\(id)/frame")
+        }
+        let panels = try ids.map(panel)
+        app.publishTopShelf(panels: panels)
+        let statuses = try XCTUnwrap(app.topShelfStatusTask, "statuses start: no frame batch is running")
+        await PanelsModel(app: app).refreshPreviews(for: panels)
+        await statuses.value
+        XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path.hasSuffix("/frame") }.count, ids.count)
+        XCTAssertLessThanOrEqual(probe.maximum, AppModel.hubRequestBudget, "frames + statuses in flight at once")
+        XCTAssertEqual(AppModel.hubRequestBudget, 4)
+    }
+
+    /// S1: a panel the list carries twice costs one status and one frame.
+    func testADuplicatedPanelIsFetchedOnce() async throws {
+        let (app, _) = try await connectedApp()
+        let frame = #"{"characters":[[1]],"message":"A","rows":1,"cols":1}"#
+        for _ in 0..<2 {
+            StubURLProtocol.enqueue(.json(frame), for: "/api/panel/a/frame")
+            StubURLProtocol.enqueue(statusStub("a"), for: "/api/panel/a")
+        }
+        let panels = [try panel("a"), try panel("a")]
+        await PanelsModel(app: app).refreshPreviews(for: panels)
+        await app.topShelfStatusTask?.value
+        XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path == "/api/panel/a/frame" }.count, 1)
+        XCTAssertEqual(statusRequests.count, 1)
+    }
+
+    // MARK: #33 T-N2 — a hub switch whose sign-in fails
+
+    /// Switching to hub B stores B before B's saved password is tried. When
+    /// that login fails (503), the TV stays on Connect, and Top Shelf must not
+    /// keep A's panels; a later successful retry finds B already saved, so it
+    /// could not clear them either.
+    func testAHubSwitchWhoseSignInFailsClearsTheOldHubsShelf() async throws {
+        let credentials = InMemoryCredentialStore()
+        let (app, store) = try await connectedApp(host: "http://first:4420", credentials: credentials)
+        await app.publishTopShelf(panels: [try panel("a")])?.value
+        XCTAssertFalse(store.items().isEmpty, "the test must begin with hub A on Home")
+        app.openPanel(ref: "a")
+
+        let second = URL(string: "http://second:4420")!
+        try credentials.save(StoredCredential(username: "jeffre", password: "hunter2"),
+                             for: FiestaClient.normalizedBaseURL(second).absoluteString)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json(#"{"detail":"starting"}"#, status: 503), for: "/api/auth/login")
+        let model = ConnectModel(app: app)
+        await model.connect(to: second, name: "Second")
+        XCTAssertNotNil(model.errorMessage, "the login failed, so Connect says so")
+        XCTAssertEqual(app.connection.saved?.host, FiestaClient.normalizedBaseURL(second))
+
+        let deadline = Date().addingTimeInterval(3)
+        while !store.items().isEmpty, Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(store.items().isEmpty, "hub A's panels must leave Home when the hub changes")
+        XCTAssertNil(app.lastViewedPanelRef, "hub A's panel is not hub B's")
     }
 
     /// S1: on the first load, frames and statuses share the hub's budget:
