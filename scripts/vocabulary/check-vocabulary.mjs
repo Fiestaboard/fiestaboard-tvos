@@ -7,14 +7,14 @@
  * The thing the TV connects to is a **hub**. "Board" means only what is on
  * screen: the split-flap picture, a panel's virtual board, its position or
  * brightness. This scans every Swift string literal under Sources/ and
- * TopShelf/ that reads as copy (it contains whitespace) and project.yml's
- * user-facing strings, and fails on:
+ * TopShelf/ and project.yml's user-facing strings, and fails on:
  *   - the word "board"/"boards" unless an allow-listed display-sense phrase
- *     covers it;
+ *     covers it (only in literals that read as copy: they contain whitespace);
  *   - "your / this / the FiestaBoard" not followed by "hub" or "app", which
  *     also names the hub (TV-APPS §4 item 1);
  *   - the listing bans ("server", "quiet") and UK spellings, unless an
- *     APP_COPY_ALLOW phrase covers the hit (TV wrap-up M-T1).
+ *     APP_COPY_ALLOW phrase covers the hit (TV wrap-up M-T1), in every
+ *     literal, one-word ones included (#33 T-N1).
  *
  * Runs in Repository guards and in the Release archive job. Exit 1 with a
  * list of findings; 2 on bad input.
@@ -208,11 +208,17 @@ function canonFindings(text, allow = []) {
   return problems;
 }
 
-/** Copy inside the app (Sources/, TopShelf/, Info.plist strings): every rule. */
+/**
+ * Copy inside the app (Sources/, TopShelf/, Info.plist strings): every rule.
+ * #33 T-N1: a literal with no whitespace skips only the hub-sense "board"
+ * rule (one word is usually an identifier or a key). The listing bans and
+ * US spelling still apply, so one-word copy such as `Text("Server")`,
+ * `"Quiet"` or `"Licences"` fails. No allow-list is needed today: no
+ * one-word wire value in Sources/ or TopShelf/ is a banned word.
+ */
 function appCopyFindings(raw) {
   const problems = findings(raw);
   const text = raw.replace(/\\\((?:[^()]|\([^()]*\))*\)/g, "{}");
-  if (!/\s/.test(text)) return problems; // identifiers, keys, URLs
   return problems.concat(canonFindings(text, APP_COPY_ALLOW));
 }
 

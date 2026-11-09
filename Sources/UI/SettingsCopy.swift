@@ -32,7 +32,7 @@ enum SettingsCopy {
             + "FiestaBoard’s servers and the app developer receive no analytics or tracking from this app. "
             + "The hub’s address and display preferences stay in this Apple TV’s app preferences; "
             + "a revocable TV credential is kept in its Keychain. Your password is sent to the hub only to sign in "
-            + "and is not saved after a TV credential is issued; older hubs use a saved Keychain password to reconnect. "
+            + "and is not saved after a TV credential is issued; hubs without TV sign-in use a saved, encrypted password to reconnect. "
             + "Sign out removes local credentials and asks the hub to revoke this TV; "
             + "if the hub is offline, revoke it on your phone in Displays › \(tvName) › Shown on."
     }

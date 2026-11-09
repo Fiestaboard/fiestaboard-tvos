@@ -180,8 +180,8 @@ final class ConnectModel {
             isConnecting = false
             connectingBoardID = nil
         }
+        let previousHost = app.connection.saved?.host
         do {
-            let previousHost = app.connection.saved?.host
             let result = try await app.connection.connect(to: host, displayName: name)
             if previousHost != host { app.clearTopShelf() }
             // `.needsSetup` routes to `.connect` — the screen already on
@@ -195,6 +195,7 @@ final class ConnectModel {
             // unless it is said out loud.
             if let message = app.errorMessage { Announce.say(message) }
         } catch FiestaError.transport {
+            clearTopShelfIfTheHubChanged(from: previousHost)
             // Nothing answered at all — the one failure that really is the
             // network. `FiestaError.userMessage` is written for screens that
             // already know which board they are on and says "your
@@ -208,10 +209,22 @@ final class ConnectModel {
             // board. `userMessage` is where that judgement already lives —
             // blaming the network sends people to check cables while the
             // board sits there replying.
+            clearTopShelfIfTheHubChanged(from: previousHost)
             fail(with: error.userMessage)
         } catch {
+            clearTopShelfIfTheHubChanged(from: previousHost)
             fail(with: Self.unreachable(host))
         }
+    }
+
+    /// #33 T-N2: `connect` saves the new hub before it tries the hub's saved
+    /// password, so a sign-in that then fails (a 503, a dropped reply) still
+    /// leaves the new hub saved. Home must not keep showing the old hub's
+    /// panels, and a later successful retry finds the new hub already saved,
+    /// so it would not clear them either.
+    private func clearTopShelfIfTheHubChanged(from previousHost: URL?) {
+        guard let saved = app.connection.saved?.host, saved != previousHost else { return }
+        app.clearTopShelf()
     }
 
     func connectManually() async {
