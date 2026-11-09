@@ -197,8 +197,9 @@ final class NoteArrayTests: XCTestCase {
         let flag = BoardLayout.make(rows: 6, cols: 30, cells: [], tileHeight: 46, noteArray: false)
         XCTAssertEqual(merged.tiles, flag.tiles)
         XCTAssertTrue(merged.notes.isEmpty)
-        XCTAssertEqual(merged.tiles[15].x, 15 * 46 * 0.845, accuracy: 1e-9, "no seam")
-        XCTAssertEqual(merged.width, 30 * 46 * 0.845 - 46 * 0.145, accuracy: 1e-9)
+        // Whole-point width and gutter (FiestaUI board-metrics, A5): 32 + 7.
+        XCTAssertEqual(merged.tiles[15].x, 15 * 39, accuracy: 1e-9, "no seam")
+        XCTAssertEqual(merged.width, 30 * 39 - 7, accuracy: 1e-9)
     }
 
     // MARK: Sizing

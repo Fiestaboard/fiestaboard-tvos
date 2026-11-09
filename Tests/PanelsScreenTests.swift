@@ -258,7 +258,7 @@ extension PanelsScreenTests {
 
     /// The rows the viewport touches, and one more each side.
     func testPreviewRowsAreTheViewportAndOneRowEitherSide() {
-        let card: CGFloat = 616, pitch = card + PanelsScreen.gridSpacing, inset: CGFloat = 44
+        let card: CGFloat = 628, pitch = card + PanelsScreen.gridSpacing, inset = PanelsScreen.gridTopInset
         func rows(_ minY: CGFloat, _ height: CGFloat = 700, count: Int = 7) -> Range<Int> {
             PanelsScreen.previewRows(visibleMinY: minY, visibleHeight: height, rowHeight: card, rowCount: count)
         }
@@ -685,14 +685,14 @@ extension PanelsScreenTests {
         let left = Self.cardMargin
         let right = left + Int(PanelCard.width) - 1
 
-        // The board is the only pure black on the card: the ground is
-        // #0e0d0b and the plate #181613.
+        // 07b: the preview is the board bezel (#050505) edge to edge, and
+        // the board's tiles, lighter than the bezel, sit inside it.
         var firstBoard = Int.max
         var lastBoard = Int.min
         for y in stride(from: left + 30, to: left + Int(PanelCard.previewHeight) - 30, by: 17) {
             for x in left...right {
                 guard let p = image.pixel(x: x, y: y) else { continue }
-                guard p.r < 6, p.g < 6, p.b < 6 else { continue }
+                guard luma(p) > 8 else { continue }
                 firstBoard = min(firstBoard, x)
                 lastBoard = max(lastBoard, x)
             }
@@ -704,32 +704,26 @@ extension PanelsScreenTests {
         XCTAssertLessThanOrEqual(abs(leadingPlate - trailingPlate), 3,
                                  "board is off centre: \(leadingPlate)pt of plate on the left, "
                                  + "\(trailingPlate)pt on the right")
-        XCTAssertGreaterThanOrEqual(leadingPlate, Int(PanelCard.boardInset),
+        XCTAssertGreaterThanOrEqual(leadingPlate, Int(PanelCard.boardInset.leading),
                                     "the board should be mounted on the plate, not bled to the edge")
     }
 
-    /// The card must have an edge.
-    ///
-    /// Against the old grey ground the plate was lighter than the app and
-    /// that was edge enough. On a near-black ground the plate is a few
-    /// values above it and the board on the card is pure black — DARKER
-    /// than the ground — so the card read as a hole. The hairline is what
-    /// draws the edge now, and it has to survive the surfaces moving again.
-    func testTheCardHasAVisibleEdgeAgainstTheAppGround() throws {
+    /// The card's edge is 07b's: the --card plate on the --background
+    /// ground, with no hairline (Default `154:4187`).
+    func testTheCardEdgeIsThePlateOnTheGround() throws {
         let image = try cardImage()
-        let midCard = Self.cardMargin + Int(PanelCard.previewHeight) / 2
-        let ground = try XCTUnwrap(image.pixel(x: 4, y: midCard))
-
+        let y = Self.cardMargin + Int(PanelCard.previewHeight) + 60   // in the meta block
+        let plate = try XCTUnwrap(image.pixel(x: Self.cardMargin + 3, y: y))
+        let ground = try XCTUnwrap(image.pixel(x: Self.cardMargin - 4, y: y))
+        let card = FiestaTokenValues.Dark.card, background = FiestaTokenValues.Dark.background
+        XCTAssertEqual(Double(plate.r) / 255, card.red, accuracy: 2.0 / 255, "the plate is --card")
+        XCTAssertEqual(Double(ground.r) / 255, background.red, accuracy: 2.0 / 255, "outside is --background")
         var brightest = 0
         for x in (Self.cardMargin - 3)...(Self.cardMargin + 3) {
-            guard let p = image.pixel(x: x, y: midCard) else { continue }
+            guard let p = image.pixel(x: x, y: y) else { continue }
             brightest = max(brightest, luma(p))
         }
-        // The plate alone is only about 9 above the ground — not an edge
-        // at ten feet. The hairline is about 34. Anything under 20 means
-        // the hairline has gone.
-        XCTAssertGreaterThan(brightest - luma(ground), 20,
-                             "the card's edge is indistinguishable from the app ground")
+        XCTAssertLessThanOrEqual(brightest, luma(plate) + 2, "no hairline brighter than the plate")
     }
 
     /// Board black, app ground and the viewer's true black are three

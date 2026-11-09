@@ -297,8 +297,10 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let slot = TopShelfPreviewRenderer.boardSlot
         XCTAssertTrue(slot.insetBy(dx: -1, dy: -1).contains(board), "\(board) inside \(slot)")
         XCTAssertGreaterThanOrEqual(board.minX, 700, "clear of the text column")
-        // Aspect-fit: the board fills the slot on one axis.
-        XCTAssertTrue(abs(board.width - slot.width) <= 2 || abs(board.height - slot.height) <= 2, "\(board)")
+        // Aspect-fit: the board fills the slot on one axis, to within one
+        // column: widths and gutters are whole points (FiestaUI
+        // board-metrics), so the pitch can't land exactly.
+        XCTAssertTrue(abs(board.width - slot.width) <= slot.width / 30 || abs(board.height - slot.height) <= 2, "\(board)")
         XCTAssertEqual(pixels.at(40, 1060).r + pixels.at(40, 1060).g, 0, "true black outside the board")
     }
 
