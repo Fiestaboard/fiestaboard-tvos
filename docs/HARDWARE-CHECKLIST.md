@@ -45,7 +45,7 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
 |---|---|
 | Connect | The hub card names the hub and its address. "Enter hub address" is reachable. |
 | Sign in with your phone | The QR is announced with its address, and the code is read as separate characters. "Use username and password" and "New code" are reachable. "Approved by …" is read once. |
-| Your panels | Each card reads its name and what it shows. Settings is reachable. |
+| Panels | Each card reads its name and what it shows. Settings is reachable. |
 | Viewer | The board's message is read when it changes, politely. A status change (override, silence) is announced once. The controls appear on a press. "Hub unreachable · showing the last update" is announced. |
 | Settings | The four categories, then every row reads its label and value. Home screen shortcut, Screen protection, Privacy and Licenses scroll with the remote and read in full. |
 | OLED care | Every row reads its value; choice lists read the selected option. |
@@ -66,10 +66,13 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
   - the panel name, the subtitle (muted text) and the chip text are readable at 3 m in both rooms;
   - the chip's dot and icons are distinguishable;
   - nothing shimmers or flickers.
-- **Known (A12 finding G-1):**
-  - The subtitle on glass over a pure-white board measured 4.33:1 in the simulator, against the 4.5:1 that
-    the regular material meets.
-  - Photograph this case from 3 m in the bright room and attach it to the designer's glass-tint decision.
+- **G-1 (fixed in the TV wrap-up, DD27):**
+  - The subtitle on glass used to be muted text, which measured 4.33:1 over a pure-white board in the
+    simulator, under the 4.5:1 the regular material meets.
+  - On glass only it is now `--foreground` at 0.78 opacity: 6.54:1 over white and 10.87:1 over black (tvOS
+    27.2 simulator). The regular material and opaque keep the muted text.
+  - Photograph the white-panel case from 3 m in the bright room. Attach it to the designer's glass-tint
+    decision; once that token ships, the subtitle may go back to the muted token if it passes.
 
 ## 3. Top Shelf text (DD26)
 
@@ -83,7 +86,7 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
   - every item shows the panel's preview, with no text drawn into the image;
   - the system shows the panel's name (title) and the status line (`contextTitle`), for example "Override
     until 9:00 PM";
-  - Play opens that panel and More Info opens Your panels.
+  - Play opens that panel and More Info opens Panels.
 - **Record:** whether the system shows the title and status text on this tvOS version. The tvOS 26 and 27
   simulators show none, and DD26 leaves this to hardware. A photo is the evidence.
 
@@ -124,7 +127,7 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
      board frame.
   3. Do it five times and take the median.
   4. Do it once with an open-at-launch panel set (which opens the viewer) and once without (which opens
-     Your panels).
+     Panels).
 - **Pass:**
   - **Apple TV 4K:** median **≤ 2.0 s** to the first content;
   - **Apple TV HD:** median **≤ 3.0 s**;
@@ -170,10 +173,10 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
   - an IR universal remote or the TV's own remote through HDMI-CEC.
 - **Pass:**
   - **Swipes and clicks:** on the touch surface, swipes move focus one step at a time and a click selects.
-    On the clickpad, the ring's edges move focus and the centre selects; circling the ring doesn't jump
+    On the clickpad, the ring's edges move focus and the center selects; circling the ring doesn't jump
     through a list.
-  - **Menu / Back:** goes up one level every time (Viewer → Your panels; a Settings page → Settings → where
-    you came from; OLED care → Settings), and never exits from a nested screen. On Your panels, it leaves
+  - **Menu / Back:** goes up one level every time (Viewer → Panels; a Settings page → Settings → where
+    you came from; OLED care → Settings), and never exits from a nested screen. On Panels, it leaves
     the app.
   - **Waking from rest:** while the viewer rests, the first press only wakes it; it doesn't open the
     controls or act.
@@ -207,7 +210,7 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
   - **Age rating:** the questionnaire is answered against server-supplied content.
   - **Listing and media:** the review notes and the reviewer walkthrough are attached (App Store media
     workflow). Screenshots match the current screens. The listing passes the vocabulary guard.
-  - **Licences and encryption:** Licenses shows the notices, with the taco credit. Export compliance
+  - **Licenses and encryption:** Licenses shows the notices, with the taco credit. Export compliance
     (`ITSAppUsesNonExemptEncryption = NO`) is accepted.
   - **The demo hub:** the review contact can reach a demo hub, or the notes explain the fixture walkthrough.
 
@@ -236,8 +239,78 @@ every App Store submission. The Android twin is fiestaboard-androidtv's `docs/HA
   - a build from `main` reaches TestFlight;
   - `CHANGELOG.md`'s heading matches the version that ships.
 
+## 14. Discovery
+
+- **How:**
+  1. With the TV and the hub on the same network, open Connect and wait for the hub card (Bonjour).
+  2. Enter the hub by a manual IPv4 address with its port, for example `192.168.1.30:4420`.
+  3. Enter it by its `.local` name, for example `fiestapi.local`.
+  4. If the hub sits behind a reverse proxy, enter the proxy address with its path (HTTPS or a subpath).
+  5. Repeat step 1 with the hub switched off, then on.
+- **Pass:**
+  - **Bonjour:** the hub card appears within 10 s and names the hub and its address (DD8, DD12).
+  - **Manual and `.local`:** each connects and lists panels.
+  - **Proxy:** connects through the proxy; the port and path are kept.
+  - **Hub off:** Connect says it couldn't reach the hub and offers the address field; it doesn't ask for a
+    password. When the hub is back, the card returns.
+
+## 15. 4K sharpness and DD24 dots
+
+- **How:** on an Apple TV 4K at native 4K output (Settings › Video and Audio › Format, 4K SDR), open a
+  64 × 64 LED panel with a pixel canvas, a 96 × 24 panel and a split-flap panel. Photograph each from 30 cm
+  with a phone, plus one from 3 m.
+- **Pass:**
+  - boards are sharp, with no scaling blur or shimmer at native 4K;
+  - LED dots are 0.82 of the pitch, with rounded corners visible on dots of 6 px and larger, and a true-black
+    gap between them (DD24);
+  - text sits on the hub's cell grid in its 5 × 7 font.
+
+## 16. Legacy sign-in migration (A9)
+
+- **How:**
+  1. Turn device sign-in off on the hub (or use a hub version without it).
+  2. On the TV, sign in with username and password. Confirm the footer says the password is stored for
+     this hub's legacy sign-in, and "All display settings" shows (DD20).
+  3. Turn device sign-in on (or update the hub to a version with it). Relaunch the app.
+  4. Check the hub's device list and the phone's Displays.
+- **Pass:**
+  - the TV is still signed in after step 3, with no password prompt;
+  - it now holds a TV credential: the TV is listed on the hub and the phone, and "All display settings"
+    is gone;
+  - **hub off during step 3:** the TV stays signed in on its password and retries the exchange later
+    (within 6 hours); it never sends you to Sign in while the hub is unreachable.
+
+## 17. Increase Contrast (DD19)
+
+- **How:** turn on Settings › Accessibility › Display › Increase Contrast, then open an LED panel and the
+  Panels grid. Turn it off again.
+- **Pass:**
+  - with it on, the LED lens lighting is off on the viewer and on the Panels previews, and the dots stay
+    distinguishable;
+  - with it off, the lens lighting returns;
+  - text and controls stay readable in both states.
+
 ## Results
+
+Fill one row per item, per device.
 
 | Date | Device | tvOS | Build | Item | Pass / fail | Evidence |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| | | | | Setup | | |
+| | | | | 1. VoiceOver | | |
+| | | | | 2. Liquid Glass contrast | | |
+| | | | | 3. Top Shelf text | | |
+| | | | | 4. LED redraw time (HD) | | |
+| | | | | 5. Split-flap frame rate | | |
+| | | | | 6. Cold start | | |
+| | | | | 7. 24-hour soak | | |
+| | | | | 8. OLED care | | |
+| | | | | 9. Siri Remote | | |
+| | | | | 10. Overscan | | |
+| | | | | 11. TestFlight and review | | |
+| | | | | 12. O6 entitlement | | |
+| | | | | 13. O10 | | |
+| | | | | 14. Discovery | | |
+| | | | | 15. 4K sharpness and DD24 dots | | |
+| | | | | 16. Legacy sign-in migration | | |
+| | | | | 17. Increase Contrast | | |
