@@ -150,6 +150,16 @@ export function checkProjectYml(source, file = "project.yml") {
   return out;
 }
 
+/** A12: App Store listing copy (fastlane/metadata/<locale>/*.txt). */
+export function checkListing(source, file) {
+  return [];
+}
+
+/** A12: the release-notes strings deliver uploads from fastlane/Fastfile. */
+export function checkFastfile(source, file = "fastlane/Fastfile") {
+  return [];
+}
+
 function swiftFiles(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {
