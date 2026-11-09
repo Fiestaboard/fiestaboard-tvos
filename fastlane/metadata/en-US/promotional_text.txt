@@ -1,1 +1,1 @@
-Your FiestaBoard panels, on your TV. Enjoy animated split-flap displays, LED matrices, pixel artwork, and Home screen previews from your own server.
+Your FiestaPanel displays, on your TV: animated split-flap boards, LED matrices, pixel artwork, and Home screen previews from your own FiestaBoard hub.

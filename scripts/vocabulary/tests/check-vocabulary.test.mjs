@@ -2,13 +2,13 @@
 // Run: node --test scripts/vocabulary/tests/*.test.mjs
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { ALLOW, checkProjectYml, checkSwift, swiftLiterals } from "../check-vocabulary.mjs";
+import { ALLOW, checkFastfile, checkListing, checkProjectYml, checkSwift, swiftLiterals } from "../check-vocabulary.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
@@ -97,4 +97,58 @@ test("interpolated identifiers and product nouns are not hub-sense copy", () => 
   assert.deepEqual(checkSwift('let x = "Your FiestaBoard account"', "X.swift"), []);
   assert.deepEqual(checkSwift('let x = "Hold Select on the FiestaBoard icon"', "X.swift"), []);
   assert.equal(checkSwift('let x = "\\(name) on this board"', "X.swift").length, 1);
+});
+
+// A12: the App Store listing (fastlane/metadata) and the release notes in the
+// Fastfile are copy too. CANON: "hub" (never "server" or hub-sense "board"),
+// "silence" (never "quiet hours"), US spelling.
+test("listing: the hub is never a server or a board", () => {
+  for (const s of [
+    "Connects to your own FiestaBoard server.",
+    "See updates from your board.",
+    "Manage TV access from your board.",
+  ]) {
+    assert.equal(checkListing(s, "description.txt").length, 1, s);
+  }
+});
+
+test("listing: CANON terms and US spelling", () => {
+  for (const s of [
+    "Schedules, overrides and quiet hours at a glance.",
+    "Quiet mode for the night.",
+    "Pick a colour for your favourite panel.",
+    "Centre the board layout.",
+    "Its behaviour follows the hub.",
+    "Licence notices are in Settings.",
+  ]) {
+    assert.ok(checkListing(s, "description.txt").length >= 1, s);
+  }
+  assert.deepEqual(checkListing("Schedules, overrides and silence, in your favorite colors.", "description.txt"), []);
+  assert.deepEqual(checkListing("Your FiestaBoard hub runs on your own network.", "description.txt"), []);
+});
+
+test("listing: URLs and empty lines are not copy", () => {
+  assert.deepEqual(checkListing("https://github.com/Fiestaboard/fiestaboard-tvos/blob/main/docs/PRIVACY.md\n\n", "privacy_url.txt"), []);
+});
+
+test("Fastfile: the release-notes string is checked", () => {
+  assert.equal(checkFastfile('options[:release_notes] = { "en-US" => "Fixes for your FiestaBoard server." }\n').length, 1);
+  assert.deepEqual(checkFastfile('options[:release_notes] = { "en-US" => "Fixes for your FiestaPanel displays." }\n'), []);
+});
+
+test("CLI: a seeded listing fails the repo check", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "vocab-listing-"));
+  mkdirSync(path.join(dir, "fastlane", "metadata", "en-US"), { recursive: true });
+  writeFileSync(path.join(dir, "project.yml"), "name: X\n");
+  writeFileSync(path.join(dir, "fastlane", "metadata", "en-US", "description.txt"), "Runs on your FiestaBoard hub.\n");
+  assert.equal(run(["--root", dir]).status, 0, run(["--root", dir]).stderr);
+  writeFileSync(path.join(dir, "fastlane", "metadata", "en-US", "subtitle.txt"), "Quiet hours on your TV\n");
+  const r = run(["--root", dir]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /subtitle\.txt:1/);
+});
+
+test("listing: the description names the FiestaBoard hub", () => {
+  const description = readFileSync(path.join(root, "fastlane", "metadata", "en-US", "description.txt"), "utf8");
+  assert.match(description, /FiestaBoard hub/);
 });

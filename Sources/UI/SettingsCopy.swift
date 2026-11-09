@@ -67,13 +67,17 @@ enum SettingsCopy {
 
     struct License: Equatable { let name: String; let text: String }
 
-    /// The notices the app ships (Resources/OFL.txt, Resources/Matrix/LICENSE).
+    /// The notices the app ships (A12): what each piece is and its terms
+    /// (Resources/THIRD_PARTY_NOTICES.txt, which carries the owner's taco
+    /// credit), then the full licence texts it refers to (Resources/OFL.txt,
+    /// Resources/Matrix/LICENSE).
     static func licenses(bundle: Bundle = .main) -> [License] {
         func read(_ name: String, _ ext: String?) -> String {
             bundle.url(forResource: name, withExtension: ext).flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
         }
-        return [License(name: "Spline Sans Mono", text: read("OFL", "txt")),
-                License(name: "Matrix renderer", text: read("LICENSE", nil))]
+        return [License(name: "Notices", text: read("THIRD_PARTY_NOTICES", "txt")),
+                License(name: "Spline Sans Mono", text: read("OFL", "txt")),
+                License(name: "MIT License", text: read("LICENSE", nil))]
     }
 }
 

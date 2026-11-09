@@ -121,9 +121,10 @@ final class A8SettingsTests: XCTestCase {
 
     func testLicensesListTheBundledNotices() throws {
         let entries = SettingsCopy.licenses(bundle: Bundle(for: AppModel.self))
-        XCTAssertEqual(entries.map(\.name), ["Spline Sans Mono", "Matrix renderer"])
+        // A12 put the notices first (A12ReleaseReadinessTests pins them).
+        XCTAssertEqual(entries.map(\.name), ["Notices", "Spline Sans Mono", "MIT License"])
         for entry in entries { XCTAssertGreaterThan(entry.text.count, 200, "\(entry.name) ships its full notice") }
-        XCTAssertTrue(entries[0].text.contains("SIL OPEN FONT LICENSE"))
+        XCTAssertTrue(entries[1].text.contains("SIL OPEN FONT LICENSE"))
     }
 
     /// The deleted-panel state (plan row A8: "This display was removed on your hub").
