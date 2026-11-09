@@ -256,7 +256,7 @@ struct SignInScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             // Said plainly because it is a real commitment: the credential is
             // kept so a lapsed session never sends anyone back to a remote.
-            Text(deviceSignInEnabled ? "Only a revocable TV credential is stored in this Apple TV’s Keychain. Your account password is not saved." : "Your username and password are stored in this Apple TV’s Keychain for this server’s legacy sign-in.")
+            Text(deviceSignInEnabled ? "Only a revocable TV credential is stored in this Apple TV’s Keychain. Your account password is not saved." : "Your username and password are stored in this Apple TV’s Keychain for this hub’s legacy sign-in.")
 
             if isUnencrypted {
                 Text("The connection to this hub isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")

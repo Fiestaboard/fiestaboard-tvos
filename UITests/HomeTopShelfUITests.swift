@@ -63,22 +63,9 @@ final class HomeTopShelfUITests: XCTestCase {
                 .firstMatch.waitForExistence(timeout: 10), "The real frame must load before preview publication")
         }
         holdForReview()
-        XCUIRemote.shared.press(.menu)
         // Recent tvOS versions host the icon grid and Top Shelf in HeadBoard;
         // PineBoard's accessibility tree contains only its scene containers.
-        let headboard = XCUIApplication(bundleIdentifier: "com.apple.HeadBoard")
-        let pineboard = XCUIApplication(bundleIdentifier: "com.apple.PineBoard")
-        // Menu returns before Home's asynchronous foreground transition ends.
-        // Selecting a host from that instantaneous state can lock this test
-        // onto PineBoard even when HeadBoard owns the visible icon grid.
-        var readyHome: XCUIApplication?
-        let homeReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            readyHome = [headboard, pineboard].first { $0.icons["FiestaBoard"].exists }
-            return readyHome != nil
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [homeReady], timeout: 5), .completed,
-                       "Home must expose FiestaBoard's icon before choosing its accessibility host")
-        let home = try XCTUnwrap(readyHome)
+        let home = try returnHome(from: app, pressing: .menu)
         let icon = home.icons["FiestaBoard"]
         XCTAssertTrue(icon.waitForExistence(timeout: 5))
         // Focus the app independently of asynchronous extension loading.
@@ -131,7 +118,7 @@ final class HomeTopShelfUITests: XCTestCase {
         holdForReview()
 
         // More Info opens Panels.
-        XCUIRemote.shared.press(.home)
+        _ = try returnHome(from: app, pressing: .home)
         XCTAssertTrue(icon.waitForExistence(timeout: 5))
         for _ in 0..<10 where !icon.hasFocus {
             if let focused = home.icons.allElementsBoundByIndex.first(where: { $0.hasFocus }) {
@@ -148,6 +135,31 @@ final class HomeTopShelfUITests: XCTestCase {
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 10), "More Info must open Panels")
         attach("Top Shelf More Info opened Panels")
+    }
+
+    /// TV wrap-up S-T2: leave the app for Home and return the Home host
+    /// that exposes FiestaBoard's icon. The press returns before the app has
+    /// left the foreground and before Home's own transition ends, so wait
+    /// for `.runningBackground` first; then, if no host shows the icon
+    /// within 5 s, press Home once more and look again (one retry).
+    private func returnHome(from app: XCUIApplication, pressing button: XCUIRemote.Button) throws -> XCUIApplication {
+        XCUIRemote.shared.press(button)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5), "the app must leave the foreground")
+        let headboard = XCUIApplication(bundleIdentifier: "com.apple.HeadBoard")
+        let pineboard = XCUIApplication(bundleIdentifier: "com.apple.PineBoard")
+        // Selecting a host from the instantaneous post-press state can lock
+        // this test onto PineBoard even when HeadBoard owns the icon grid.
+        func readyHost() -> XCUIApplication? {
+            var ready: XCUIApplication?
+            let shown = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                ready = [headboard, pineboard].first { $0.icons["FiestaBoard"].exists }
+                return ready != nil
+            }, object: nil)
+            return XCTWaiter.wait(for: [shown], timeout: 5) == .completed ? ready : nil
+        }
+        if let host = readyHost() { return host }
+        XCUIRemote.shared.press(.home)
+        return try XCTUnwrap(readyHost(), "Home must expose FiestaBoard's icon before choosing its accessibility host")
     }
 
     private func attach(_ name: String) {

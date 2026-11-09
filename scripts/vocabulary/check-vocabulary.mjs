@@ -6,13 +6,15 @@
  *
  * The thing the TV connects to is a **hub**. "Board" means only what is on
  * screen: the split-flap picture, a panel's virtual board, its position or
- * brightness. This scans every Swift string literal under Sources/ that
- * reads as copy (it contains whitespace) and project.yml's user-facing
- * strings, and fails on:
+ * brightness. This scans every Swift string literal under Sources/ and
+ * TopShelf/ that reads as copy (it contains whitespace) and project.yml's
+ * user-facing strings, and fails on:
  *   - the word "board"/"boards" unless an allow-listed display-sense phrase
  *     covers it;
  *   - "your / this / the FiestaBoard" not followed by "hub" or "app", which
- *     also names the hub (TV-APPS §4 item 1).
+ *     also names the hub (TV-APPS §4 item 1);
+ *   - the listing bans ("server", "quiet") and UK spellings, unless an
+ *     APP_COPY_ALLOW phrase covers the hit (TV wrap-up M-T1).
  *
  * Runs in Repository guards and in the Release archive job. Exit 1 with a
  * list of findings; 2 on bad input.
@@ -50,6 +52,8 @@ export const ALLOW = [
   "keeps the board bright",
   // A12 App Store listing: the picture a panel draws.
   "split-flap board",
+  // 07b G9 9b `278:138887` Movement › Gentle: OLED care moves the picture.
+  "shifts the board",
 ];
 
 const BOARD = /\bboards?\b/gi;
@@ -134,7 +138,7 @@ function findings(raw) {
 export function checkSwift(source, file) {
   const out = [];
   for (const literal of swiftLiterals(source)) {
-    const problems = findings(literal.text);
+    const problems = appCopyFindings(literal.text);
     if (problems.length) out.push({ file, line: literal.line, text: literal.text, problems });
   }
   return out;
@@ -146,7 +150,7 @@ export function checkProjectYml(source, file = "project.yml") {
   source.split("\n").forEach((raw, index) => {
     const m = raw.match(/^\s*(NS\w+Description|CFBundleDisplayName)\s*:\s*(.+)$/);
     if (!m) return;
-    const problems = findings(m[2]);
+    const problems = appCopyFindings(m[2]);
     if (problems.length) out.push({ file, line: index + 1, text: m[2], problems });
   });
   return out;
@@ -170,17 +174,50 @@ export const US_SPELLING = {
   programme: "program", optimise: "optimize", personalise: "personalize", recognise: "recognize",
 };
 
-function listingFindings(text) {
-  const problems = findings(text);
-  for (const [pattern, advice] of LISTING_BANS) {
-    if (!advice) continue;
-    for (const m of text.matchAll(pattern)) problems.push(`"${m[0]}": ${advice}`);
+/**
+ * TV wrap-up M-T1: app copy that uses a banned word in a sense that is not
+ * the hub. Every listing-ban hit in a Sources/ or TopShelf/ literal must sit
+ * inside one of these (case-insensitive). Keep it short.
+ */
+export const APP_COPY_ALLOW = [
+  // Settings › Privacy: FiestaBoard, the project, runs no servers this app talks to.
+  "fiestaboard’s servers",
+  "fiestaboard's servers",
+];
+
+/** The listing bans and US spelling; hits inside an `allow` phrase pass. */
+function canonFindings(text, allow = []) {
+  const problems = [];
+  const lower = text.toLowerCase();
+  const covered = [];
+  for (const phrase of allow) {
+    let at = lower.indexOf(phrase);
+    while (at >= 0) {
+      covered.push([at, at + phrase.length]);
+      at = lower.indexOf(phrase, at + 1);
+    }
   }
-  for (const word of text.match(/[A-Za-z]+/g) ?? []) {
-    const us = US_SPELLING[word.toLowerCase()];
-    if (us) problems.push(`"${word}": US spelling is "${us}"`);
+  const inside = (index) => covered.some(([a, b]) => index >= a && index < b);
+  for (const [pattern, advice] of LISTING_BANS) {
+    for (const m of text.matchAll(pattern)) if (!inside(m.index)) problems.push(`"${m[0]}": ${advice}`);
+  }
+  for (const m of text.matchAll(/[A-Za-z]+/g)) {
+    const us = US_SPELLING[m[0].toLowerCase()];
+    if (us && !inside(m.index)) problems.push(`"${m[0]}": US spelling is "${us}"`);
   }
   return problems;
+}
+
+/** Copy inside the app (Sources/, TopShelf/, Info.plist strings): every rule. */
+function appCopyFindings(raw) {
+  const problems = findings(raw);
+  const text = raw.replace(/\\\((?:[^()]|\([^()]*\))*\)/g, "{}");
+  if (!/\s/.test(text)) return problems; // identifiers, keys, URLs
+  return problems.concat(canonFindings(text, APP_COPY_ALLOW));
+}
+
+function listingFindings(text) {
+  return findings(text).concat(canonFindings(text));
 }
 
 /** A12: App Store listing copy (fastlane/metadata/<locale>/*.txt), line by line. */
@@ -265,7 +302,7 @@ function main(argv) {
     for (const r of results) {
       process.stderr.write(`${r.file}:${r.line}: "${r.text.trim().slice(0, 140)}" — ${r.problems.join("; ")}\n`);
     }
-    process.stderr.write(`\n${results.length} string(s) use "board" for the hub. Say "hub"; if "board" means the picture on screen, add the phrase to ALLOW.\n`);
+    process.stderr.write(`\n${results.length} string(s) break the hub vocabulary. Say "hub" for the hub; if "board" means the picture on screen, add the phrase to ALLOW. For "server", "quiet" or a UK spelling, follow CANON (hub, silence, US English).\n`);
     return 1;
   }
   process.stdout.write("Hub vocabulary: ok\n");

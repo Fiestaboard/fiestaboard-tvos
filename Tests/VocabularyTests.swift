@@ -83,7 +83,9 @@ final class VocabularyTests: XCTestCase {
         XCTAssertEqual(TVCopy.Settings.connectedHeader, "Connected hub")
         XCTAssertEqual(TVCopy.Settings.forget, "Forget this hub")
         XCTAssertEqual(TVCopy.Settings.forgetConfirmTitle, "Forget this hub?")
-        XCTAssertEqual(TVCopy.SignIn.useAnother, "Use another hub")
+        // TV wrap-up S-B1: one wording on both TVs (Android `sign_in_other_hub`);
+        // matches the Connect family ("Choose the hub on your network").
+        XCTAssertEqual(TVCopy.SignIn.useAnother, "Choose another hub")
     }
 
     func testHubErrorsSayHub() {

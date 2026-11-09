@@ -185,11 +185,15 @@ final class A12ReleaseReadinessTests: XCTestCase {
     func testTheHardwareChecklistCoversEveryDeviceItem() throws {
         let checklist = try Self.text("docs/HARDWARE-CHECKLIST.md")
         for item in ["VoiceOver", "Liquid Glass", "Top Shelf", "DD26", "LED redraw", "Cold start", "24-hour memory soak",
-                     "OLED care", "Siri Remote", "TestFlight", "App Store review", "O6", "O10"] {
+                     "OLED care", "Siri Remote", "TestFlight", "App Store review", "O6", "O10",
+                     // TV wrap-up S-T5: the items Android's checklist had, and two neither had.
+                     "Discovery", "DD24", "Legacy sign-in migration", "Increase Contrast"] {
             XCTAssertTrue(checklist.contains(item), item)
         }
+        // The screen is "Panels" (TVCopy.Panels.title, A3 `166:147716`).
+        XCTAssertFalse(checklist.contains("Your panels"))
         let sections = checklist.components(separatedBy: "\n## ").dropFirst().filter { $0.first?.isNumber == true }
-        XCTAssertGreaterThanOrEqual(sections.count, 11)
+        XCTAssertGreaterThanOrEqual(sections.count, 17)
         for section in sections {
             let title = section.components(separatedBy: "\n").first ?? ""
             XCTAssertTrue(section.contains("**How:**"), "\(title): how to measure")

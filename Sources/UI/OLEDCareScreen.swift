@@ -11,7 +11,11 @@ struct OLEDCareScreen: View {
 
     static let subtitle = "Keeps the board bright where it matters and gives the panel rest so it doesn’t burn in."
     static let keepAwakeCaveat = "Keep-awake: this Apple TV stays on while a board is showing; only Rest (scheduled or disconnected) lets it sleep."
-    static let disconnectedCaveat = "When disconnected = the hub can’t be reached: keep the last frame, dim, or rest after the delay. A remote press wakes it for 5 min."
+    static let disconnectedCaveat = "When disconnected = the hub can’t be reached: keep the last frame, dim, or rest after the delay. A remote press resumes for 5 min."
+    /// Movement choices (07b G9 9b `278:138887`; TV wrap-up S-T4).
+    static let movementGentleSubtitle = "Shifts the board a few pixels over 20 min"
+    static let movementWiderSubtitle = "Larger shifts for long, static days"
+    static let movementFooter = "Reduce Motion pauses movement."
 
     var body: some View {
         let summary = OLEDCareSummary(app.oledCare, neverDim: false)
@@ -223,10 +227,12 @@ private struct OLEDMovementPage: View {
         List {
             Section {
                 choice("Off", selected: !app.oledCare.movement) { $0.movement = false }
-                choice("Gentle", selected: app.oledCare.movement && app.oledCare.movementRange <= 8) { $0.movement = true; $0.movementRange = 8 }
-                choice("Wider", selected: app.oledCare.movement && app.oledCare.movementRange > 8) { $0.movement = true; $0.movementRange = 24 }
+                choice("Gentle", subtitle: OLEDCareScreen.movementGentleSubtitle,
+                       selected: app.oledCare.movement && app.oledCare.movementRange <= 8) { $0.movement = true; $0.movementRange = 8 }
+                choice("Wider", subtitle: OLEDCareScreen.movementWiderSubtitle,
+                       selected: app.oledCare.movement && app.oledCare.movementRange > 8) { $0.movement = true; $0.movementRange = 24 }
             } footer: {
-                Text("Moves the picture a few points over twenty minutes. Wider leaves more space around it. Reduce Motion pauses movement.")
+                Text(OLEDCareScreen.movementFooter)
                     .foregroundStyle(Fiesta.Colors.mutedForeground)
             }
         }
@@ -234,12 +240,27 @@ private struct OLEDMovementPage: View {
         .navigationTitle("Movement")
     }
 
-    private func choice(_ title: String, selected: Bool, apply: @escaping (inout OLEDCareConfiguration) -> Void) -> some View {
+    private func choice(_ title: String, subtitle: String? = nil, selected: Bool,
+                        apply: @escaping (inout OLEDCareConfiguration) -> Void) -> some View {
         Button {
             var c = app.oledCare; apply(&c); app.saveOLEDCare(c); dismiss()
-        } label: { HStack { Text(title); Spacer(); if selected { Image(systemName: "checkmark") } } }
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(Fiesta.Text.caption)
+                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                    }
+                }
+                Spacer()
+                if selected { Image(systemName: "checkmark") }
+            }
+        }
         .accessibilityLabel(title)
         .accessibilityValue(selected ? "Selected" : "")
+        .accessibilityHint(subtitle ?? "")
     }
 }
 

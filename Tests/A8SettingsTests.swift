@@ -139,6 +139,17 @@ final class A8SettingsTests: XCTestCase {
         XCTAssertEqual(Clock12.label(minutes: 12 * 60 + 5), "12:05 PM")
     }
 
+    /// TV wrap-up S-T4: the Movement choices carry 07b's subtitles (G9 9b
+    /// `278:138887`, as Android), Reduce Motion stays the footer, and the
+    /// disconnected caveat says "resumes" (G9 `259:122518`).
+    func testOLEDCareMovementAndDisconnectedCopyMatch07b() {
+        XCTAssertEqual(OLEDCareScreen.movementGentleSubtitle, "Shifts the board a few pixels over 20 min")
+        XCTAssertEqual(OLEDCareScreen.movementWiderSubtitle, "Larger shifts for long, static days")
+        XCTAssertEqual(OLEDCareScreen.movementFooter, "Reduce Motion pauses movement.")
+        XCTAssertEqual(OLEDCareScreen.disconnectedCaveat,
+                       "When disconnected = the hub can’t be reached: keep the last frame, dim, or rest after the delay. A remote press resumes for 5 min.")
+    }
+
     func testTheOLEDCareRowsSummariseEachChoice() {
         var c = OLEDCareConfiguration()
         c.brightness = 80; c.movement = true; c.movementRange = 8

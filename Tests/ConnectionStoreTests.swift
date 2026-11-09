@@ -340,6 +340,63 @@ final class ConnectionStoreTests: XCTestCase {
         XCTAssertEqual(result, .needsSignIn)
     }
 
+    /// TV wrap-up S-T1 (N3): only the hub refusing the credential means
+    /// sign-in. A hub that stops answering in the middle of a Connect used to
+    /// send the person to Sign In with a valid credential in the Keychain.
+    func testATransportErrorDuringRecoveryIsNotASignInRequest() async throws {
+        try credentials.save(StoredCredential(username: "jeffre", password: "hunter2"),
+                             for: host.absoluteString)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
+        // Nothing enqueued for /api/auth/login: it fails at the transport.
+
+        do {
+            let result = try await store.connect(to: host, displayName: "FiestaBoard")
+            XCTFail("expected the transport error, got \(result)")
+        } catch FiestaError.transport {
+            // Connect shows "Couldn't reach …", the hub-unreachable copy.
+        }
+        XCTAssertFalse(store.isSignedOut, "an unrefused credential is not a signed-out TV")
+        XCTAssertNotNil(credentials.load(for: host.absoluteString), "the credential stays")
+
+        let app = AppModel(connection: store)
+        app.start()
+        XCTAssertNotEqual(app.route, .signIn, "the next launch does not ask for a password either")
+    }
+
+    /// The same for a hub that answers but is still starting (503) or fails
+    /// (500): neither is a refusal of the credential.
+    func testAHubErrorDuringRecoveryIsNotASignInRequest() async throws {
+        for (status, expected) in [(503, FiestaError.unavailable), (500, FiestaError.http(500))] {
+            StubURLProtocol.reset()
+            try credentials.save(StoredCredential(username: "jeffre", password: "hunter2"),
+                                 for: host.absoluteString)
+            StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
+            StubURLProtocol.enqueue(.json(#"{"detail":"x"}"#, status: status), for: "/api/auth/login")
+            do {
+                let result = try await store.connect(to: host, displayName: "FiestaBoard")
+                XCTFail("\(status): expected \(expected), got \(result)")
+            } catch let error as FiestaError {
+                XCTAssertEqual(error, expected, "\(status)")
+            }
+            XCTAssertFalse(store.isSignedOut, "\(status)")
+        }
+    }
+
+    /// Through Connect: the person stays on Connect with the unreachable
+    /// line, not on Sign In.
+    func testConnectShowsHubUnreachableWhenRecoveryCannotReachTheHub() async throws {
+        try credentials.save(StoredCredential(username: "jeffre", password: "hunter2"),
+                             for: host.absoluteString)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusEnabled), for: "/api/auth/status")
+        let app = AppModel(connection: store)
+        let model = ConnectModel(app: app)
+        await model.connect(to: host, name: "FiestaBoard")
+
+        XCTAssertNotEqual(app.route, .signIn)
+        let message = try XCTUnwrap(model.errorMessage)
+        XCTAssertTrue(message.hasPrefix("Couldn't reach 192.168.1.50"), message)
+    }
+
     /// The silent branch used to return `.ready` while leaving `signedOut`
     /// set, so the next cold boot asked for a password it had just used.
     func testTheSilentLoginClearsTheSignedOutRoute() async throws {
