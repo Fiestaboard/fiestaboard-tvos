@@ -72,13 +72,19 @@ final class A5RulesTests: XCTestCase {
         return app
     }
 
-    private func panel(_ id: String, aspect: (Double, Double) = (16, 9), boardMissing: Bool = false) throws -> Panel {
+    /// `grid` is (rows, cols). 12 × 30 is close to 16:9 once drawn; the
+    /// stored screen aspect is the hub's 16:9 default either way.
+    private func panel(_ id: String, grid: (Int, Int)? = (12, 30), aspect: (Double, Double) = (16, 9),
+                       boardMissing: Bool = false, led: Bool = false) throws -> Panel {
         var json = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
         json["id"] = id
         json["name"] = "Panel \(id)"
+        json["rows"] = grid.map { $0.0 } ?? NSNull()
+        json["cols"] = grid.map { $0.1 } ?? NSNull()
         json["screen_aspect_w"] = aspect.0
         json["screen_aspect_h"] = aspect.1
         json["board_missing"] = boardMissing
+        if led { json["render_style"] = "led_matrix" }
         return try JSONDecoder().decode(Panel.self, from: JSONSerialization.data(withJSONObject: json))
     }
 
@@ -89,23 +95,52 @@ final class A5RulesTests: XCTestCase {
         return (model, app)
     }
 
-    func testAPanelFitsThisTVWhenItsScreenIsSixteenByNine() throws {
-        XCTAssertTrue(PanelsModel.fitsThisTV(try panel("a")))
-        XCTAssertTrue(PanelsModel.fitsThisTV(try panel("a", aspect: (1920, 1081))), "within 1 %")
-        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", aspect: (4, 3))))
-        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", aspect: (21, 9))))
+    /// "Fits this TV" is the viewer's own resize-offer rule (the drawn grid
+    /// within 25 % of 16:9), so the offer and the viewer never disagree. The
+    /// stored screen aspect says nothing: the hub defaults it to 16:9.
+    func testAPanelFitsThisTVWhenItsGridIsCloseToSixteenByNine() throws {
+        XCTAssertTrue(PanelsModel.fitsThisTV(try panel("a")), "12 × 30")
+        XCTAssertTrue(PanelsModel.fitsThisTV(try panel("a", aspect: (4, 3))), "the stored aspect doesn't decide")
+        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", grid: (6, 22))), "a 22 × 6 flagship is a wide strip")
+        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", grid: (24, 96))), "a 96 × 24 FiestaPanel")
+        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", grid: (30, 12))), "a tall board")
+        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", grid: nil)), "no grid, no claim")
         XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", boardMissing: true)), "a removed board fits nothing")
+        // LED matrices take the same rule, as on Android (G5 `needsResizeOffer`).
+        XCTAssertTrue(PanelsModel.fitsThisTV(try panel("a", led: true)))
+        XCTAssertFalse(PanelsModel.fitsThisTV(try panel("a", grid: (6, 22), led: true)))
+    }
+
+    /// The offer and the viewer's resize offer are one rule.
+    func testFitsThisTVIsTheViewersResizeRule() throws {
+        for grid in [(12, 30), (6, 22), (24, 96), (9, 16), (20, 30), (30, 12), (3, 15)] {
+            let fits = PanelsModel.fitsThisTV(try panel("a", grid: grid))
+            XCTAssertEqual(fits, BoardLayout.gridSuits(rows: grid.0, cols: grid.1, noteArray: false,
+                                                       screen: CGSize(width: 1920, height: 1080)), "\(grid)")
+        }
     }
 
     func testTheOfferIsTheOnlyPanelThatFits() async throws {
         let only = try panel("only")
-        let (model, _) = await model([only, try panel("square", aspect: (4, 3)),
+        let (model, _) = await model([only, try panel("strip", grid: (6, 22)),
                                       try panel("gone", boardMissing: true)], signage: signage())
         XCTAssertEqual(model.openAtLaunchOffer?.id, "only")
     }
 
+    /// A hub whose only panel doesn't fit: no "fits this TV" claim.
+    func testNoOfferForAnOnlyPanelThatDoesNotFit() async throws {
+        let (model, _) = await model([try panel("strip", grid: (6, 22))], signage: signage())
+        XCTAssertNil(model.openAtLaunchOffer)
+    }
+
+    /// One of two panels fits: that one is offered.
+    func testTheOneOfTwoThatFitsIsOffered() async throws {
+        let (model, _) = await model([try panel("strip", grid: (6, 22)), try panel("wall")], signage: signage())
+        XCTAssertEqual(model.openAtLaunchOffer?.id, "wall")
+    }
+
     func testNoOfferWhenNoneOrSeveralFit() async throws {
-        let (none, _) = await model([try panel("square", aspect: (4, 3))], signage: signage())
+        let (none, _) = await model([try panel("square", grid: (24, 96))], signage: signage())
         XCTAssertNil(none.openAtLaunchOffer)
         let (two, _) = await model([try panel("a"), try panel("b")], signage: signage())
         XCTAssertNil(two.openAtLaunchOffer)
