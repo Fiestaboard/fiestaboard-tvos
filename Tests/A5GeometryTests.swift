@@ -29,6 +29,12 @@ final class A5GeometryTests: XCTestCase {
         return app
     }
 
+    /// The app's own defaults remember an answered offer (UI tests answer
+    /// it), so the offer's tests use a device that hasn't been asked.
+    private func freshSignage() -> SignageSettings {
+        SignageSettings(defaults: UserDefaults(suiteName: "tv.a5.signage.\(UUID().uuidString)")!)
+    }
+
     private func frame(_ id: String, file: StaticString = #filePath, line: UInt = #line) throws -> CGRect {
         try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()[id]?.frame, "no probe for \(id)", file: file, line: line)
     }
@@ -50,7 +56,7 @@ final class A5GeometryTests: XCTestCase {
     func testPanelsCardAndOfferSitWhereA3DrawsThem() async throws {
         let app = await makeApp()
         StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
-        let model = PanelsModel(app: app)
+        let model = PanelsModel(app: app, signage: freshSignage())
         await model.load()
         _ = TVSnapshot.image(PanelsScreen(model: model).environment(app), settle: 0.3)
 
@@ -70,7 +76,7 @@ final class A5GeometryTests: XCTestCase {
         let app = await makeApp()
         StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
         StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame")
-        let model = PanelsModel(app: app)
+        let model = PanelsModel(app: app, signage: freshSignage())
         await model.load()
         let panel = try XCTUnwrap(model.panels.first)
         for _ in 0..<300 where model.previewState(for: panel) == .loading {

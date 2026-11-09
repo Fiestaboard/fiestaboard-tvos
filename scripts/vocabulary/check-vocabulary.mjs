@@ -46,6 +46,8 @@ export const ALLOW = [
   "missing/deleted boards",
   "another board render",
   "board is showing",
+  // 07b A8b `248:110205` subtitle: the picture on screen.
+  "keeps the board bright",
 ];
 
 const BOARD = /\bboards?\b/gi;

@@ -167,12 +167,17 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        // Queued before publishTopShelf on purpose: publishing starts A7's
+        // async `GET /panel/{id}` status fetch. Under the broad "/api/panel/"
+        // key that request took this frame (CI run 42528427242); "/frame"
+        // only matches frame requests, so the order no longer matters.
+        StubURLProtocol.enqueue(.json(#"{"characters":[[63]],"message":"RED","rows":1,"cols":1}"#),
+                                for: "/frame")
         let app = AppModel(connection: connection, topShelfStore: store)
         app.publishTopShelf(panels: [panel])
+        // Let the status fetch reach the network first, as it did on CI.
+        try await Task.sleep(nanoseconds: 300_000_000)
         let panels = PanelsModel(app: app)
-
-        StubURLProtocol.enqueue(.json(#"{"characters":[[63]],"message":"RED","rows":1,"cols":1}"#),
-                                for: "/api/panel/")
         await panels.refreshPreviews(for: [panel])
         let red = try XCTUnwrap(store.items().first)
         let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: red))))
@@ -185,7 +190,7 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         XCTAssertEqual(Int(pigment.b), 52, accuracy: 2)
 
         StubURLProtocol.enqueue(.json(#"{"characters":[[67]],"message":"BLUE","rows":1,"cols":1}"#),
-                                for: "/api/panel/")
+                                for: "/frame")
         await panels.refreshPreviews(for: [panel])
         let blue = try XCTUnwrap(store.items().first)
         XCTAssertNotEqual(red.imageFile, blue.imageFile, "A new frame must replace the Home card artwork")
@@ -211,7 +216,8 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         stub.beforeReply = { reply in
             Task { @MainActor in release = reply; received.fulfill() }
         }
-        StubURLProtocol.enqueue(stub, for: "/api/panel/")
+        // "/frame", not "/api/panel/": an A7 status fetch must not take it.
+        StubURLProtocol.enqueue(stub, for: "/frame")
         let refresh = Task { await model.refreshPreviews(for: [panel]) }
         await fulfillment(of: [received], timeout: 3)
         connection.signOut()
@@ -322,9 +328,16 @@ final class TopShelfPreviewRendererTests: XCTestCase {
             let centre = pixels.at(Int(dot.midX), Int(dot.midY))
             XCTAssertGreaterThan(centre.r, 180)
             let corner = pixels.at(Int(dot.minX), Int(dot.minY))
-            // The corner pixel is antialiased; a square dot still keeps it lit.
-            if shape == "square" { XCTAssertGreaterThan(corner.r, 150) }
-            else { XCTAssertLessThan(corner.r, 120, "round LEDs must retain their dark corners") }
+            // The block's top-left pixel is one dot's true corner, antialiased.
+            if shape == "square" {
+                // DD24: the hub's square is FiestaUI's rounded square: the
+                // corner is cut (a square kept it above 150), but by 0.15 of
+                // the dot, not into an oval's dark corner.
+                XCTAssertLessThan(corner.r, 150, "square LEDs round their true corner (DD24)")
+                XCTAssertGreaterThan(corner.r, 60, "…by 0.15 of the dot, not into an oval")
+            } else {
+                XCTAssertLessThan(corner.r, 40, "round LEDs must retain their dark corners")
+            }
         }
     }
 

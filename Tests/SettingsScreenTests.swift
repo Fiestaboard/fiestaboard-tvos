@@ -662,12 +662,11 @@ final class SettingsScreenTests: XCTestCase {
     /// elsewhere is worse than no claim at all. The honest scope is servers
     /// and third parties.
     func testThePrivacyStatementDoesNotClaimNothingLeavesTheDevice() {
-        let body = SettingsScreen.privacyBody
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
         XCTAssertFalse(body.contains("leaves this Apple TV"), body)
         XCTAssertFalse(body.lowercased().contains("never leaves"), body)
         XCTAssertFalse(body.lowercased().contains("stays on this apple tv"), body)
-        XCTAssertTrue(body.contains("FiestaBoard's servers"), body)
-        XCTAssertTrue(body.contains("third party"), body)
+        XCTAssertTrue(body.contains("FiestaBoard’s servers"), body)
         XCTAssertTrue(body.contains("the hub you chose"), body)
     }
 
@@ -685,7 +684,7 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(remote.host(), "board.example.com",
                        "a typed https board is supported and need not be on this network")
 
-        let body = SettingsScreen.privacyBody.lowercased()
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false).lowercased()
         XCTAssertFalse(body.contains("local network"), body)
         XCTAssertFalse(body.contains("same network"), body)
         XCTAssertFalse(body.contains("this network"), body)
@@ -693,13 +692,11 @@ final class SettingsScreenTests: XCTestCase {
     }
 
     /// The other half of the same rule: dropping the network scope must not
-    /// leave the section vague. The recipient claim is the reassuring part a
-    /// 5.1.1(i) reviewer reads, and a broadening — another recipient, or a
-    /// "we may share" hedge — has to fail here.
-    func testThePrivacyStatementDisclosesFiestaBotProviderTraffic() {
-        let body = SettingsScreen.privacyBody
-        XCTAssertTrue(body.contains("configured AI provider"), body)
-        XCTAssertTrue(body.contains("Siri dictation"), body)
+    /// leave the section vague. A broadening ("we may share") has to fail
+    /// here. A8f dropped the FiestaBot / AI-provider / Siri lines with the
+    /// feature's scope on a TV credential (A8SettingsTests pins their absence).
+    func testThePrivacyStatementNamesItsOneRecipient() {
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
         XCTAssertFalse(body.contains("the hub you chose and to no one else"), body)
         XCTAssertTrue(body.contains("the address you typed"),
                       "the typed-address path is one of the two ways to reach a board: \(body)")
@@ -711,9 +708,9 @@ final class SettingsScreenTests: XCTestCase {
     /// Stating storage and saying nothing about transmission is how the old
     /// copy read as "it never travels".
     func testThePrivacyStatementSaysThePasswordIsSentToTheBoard() {
-        let body = SettingsScreen.privacyBody
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
         XCTAssertTrue(body.contains("Keychain"), body)
-        XCTAssertTrue(body.contains("sent to that hub"), body)
+        XCTAssertTrue(body.contains("sent to the hub only to sign in"), body)
     }
 
     /// The schedule is now editable on Apple TV, so name its controls.
