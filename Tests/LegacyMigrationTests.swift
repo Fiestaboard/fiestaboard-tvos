@@ -109,8 +109,17 @@ final class LegacyMigrationTests: XCTestCase {
 
     func testAFailedValidationAndAFailedLegacyLoginLeaveTheTVSignedIn() async throws {
         try saveLegacy()
-        let (store, _) = try await exchangeThenValidationFails(validation: .json("{}", status: 503),
-                                                               legacyLogin: .json("{}", status: 503))
+        let store = makeStore()
+        StubURLProtocol.enqueue(.json(signedOutStatus), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json("{}", status: 503), for: "/api/auth/status")
+        StubURLProtocol.enqueue(.json(DeviceAuthorizationTests.token), for: "/auth/device/login")
+        StubURLProtocol.enqueue(.json("{}", status: 503), for: "/api/auth/login")
+        // TV wrap-up S-T1: a hub that is still starting is not a sign-in
+        // request; Connect shows why the hub can't serve instead.
+        do {
+            let result = try await store.connect(to: host, displayName: "Board")
+            XCTFail("expected unavailable, got \(result)")
+        } catch FiestaError.unavailable {}
         XCTAssertFalse(store.isSignedOut, "a valid saved password is not a signed-out TV")
         XCTAssertFalse(store.usesDeviceCredential)
         XCTAssertEqual(credentials.load(for: host.absoluteString)?.password, "secret")

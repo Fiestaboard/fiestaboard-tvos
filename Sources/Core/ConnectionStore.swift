@@ -248,9 +248,22 @@ public final class ConnectionStore: @unchecked Sendable {
                     silentLoginBlockedUntil = nil
                 }
                 return .ready
-            } catch {
+            } catch FiestaError.unauthorized {
                 try checkCurrent(generation)
                 return .needsSignIn
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // TV wrap-up S-T1 (N3): only the hub refusing the credential
+                // means sign-in. A hub that stopped answering, is starting or
+                // failed has not refused anything, so the TV keeps its
+                // credential and is not signed out; the error reaches Connect,
+                // which says the hub can't be reached (or why it can't serve).
+                try lock.withLock {
+                    try checkCurrentLocked(generation)
+                    defaults.set(false, forKey: Keys.signedOut)
+                }
+                throw error
             }
         }
         return .needsSignIn
