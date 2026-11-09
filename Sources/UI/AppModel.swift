@@ -221,6 +221,12 @@ public final class AppModel {
         route = .viewer(ref)
     }
 
+    /// The hub's panel id or short-code shape (#24 S3): 1–64 ASCII letters,
+    /// digits, `-` or `_`. A decoded `?`, `/`, `%` or `..` never qualifies.
+    static func isPanelRef(_ ref: String) -> Bool {
+        ref.range(of: "\\A[A-Za-z0-9_-]{1,64}\\z", options: .regularExpression) != nil
+    }
+
     /// Opens `fiestaboard://panel/<ref>` from a Top Shelf carousel item.
     ///
     /// Exactly one path component, and only for a board this TV is still
@@ -233,11 +239,16 @@ public final class AppModel {
         guard url.scheme == "fiestaboard",
               connection.saved != nil, connection.client != nil,
               !connection.isSignedOut else { return }
+        // #24 S3: the carousel sends exactly two shapes. Anything else (a
+        // query, a fragment, a user or port, another host) is refused.
+        guard url.query == nil, url.fragment == nil, url.user == nil,
+              url.password == nil, url.port == nil else { return }
         if url.host == "panels" {
             if components.isEmpty { showPanels() }
             return
         }
-        guard url.host == "panel", components.count == 1 else { return }
+        guard url.host == "panel", components.count == 1,
+              Self.isPanelRef(String(components[0])) else { return }
         // No republish here. Opening a Top Shelf card brings the app to the
         // foreground, and the foreground hook above already refreshes — doing
         // it again on a cold launch into a default panel fired two panel
