@@ -218,22 +218,93 @@ final class PanelsScreenTests: XCTestCase {
 
 extension PanelsScreenTests {
 
-    func testVerticalFocusRecoveryKeepsTheColumnAndStopsAtGridEdges() throws {
-        let panels = try (0..<14).map { try decodedPanel(id: "p\($0)") }
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p11", direction: .down), "p13")
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p12", direction: .up), "p10")
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p13", direction: .down))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .up))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .right))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: panels, from: "gone", direction: .down))
-        XCTAssertNil(PanelsScreen.verticalFocusTarget(in: [], from: "p1", direction: .down))
+    /// Every card is built, but only the rows near the viewport draw a
+    /// board picture: the eager grid must not render fourteen previews up
+    /// front. Fourteen is past the cache's twelve, so drawing them all
+    /// would also leave the last rows' pictures in it.
+    func testOnlyRowsNearTheViewportDrawTheirPreviews() async {
+        let count = 14
+        let app = await makeApp()
+        StubURLProtocol.enqueue(.json(panelsList(count: count)), for: "/api/panels")
+        for _ in 0..<count { StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame") }
+        let model = PanelsModel(app: app)
+        await model.load()
+        for panel in model.panels {
+            guard case .ready = await settledPreview(model, for: panel) else {
+                return XCTFail("\(panel.id) never got a preview")
+            }
+        }
+        let cache = PanelPreviewImageCache()
+
+        RenderHarness.render(PanelsScreen(model: model, previewImages: cache).environment(app))
+
+        let drawn = cache.panelIDs
+        XCTAssertTrue(drawn.isSuperset(of: ["panel-0", "panel-1"]), "the first row on screen drew \(drawn.sorted())")
+        XCTAssertFalse(drawn.contains("panel-12") || drawn.contains("panel-13"),
+                       "the last row, screens below, drew its pictures: \(drawn.sorted())")
+        XCTAssertLessThanOrEqual(drawn.count, 2 * 4, "more than the viewport and one row either side: \(drawn.sorted())")
+        XCTAssertEqual(model.panels.count, count)
     }
 
-    func testVerticalFocusRecoverySkipsRemovedBoardsAndReachesAnOddLastRow() throws {
-        let panels = try (0..<7).map { try decodedPanel(id: "p\($0)", boardMissing: [2, 3, 5].contains($0)) }
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p1", direction: .down), "p4")
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p4", direction: .down), "p6")
-        XCTAssertEqual(PanelsScreen.verticalFocusTarget(in: panels, from: "p6", direction: .up), "p4")
+    /// `PanelsScreen.cardHeight(width:)` is what the preview window counts
+    /// rows by: it must be the card's real height.
+    func testTheCardIsAsTallAsCardHeightSays() throws {
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        let host = UIHostingController(rootView: PanelCard(panel: panel, preview: .loading, action: {},
+                                                           cardWidth: PanelsScreen.maxCardWidth))
+        let size = host.sizeThatFits(in: CGSize(width: 1920, height: 4000))
+        XCTAssertEqual(size.height, PanelsScreen.cardHeight(width: PanelsScreen.maxCardWidth), accuracy: 0.5)
+    }
+
+    /// The rows the viewport touches, and one more each side.
+    func testPreviewRowsAreTheViewportAndOneRowEitherSide() {
+        let card: CGFloat = 628, pitch = card + PanelsScreen.gridSpacing, inset = PanelsScreen.gridTopInset
+        func rows(_ minY: CGFloat, _ height: CGFloat = 700, count: Int = 7) -> Range<Int> {
+            PanelsScreen.previewRows(visibleMinY: minY, visibleHeight: height, rowHeight: card, rowCount: count)
+        }
+        XCTAssertEqual(rows(0), 0..<2, "row 0 is on screen; row 1 is the look-ahead")
+        XCTAssertEqual(rows(0, 900), 0..<3, "rows 0 and 1 are on screen; row 2 is the look-ahead")
+        XCTAssertEqual(rows(inset + pitch * 3), 2..<6)
+        XCTAssertEqual(rows(inset + pitch * 6), 5..<7, "clamped to the last row")
+        XCTAssertEqual(rows(-200), 0..<2, "an overscroll above the top")
+        XCTAssertEqual(rows(0, count: 0), 0..<0)
+        XCTAssertEqual(rows(0, 0), 0..<0, "no viewport yet")
+        XCTAssertEqual(PanelsScreen.previewRows(visibleMinY: 0, visibleHeight: 700, rowHeight: card,
+                                                rowCount: 7, lookahead: 0), 0..<1)
+    }
+
+    /// The eager layout puts cards exactly where the `LazyVGrid` with two
+    /// flexible columns did, odd last card included, so the A3 frame's
+    /// geometry is unchanged.
+    func testTheEagerGridPlacesCardsWhereTheLazyGridDid() {
+        let colors: [Color] = [.red, .green, .blue, .yellow, .purple]
+        // The app's: the 1760 pt column, widened by the focus inset either side.
+        let size = CGSize(width: 1760 + 88, height: 1400)
+        func cell(_ index: Int) -> some View {
+            colors[index].frame(width: 800, height: index == 1 ? 300 : 250)
+        }
+        let lazy = RenderHarness.image(
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 48), GridItem(.flexible())],
+                      alignment: .leading, spacing: 48) {
+                ForEach(0..<colors.count, id: \.self) { cell($0) }
+            }
+            .padding(44)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top), size: size)
+        let eager = RenderHarness.image(
+            VStack(spacing: 48) {
+                ForEach(0..<3, id: \.self) { row in
+                    PanelGridRow(spacing: 48) {
+                        ForEach((row * 2)..<min(row * 2 + 2, colors.count), id: \.self) { cell($0) }
+                    }
+                }
+            }
+            .padding(44)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top), size: size)
+        XCTAssertEqual(lazy.pngData(), eager.pngData(), "the eager grid moved a card")
+        // And it is not two blank images agreeing.
+        let first = try? XCTUnwrap(eager.pixel(x: 44 + 10, y: 44 + 25 + 10))
+        XCTAssertGreaterThan(first?.r ?? 0, 200)
+        XCTAssertLessThan(first?.g ?? 255, 120)
     }
 
     /// `n` panels with distinct ids, from the one-panel fixture.
@@ -614,14 +685,14 @@ extension PanelsScreenTests {
         let left = Self.cardMargin
         let right = left + Int(PanelCard.width) - 1
 
-        // The board is the only pure black on the card: the ground is
-        // #0e0d0b and the plate #181613.
+        // 07b: the preview is the board bezel (#050505) edge to edge, and
+        // the board's tiles, lighter than the bezel, sit inside it.
         var firstBoard = Int.max
         var lastBoard = Int.min
         for y in stride(from: left + 30, to: left + Int(PanelCard.previewHeight) - 30, by: 17) {
             for x in left...right {
                 guard let p = image.pixel(x: x, y: y) else { continue }
-                guard p.r < 6, p.g < 6, p.b < 6 else { continue }
+                guard luma(p) > 8 else { continue }
                 firstBoard = min(firstBoard, x)
                 lastBoard = max(lastBoard, x)
             }
@@ -633,32 +704,26 @@ extension PanelsScreenTests {
         XCTAssertLessThanOrEqual(abs(leadingPlate - trailingPlate), 3,
                                  "board is off centre: \(leadingPlate)pt of plate on the left, "
                                  + "\(trailingPlate)pt on the right")
-        XCTAssertGreaterThanOrEqual(leadingPlate, Int(PanelCard.boardInset),
+        XCTAssertGreaterThanOrEqual(leadingPlate, Int(PanelCard.boardInset.leading),
                                     "the board should be mounted on the plate, not bled to the edge")
     }
 
-    /// The card must have an edge.
-    ///
-    /// Against the old grey ground the plate was lighter than the app and
-    /// that was edge enough. On a near-black ground the plate is a few
-    /// values above it and the board on the card is pure black — DARKER
-    /// than the ground — so the card read as a hole. The hairline is what
-    /// draws the edge now, and it has to survive the surfaces moving again.
-    func testTheCardHasAVisibleEdgeAgainstTheAppGround() throws {
+    /// The card's edge is 07b's: the --card plate on the --background
+    /// ground, with no hairline (Default `154:4187`).
+    func testTheCardEdgeIsThePlateOnTheGround() throws {
         let image = try cardImage()
-        let midCard = Self.cardMargin + Int(PanelCard.previewHeight) / 2
-        let ground = try XCTUnwrap(image.pixel(x: 4, y: midCard))
-
+        let y = Self.cardMargin + Int(PanelCard.previewHeight) + 60   // in the meta block
+        let plate = try XCTUnwrap(image.pixel(x: Self.cardMargin + 3, y: y))
+        let ground = try XCTUnwrap(image.pixel(x: Self.cardMargin - 4, y: y))
+        let card = FiestaTokenValues.Dark.card, background = FiestaTokenValues.Dark.background
+        XCTAssertEqual(Double(plate.r) / 255, card.red, accuracy: 2.0 / 255, "the plate is --card")
+        XCTAssertEqual(Double(ground.r) / 255, background.red, accuracy: 2.0 / 255, "outside is --background")
         var brightest = 0
         for x in (Self.cardMargin - 3)...(Self.cardMargin + 3) {
-            guard let p = image.pixel(x: x, y: midCard) else { continue }
+            guard let p = image.pixel(x: x, y: y) else { continue }
             brightest = max(brightest, luma(p))
         }
-        // The plate alone is only about 9 above the ground — not an edge
-        // at ten feet. The hairline is about 34. Anything under 20 means
-        // the hairline has gone.
-        XCTAssertGreaterThan(brightest - luma(ground), 20,
-                             "the card's edge is indistinguishable from the app ground")
+        XCTAssertLessThanOrEqual(brightest, luma(plate) + 2, "no hairline brighter than the plate")
     }
 
     /// Board black, app ground and the viewer's true black are three

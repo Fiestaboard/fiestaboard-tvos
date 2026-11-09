@@ -208,9 +208,10 @@ final class SettingsPreviewTests: XCTestCase {
             let layout = try XCTUnwrap(SettingsPanelPreview.layout(
                 panel: panel, preview: preview, in: CGSize(width: 960, height: 540),
                 calibrationScale: nil))
-            // Two 0.7-wide flaps plus one 0.145 gutter fit vertically first.
+            // Two 0.7-wide flaps plus one 0.145 gutter fit vertically first,
+            // in whole points as FiestaUI rounds them: 378 + 78 + 378.
             XCTAssertEqual(layout.tileHeight, 540, accuracy: 0.001)
-            XCTAssertEqual(layout.width, 834.3, accuracy: 0.001)
+            XCTAssertEqual(layout.width, 834, accuracy: 0.001)
         }
     }
 

@@ -41,7 +41,7 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let cache = TopShelfPreviewPublisher.Cache { image in
             XCTAssertFalse(Thread.isMainThread, "PNG compression must not block focus updates")
             let number = count.withLock { $0 += 1; return $0 }
-            if number == 1 {
+            if number == 1 { // the red @1x; its @2x follows (A7: two encodes per hero)
                 encoding.fulfill()
                 XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
             }
@@ -61,10 +61,12 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         release.signal()
         await latest?.value
 
-        XCTAssertEqual(count.withLock { $0 }, 2, "The superseded pending frame must never be encoded")
+        XCTAssertEqual(count.withLock { $0 }, 4,
+                       "The superseded pending frame must never be encoded (red and blue, each at @1x and @2x)")
         let item = try XCTUnwrap(store.items().first)
         let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: item))))
-        let pixel = try XCTUnwrap(image.pixel(x: 960, y: 250))
+        let slot = TopShelfPreviewRenderer.boardSlot
+        let pixel = try XCTUnwrap(image.pixel(x: Int(slot.midX), y: Int(slot.midY)))
         XCTAssertGreaterThan(pixel.b, pixel.r, "Only the latest blue frame belongs on Home")
         XCTAssertEqual(cache.images[panel.id]?.state, color(.blue))
     }
@@ -79,9 +81,13 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let encoding = expectation(description: "old image encoding held")
         let release = DispatchSemaphore(value: 0)
         defer { release.signal() }
+        let first = OSAllocatedUnfairLock(initialState: true)
         let cache = TopShelfPreviewPublisher.Cache { image in
-            encoding.fulfill()
-            XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            // Hold the first encode only (A7 encodes @1x then @2x).
+            if first.withLock({ let was = $0; $0 = false; return was }) {
+                encoding.fulfill()
+                XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            }
             return Self.png(image)
         }
         TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
@@ -109,9 +115,13 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         let encoding = expectation(description: "superseded refresh encoding held")
         let release = DispatchSemaphore(value: 0)
         defer { release.signal() }
+        let first = OSAllocatedUnfairLock(initialState: true)
         let cache = TopShelfPreviewPublisher.Cache { image in
-            encoding.fulfill()
-            XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            // Hold the first encode only (A7 encodes @1x then @2x).
+            if first.withLock({ let was = $0; $0 = false; return was }) {
+                encoding.fulfill()
+                XCTAssertEqual(release.wait(timeout: .now() + 5), .success)
+            }
             return Self.png(image)
         }
         let publication = TopShelfPreviewPublisher.publish(panels: [panel], previews: [panel.id: color(.red)],
@@ -157,23 +167,30 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
         _ = try await connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
         let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        // Queued before publishTopShelf on purpose: publishing starts A7's
+        // async `GET /panel/{id}` status fetch. Under the broad "/api/panel/"
+        // key that request took this frame (CI run 42528427242); "/frame"
+        // only matches frame requests, so the order no longer matters.
+        StubURLProtocol.enqueue(.json(#"{"characters":[[63]],"message":"RED","rows":1,"cols":1}"#),
+                                for: "/frame")
         let app = AppModel(connection: connection, topShelfStore: store)
         app.publishTopShelf(panels: [panel])
+        // Let the status fetch reach the network first, as it did on CI.
+        try await Task.sleep(nanoseconds: 300_000_000)
         let panels = PanelsModel(app: app)
-
-        StubURLProtocol.enqueue(.json(#"{"characters":[[63]],"message":"RED","rows":1,"cols":1}"#),
-                                for: "/api/panel/")
         await panels.refreshPreviews(for: [panel])
         let red = try XCTUnwrap(store.items().first)
         let image = try XCTUnwrap(UIImage(data: Data(contentsOf: store.imageURL(for: red))))
         XCTAssertEqual(image.size.width / image.size.height, 16.0 / 9, accuracy: 0.001)
-        let pigment = try XCTUnwrap(image.pixel(x: 960, y: 250))
+        let slot = TopShelfPreviewRenderer.boardSlot
+        // Below the flap's split line, which crosses the slot's centre.
+        let pigment = try XCTUnwrap(image.pixel(x: Int(slot.midX), y: Int(slot.midY + 120)))
         XCTAssertEqual(Int(pigment.r), 235, accuracy: 2)
         XCTAssertEqual(Int(pigment.g), 64, accuracy: 2)
         XCTAssertEqual(Int(pigment.b), 52, accuracy: 2)
 
         StubURLProtocol.enqueue(.json(#"{"characters":[[67]],"message":"BLUE","rows":1,"cols":1}"#),
-                                for: "/api/panel/")
+                                for: "/frame")
         await panels.refreshPreviews(for: [panel])
         let blue = try XCTUnwrap(store.items().first)
         XCTAssertNotEqual(red.imageFile, blue.imageFile, "A new frame must replace the Home card artwork")
@@ -199,7 +216,8 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         stub.beforeReply = { reply in
             Task { @MainActor in release = reply; received.fulfill() }
         }
-        StubURLProtocol.enqueue(stub, for: "/api/panel/")
+        // "/frame", not "/api/panel/": an A7 status fetch must not take it.
+        StubURLProtocol.enqueue(stub, for: "/frame")
         let refresh = Task { await model.refreshPreviews(for: [panel]) }
         await fulfillment(of: [received], timeout: 3)
         connection.signOut()
@@ -214,36 +232,113 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         XCTAssertNil(model.previews[panel.id], "A stale response must not become the current panel picture either")
     }
 
+    // MARK: A7 — the carousel hero (07b A9 `166:207117`, hero `…;184:181334`)
+
+    /// RGBA bytes of a whole image, for bounding-box scans.
+    private struct Pixels {
+        let width: Int, height: Int
+        let bytes: [UInt8]
+        init(_ image: CGImage) throws {
+            width = image.width; height = image.height
+            var bytes = [UInt8](repeating: 0, count: width * height * 4)
+            let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+            let context = try XCTUnwrap(CGContext(data: &bytes, width: width, height: height, bitsPerComponent: 8,
+                                                  bytesPerRow: width * 4, space: space,
+                                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            self.bytes = bytes
+        }
+        func at(_ x: Int, _ y: Int) -> (r: Int, g: Int, b: Int) {
+            let i = (y * width + x) * 4
+            return (Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2]))
+        }
+        /// Bounding box (in pixels) of everything brighter than `floor`.
+        func box(where test: ((r: Int, g: Int, b: Int)) -> Bool) -> CGRect? {
+            var minX = Int.max, minY = Int.max, maxX = -1, maxY = -1
+            for y in 0..<height { for x in 0..<width where test(at(x, y)) {
+                minX = min(minX, x); minY = min(minY, y); maxX = max(maxX, x); maxY = max(maxY, y)
+            } }
+            return maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+        }
+    }
+
+    private func splitFlap() throws -> (Panel, PanelPreview) {
+        let panel = try JSONDecoder().decode(Panel.self, from: Data(Fixtures.panelJSON.utf8))
+        var cells = Array(repeating: Array(repeating: BoardCell.blank, count: 30), count: 12)
+        let pigments: [BoardColor] = [.red, .orange, .yellow, .green, .blue, .violet]
+        for column in 0..<30 {
+            cells[1][column] = .color(pigments[column / 5])
+            cells[10][column] = .color(pigments[5 - column / 5])
+        }
+        for (offset, char) in "LIVING ROOM".enumerated() where char != " " { cells[5][9 + offset] = .character(char) }
+        return (panel, PanelPreview(rows: 12, cols: 30, cells: cells, message: "LIVING ROOM"))
+    }
+
+    /// HIG: the carousel image is the full screen, 1920×1080 pt, supplied
+    /// at @1x and @2x.
+    func testTheHeroIsFullScreenAtBothScales() throws {
+        let (panel, preview) = try splitFlap()
+        let hero = try XCTUnwrap(TopShelfPreviewRenderer.hero(panel: panel, preview: preview))
+        XCTAssertEqual([hero.oneX.width, hero.oneX.height], [1920, 1080])
+        XCTAssertEqual([hero.twoX.width, hero.twoX.height], [3840, 2160])
+        let unavailable = try XCTUnwrap(TopShelfPreviewRenderer.unavailableHero)
+        XCTAssertEqual([unavailable.oneX.width, unavailable.twoX.width], [1920, 3840])
+    }
+
+    /// 07b A9: the board sits in `…;184:183320`'s slot, (700, 11) 1180×678,
+    /// right of the system's text column (contextTitle, title, Play / More
+    /// Info at x 80–744), on true black.
+    func testTheBoardSitsInThe07bHeroSlot() throws {
+        XCTAssertEqual(TopShelfPreviewRenderer.boardSlot, CGRect(x: 700, y: 11, width: 1180, height: 678))
+        let (panel, preview) = try splitFlap()
+        let hero = try XCTUnwrap(TopShelfPreviewRenderer.hero(panel: panel, preview: preview))
+        let pixels = try Pixels(hero.oneX)
+        let board = try XCTUnwrap(pixels.box { $0.r + $0.g + $0.b > 12 }, "the board must be drawn")
+        let slot = TopShelfPreviewRenderer.boardSlot
+        XCTAssertTrue(slot.insetBy(dx: -1, dy: -1).contains(board), "\(board) inside \(slot)")
+        XCTAssertGreaterThanOrEqual(board.minX, 700, "clear of the text column")
+        // Aspect-fit: the board fills the slot on one axis, to within one
+        // column: widths and gutters are whole points (FiestaUI
+        // board-metrics), so the pitch can't land exactly.
+        XCTAssertTrue(abs(board.width - slot.width) <= slot.width / 30 || abs(board.height - slot.height) <= 2, "\(board)")
+        XCTAssertEqual(pixels.at(40, 1060).r + pixels.at(40, 1060).g, 0, "true black outside the board")
+    }
+
+    /// The golden: the @2x hero, A9 hero `I166:207117;149:182603;184:181334`.
+    func testHeroGolden() throws {
+        let (panel, preview) = try splitFlap()
+        let hero = try XCTUnwrap(TopShelfPreviewRenderer.hero(panel: panel, preview: preview))
+        TVSnapshot.assertMatches(UIImage(cgImage: hero.twoX, scale: 2, orientation: .up), named: "top-shelf-hero")
+    }
+
     func testSnapshotsPreserveSquareAndRoundLEDGeometry() throws {
         let preview = PanelPreview(rows: 1, cols: 1, cells: [[.color(.red)]], message: "RED")
         for shape in ["square", "round"] {
             let panel = try MatrixDisplayTests.panel(["render_style": "led_matrix", "device_model_spec": [
                 "geometry": ["kind": "pixels", "width": 192, "height": 96],
                 "appearance": ["pixelShape": shape, "dotRatio": 0.82]]])
-            let pixels = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
-            let image = UIImage(cgImage: pixels)
-            let attachment = XCTAttachment(image: image)
+            let hero = try XCTUnwrap(TopShelfPreviewRenderer.hero(panel: panel, preview: preview))
+            let attachment = XCTAttachment(image: UIImage(cgImage: hero.oneX))
             attachment.name = "Top Shelf \(shape) LEDs"
             attachment.lifetime = .keepAlways
             add(attachment)
-            XCTAssertEqual(image.size.width, 1920)
-            XCTAssertEqual(image.size.height, 1080)
-            XCTAssertEqual(Int(try XCTUnwrap(image.pixel(x: 69, y: 97)).r), 235, accuracy: 2)
-            let corner = try XCTUnwrap(image.pixel(x: 65, y: 93))
-            if shape == "square" { XCTAssertGreaterThan(corner.r, 200) }
-            else { XCTAssertLessThan(corner.r, 80, "round LEDs must retain their dark corners") }
+            let pixels = try Pixels(hero.twoX)
+            let dot = try XCTUnwrap(pixels.box { $0.r > 200 && $0.g < 120 }, "the red LED must be drawn")
+            XCTAssertTrue(TopShelfPreviewRenderer.boardSlot.applying(.init(scaleX: 2, y: 2)).contains(dot))
+            let centre = pixels.at(Int(dot.midX), Int(dot.midY))
+            XCTAssertGreaterThan(centre.r, 180)
+            let corner = pixels.at(Int(dot.minX), Int(dot.minY))
+            // The block's top-left pixel is one dot's true corner, antialiased.
+            if shape == "square" {
+                // DD24: the hub's square is FiestaUI's rounded square: the
+                // corner is cut (a square kept it above 150), but by 0.15 of
+                // the dot, not into an oval's dark corner.
+                XCTAssertLessThan(corner.r, 150, "square LEDs round their true corner (DD24)")
+                XCTAssertGreaterThan(corner.r, 60, "…by 0.15 of the dot, not into an oval")
+            } else {
+                XCTAssertLessThan(corner.r, 40, "round LEDs must retain their dark corners")
+            }
         }
-    }
-
-    func testBoardContentStaysClearOfHomeCardRoundedEdges() throws {
-        let preview = PanelPreview(rows: 1, cols: 1, cells: [[.color(.red)]], message: "RED")
-        let panel = try MatrixDisplayTests.panel(["render_style": "led_matrix"])
-        let pixels = try XCTUnwrap(TopShelfPreviewRenderer.image(panel: panel, preview: preview))
-        let image = UIImage(cgImage: pixels)
-        // Home crops the corners and adds a focus rim. Lit edge LEDs need
-        // breathing room inside the image instead of touching that crop.
-        XCTAssertLessThan(try XCTUnwrap(image.pixel(x: 5, y: 65)).r, 80)
-        XCTAssertLessThan(try XCTUnwrap(image.pixel(x: 1915, y: 1015)).r, 80)
     }
 
     func testPublisherUsesExplicitUnavailableArtworkWithoutTouchingTheNetwork() async throws {
@@ -267,7 +362,10 @@ final class TopShelfPreviewRendererTests: XCTestCase {
         XCTAssertEqual(item.name, panel.name)
         let image = try Data(contentsOf: store.imageURL(for: item))
         XCTAssertNotNil(UIImage(data: image))
-        XCTAssertEqual(image, Self.png(try XCTUnwrap(TopShelfPreviewRenderer.unavailable)),
+        let image2x = try Data(contentsOf: try XCTUnwrap(store.imageURL2x(for: item)))
+        XCTAssertEqual(image2x, Self.png(try XCTUnwrap(TopShelfPreviewRenderer.unavailableHero?.twoX)),
+                       "A7: the @2x artwork is published too")
+        XCTAssertEqual(image, Self.png(try XCTUnwrap(TopShelfPreviewRenderer.unavailableHero?.oneX)),
                        "No fetched frame means an explicit unavailable picture, never invented board content")
         // Fetching belongs to the caller; publishing only writes local images.
         XCTAssertTrue(StubURLProtocol.requests.isEmpty,

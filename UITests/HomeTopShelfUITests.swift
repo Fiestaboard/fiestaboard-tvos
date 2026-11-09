@@ -10,7 +10,8 @@ final class HomeTopShelfUITests: XCTestCase {
     }
 
     /// A static brand poster must not pass for working Top Shelf content.
-    /// Exercise the real Home card row and open its second panel with Select.
+    /// Exercise the real Home carousel (A7) and open a panel with Play and
+    /// Panels with More Info.
     func testHomeTopShelfScreenshotForReview() throws {
         continueAfterFailure = false
         let panelsLoaded = expectation(description: "The app requested the available panels")
@@ -92,53 +93,68 @@ final class HomeTopShelfUITests: XCTestCase {
             }
         }
         XCTAssertTrue(icon.hasFocus, "FiestaBoard's icon should be focused while its Top Shelf loads")
-        // HeadBoard exposes section headers as Other and cards as Cell.
-        let section = home.otherElements["Available panels"]
+
+        // A7 (07b A9 `166:207117`, DD2): a full-screen carousel, one item
+        // per panel. HeadBoard exposes each item as a Cell labelled with
+        // the item's title, and the `.actions` buttons as Play / More Info.
         let livingRoom = home.cells.matching(NSPredicate(format: "label == %@", "Living Room")).firstMatch
-        let kitchenCard = home.cells.matching(NSPredicate(format: "label == %@", "Kitchen Review")).firstMatch
-        XCTAssertTrue(kitchenCard.waitForExistence(timeout: 15), "The extension must load both available panel cards")
-        let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        capture.name = "Apple TV Home — available panel cards"
-        capture.lifetime = .keepAlways
-        add(capture)
-        let hierarchy = XCTAttachment(string: home.debugDescription)
-        hierarchy.name = "Top Shelf card accessibility"
-        hierarchy.lifetime = .keepAlways
-        add(hierarchy)
-        XCTAssertTrue(section.exists, "Home should show the extension's available-panel card row")
+        let kitchenItem = home.cells.matching(NSPredicate(format: "label == %@", "Kitchen Review")).firstMatch
+        XCTAssertTrue(kitchenItem.waitForExistence(timeout: 15), "The extension must load one carousel item per panel")
         XCTAssertTrue(livingRoom.exists)
+        XCTAssertEqual(livingRoom.frame.size, CGSize(width: 1920, height: 1080),
+                       "carousel items are full screen (HIG), not a row of cards")
+        Thread.sleep(forTimeInterval: 1)
+        attach("Apple TV Home — Top Shelf carousel (07b A9 166:207117)")
+
+        // Swipe up: the carousel goes full screen with the system actions.
         XCUIRemote.shared.press(.up)
-        for _ in 0..<3 {
-            if livingRoom.hasFocus { break }
-            XCUIRemote.shared.press(.left)
-        }
-        XCTAssertTrue(livingRoom.hasFocus, "The first available panel card should accept remote focus")
+        let play = livingRoom.buttons["Play"]
+        let moreInfo = livingRoom.buttons["More Info"]
+        XCTAssertTrue(play.waitForExistence(timeout: 5), "`.actions` style: the system Play button")
+        XCTAssertTrue(moreInfo.exists, "`.actions` style: the system More Info button")
+        XCTAssertTrue(play.hasFocus, "Play takes focus when the carousel goes full screen")
+        Thread.sleep(forTimeInterval: 1)
+        attach("Apple TV Home — carousel full screen, Play / More Info")
+        let tree = XCTAttachment(string: home.debugDescription)
+        tree.name = "Top Shelf carousel accessibility"
+        tree.lifetime = .keepAlways
+        add(tree)
         holdForReview()
-        XCUIRemote.shared.press(.right)
-        XCTAssertTrue(kitchenCard.hasFocus, "Moving right must focus the second available panel card")
-        let focusedCard = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        focusedCard.name = "Apple TV Home — Kitchen Review card selected"
-        focusedCard.lifetime = .keepAlways
-        add(focusedCard)
-        holdForReview()
+
+        // Play opens that panel's viewer directly.
         XCUIRemote.shared.press(.select)
-        XCTAssertTrue(app.buttons["Kitchen Review"].waitForExistence(timeout: 10),
-                      "Selecting the second Home card must open that panel's viewer")
+        XCTAssertTrue(app.buttons["Living Room"].waitForExistence(timeout: 10),
+                      "Play must open the panel's viewer")
         XCTAssertEqual(app.state, .runningForeground)
-        XCTAssertFalse(app.staticTexts["Panels"].exists,
-                       "A Top Shelf card should open its panel directly")
-        let boardReady = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hasFocus == YES AND value == %@", "KITCHEN REVIEW"),
-            object: app.buttons["Kitchen Review"])
-        XCTAssertEqual(XCTWaiter.wait(for: [boardReady], timeout: 5), .completed)
+        XCTAssertFalse(app.staticTexts["Panels"].exists, "Play opens the viewer, not Panels")
+        attach("Top Shelf Play opened Living Room")
         holdForReview()
+
+        // More Info opens Panels.
+        XCUIRemote.shared.press(.home)
+        XCTAssertTrue(icon.waitForExistence(timeout: 5))
+        for _ in 0..<10 where !icon.hasFocus {
+            if let focused = home.icons.allElementsBoundByIndex.first(where: { $0.hasFocus }) {
+                XCUIRemote.shared.press(focused.frame.midX < icon.frame.midX ? .right : .left)
+            } else {
+                XCUIRemote.shared.press(.down)
+            }
+        }
+        XCTAssertTrue(icon.hasFocus)
+        XCUIRemote.shared.press(.up)
+        XCTAssertTrue(play.waitForExistence(timeout: 5))
+        XCUIRemote.shared.press(.down)
+        XCTAssertTrue(moreInfo.hasFocus, "Down moves from Play to More Info")
         XCUIRemote.shared.press(.select)
-        XCTAssertTrue(app.staticTexts["Kitchen Review"].waitForExistence(timeout: 3))
-        holdForReview()
-        let opened = XCTAttachment(screenshot: app.screenshot())
-        opened.name = "Top Shelf opened Kitchen Review"
-        opened.lifetime = .keepAlways
-        add(opened)
+        XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 10), "More Info must open Panels")
+        attach("Top Shelf More Info opened Panels")
+    }
+
+    private func attach(_ name: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
     }
 
     private func holdForReview() {

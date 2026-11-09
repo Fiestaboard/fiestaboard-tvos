@@ -13,23 +13,28 @@ struct DeviceSignInScreen: View {
                                     ? TVCopy.DeviceSignIn.retrySubtitle
                                     : TVCopy.DeviceSignIn.subtitle,
                                 context: app.connection.saved?.displayName ?? "FiestaBoard")
-            HStack(alignment: .top, spacing: 64) {
+                .frame(height: ScreenRhythm.headingHeight, alignment: .topLeading)
+            // 07b A2: the QR at (80, 320), 348 square; the words at x 500.
+            HStack(alignment: .top, spacing: 500 - 80 - Self.qrSide) {
                 Group {
                     if let url = model?.completeURL { QRCodeView(url: url) }
                     else if model == nil || model?.state == .idle || model?.state == .starting {
-                        TacoLoader(size: .large).frame(width: 390, height: 390)
+                        TacoLoader(size: .large).frame(width: Self.qrSide, height: Self.qrSide)
                             .accessibilityIdentifier("device-code-loading")
                     } else {
                         Image(systemName: "qrcode")
                             .font(.system(size: 120))
                             .foregroundStyle(Fiesta.Colors.mutedForeground)
-                            .frame(width: 390, height: 390)
+                            .frame(width: Self.qrSide, height: Self.qrSide)
                             .accessibilityHidden(true)
                     }
                 }
+                .frame(width: Self.qrSide, height: Self.qrSide)
+                .figmaNode(Self.a2Slot + ";166:147625")
                 VStack(alignment: .leading, spacing: 18) {
                     Text(activationAddress)
                         .font(.title3)
+                        .figmaNode(Self.a2Slot + ";166:147627", label: activationAddress)
                         .accessibilityLabel("Browser address: \(activationAddress)")
                     if let challenge = model?.challenge {
                         Text(challenge.userCode).font(.system(size: 60, weight: .bold, design: .monospaced))
@@ -55,11 +60,15 @@ struct DeviceSignInScreen: View {
                         .font(.caption).foregroundStyle(Fiesta.Colors.mutedForeground)
                 }
             }
+            // 07b A2: the block from y 320, the buttons at y 860 (`166:147655`).
+            .padding(.top, 320 - ScreenRhythm.contentTop)
+            .frame(height: 860 - Fiesta.Metrics.gutter - ScreenRhythm.contentTop, alignment: .topLeading)
             HStack(spacing: 24) {
                 Button(TVCopy.DeviceSignIn.newCode) { model?.start() }.accessibilityIdentifier("device-new-code")
                 Button(TVCopy.DeviceSignIn.usePassword) { backToPassword() }
                 Button(TVCopy.DeviceSignIn.back) { backToPassword() }
             }
+            .figmaNode(Self.a2Slot + ";166:147655")
         }
         // A4a: the system safe area is the 07b title-safe (80/60), and the
         // content hangs from the top as A2 draws it (eyebrow at y 110), not
@@ -85,6 +94,11 @@ struct DeviceSignInScreen: View {
     }
 
     private func backToPassword() { model?.cancel(); app.route = .signIn }
+
+    static let qrSide: CGFloat = 348
+
+    /// The 07b A2 frame's Screen slot (`I166:147391;149:182603`).
+    private static let a2Slot = "I166:147391;149:182603"
 }
 
 /// A2 `166:147643` "Waiting": the static 44 pt Taco mark (`166:147644`)

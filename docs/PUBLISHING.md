@@ -89,7 +89,7 @@ checks. See `docs/REVOCABLE-SIGN-IN.md`.
 FiestaBot is retired on TV (A9): the app sends nothing to an AI provider and
 holds no chat history. At the next submission, update the App Store privacy
 answers and the age-rating questionnaire to drop the AI-provider data flow.
-Keep this document, SettingsScreen.privacyBody, the network usage text in
+Keep this document, `SettingsCopy.privacyBody`, the network usage text in
 project.yml, docs/PRIVACY.md and the privacy manifest consistent. The server is
 the **hub** in all of them; "board" means only what a panel shows
 (`scripts/vocabulary/check-vocabulary.mjs` enforces it for the app and
@@ -196,3 +196,26 @@ when visible features change.
 Both app and Top Shelf Info.plist files declare the `arm64` required capability.
 The Release archive job and signed export validate the processed plists before
 upload, catching Apple's ITMS-90502 rejection locally in the build pipeline.
+
+## Release readiness checks (A12)
+
+What CI already proves before an upload, and what still needs a real Apple TV:
+
+- **Listing copy.** `fastlane/metadata/en-US/*.txt` and the Fastfile's release notes go through
+  `scripts/vocabulary/check-vocabulary.mjs` with the app's strings: "hub" (never "server" or
+  hub-sense "board"), "silence" (never "quiet"), US spelling. `A12ReleaseReadinessTests` checks
+  App Store Connect's field limits.
+- **Notices.** `Resources/THIRD_PARTY_NOTICES.txt` is the first page of Settings › About & help ›
+  Licenses. It credits the app code (MIT), the matrix data (MIT), Spline Sans Mono (OFL) and the
+  taco artwork with the owner's wording, "Taco artwork © FiestaBoard. All rights reserved. Used in
+  this app with permission." The taco art is not MIT. `A12ReleaseReadinessTests` fails on any new
+  font, bundled licence or Swift package that isn't credited, and on a package that ships.
+- **Version.** `CHANGELOG.md`'s newest heading matches `MARKETING_VERSION`; the app and its Top
+  Shelf extension carry the same numbers.
+- **Privacy.** `docs/PRIVACY.md`, the in-app Privacy page and `PrivacyInfo.xcprivacy` are checked
+  against each other. The FiestaBot paragraphs leave the policy and the in-app page together (A9).
+- **Release archive.** `scripts/check-release-probes.sh` fails on any DEBUG parity or timing probe,
+  its defaults key, or a 07b node id in the shipped binaries.
+- **Accessibility.** `AccessibilityAuditUITests` runs Apple's audit on every reachable screen.
+- **On a real Apple TV:** [docs/HARDWARE-CHECKLIST.md](HARDWARE-CHECKLIST.md), before TestFlight
+  and before each submission.

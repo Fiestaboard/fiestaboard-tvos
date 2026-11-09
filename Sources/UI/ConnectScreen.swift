@@ -37,9 +37,13 @@ struct ConnectScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Fiesta.Metrics.gutter) {
             header
+                .frame(height: ScreenRhythm.headingHeight, alignment: .topLeading)
             errorBanner
             boards
+                // 07b A1: the address row's label at y 800 (`166:147344`).
+                .frame(height: 800 - Fiesta.Metrics.gutter - ScreenRhythm.contentTop)
             manualEntry
+            Spacer(minLength: 0)
         }
         // A4a: no padding of its own; the system safe area is the 07b
         // title-safe (80/60). The A1 Screen slot is the whole 1920×1080
@@ -129,9 +133,14 @@ struct ConnectScreen: View {
                 }
                 // Cards lift on focus; without room inside the scroll view
                 // the lift is clipped at the edges.
-                .padding(.vertical, 36)
-                .padding(.horizontal, 16)
+                // 07b A1: the hub card at y 340 (`166:147325`).
+                .padding(EdgeInsets(top: 340 - ScreenRhythm.contentTop, leading: Self.focusRoom,
+                                    bottom: Self.focusRoom, trailing: Self.focusRoom))
             }
+            // A5: widen the viewport by the focus room it spends on its
+            // content, so the first card sits on the title-safe edge (A1's
+            // x 80), not 16 pt inside it.
+            .padding(.horizontal, -Self.focusRoom)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .focusScope(boardScope)
             // Two focus sections on this screen — the grid and the address
@@ -178,6 +187,8 @@ struct ConnectScreen: View {
     /// `DiscoveredBoardCard`'s height (190 pt content + 2 × 28 pt padding).
     private static let cardHeight: CGFloat = 246
 
+    /// Room inside the hub grid for a card's focus lift.
+    private static let focusRoom: CGFloat = 16
     private static let columns = [GridItem(.adaptive(minimum: 400), spacing: 40, alignment: .topLeading)]
 
     private var boardIDs: [String] { model?.boards.map(\.id) ?? [] }
@@ -192,6 +203,7 @@ struct ConnectScreen: View {
         card.figmaTitle = board.id == boardIDs.first ? Self.cardTitleNode : nil
         #endif
         return card
+            .figmaNode(Self.a1Slot + ";166:147325", enabled: board.id == boardIDs.first)
             .focused($focusedControl, equals: .board(board.id))
             .prefersDefaultFocus(board.id == boardIDs.first, in: boardScope)
     }
@@ -270,10 +282,12 @@ struct ConnectScreen: View {
     /// It is visible and focusable in every state on purpose — it is the only
     /// route through this screen for anyone with no board on their network.
     private var manualEntry: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        // 07b A1: the label at y 800, 32 tall; the field 18 below, at y 850.
+        VStack(alignment: .leading, spacing: 18) {
             Text(TVCopy.Connect.manualLabel)
                 .font(Fiesta.Text.caption)
                 .foregroundStyle(Fiesta.Colors.mutedForeground)
+                .frame(height: 32, alignment: .topLeading)
                 .figmaNode(Self.a1Slot + ";166:147344", label: TVCopy.Connect.manualLabel)
 
             HStack(spacing: 20) {

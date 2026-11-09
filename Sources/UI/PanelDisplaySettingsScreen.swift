@@ -62,8 +62,9 @@ struct PanelDisplaySettingsScreen: View {
                                              (.some(.fillTV), "Fill TV"), (.some(.fitPanel), "Fit panel"),
                                              (.some(.trueSize), "True LED size")], selection: $draft.matrixSizing)
                                 .accessibilityIdentifier("panelSettings.matrixSizing")
-                            choice("LED spacing presets", value: "\(draft.pitchText) mm",
-                                   options: [2.0, 3, 4, 5, 6, 8, 10, 12, 16, 20].map { (String($0), "\(Int($0)) mm") },
+                            // DD21: the shared presets, in their shortest exact form.
+                            choice("LED spacing presets", value: Double(draft.pitchText).map(LEDSpacing.label) ?? "\(draft.pitchText) mm",
+                                   options: LEDSpacing.presets.map { (String($0), LEDSpacing.label($0)) },
                                    selection: $draft.pitchText)
                             number("LED spacing (1–20 mm)", text: $draft.pitchText)
                         } else {

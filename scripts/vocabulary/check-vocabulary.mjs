@@ -46,6 +46,10 @@ export const ALLOW = [
   "missing/deleted boards",
   "another board render",
   "board is showing",
+  // 07b A8b `248:110205` subtitle: the picture on screen.
+  "keeps the board bright",
+  // A12 App Store listing: the picture a panel draws.
+  "split-flap board",
 ];
 
 const BOARD = /\bboards?\b/gi;
@@ -148,6 +152,62 @@ export function checkProjectYml(source, file = "project.yml") {
   return out;
 }
 
+/**
+ * A12: words the listing must not use. CANON: the hub is never a "server";
+ * DD22 aligned the TV on the web's "silence", so "quiet" is not a mode name;
+ * the copy is US English.
+ */
+export const LISTING_BANS = [
+  [/\bservers?\b/gi, 'say "hub"'],
+  [/\bquiet\b/gi, 'say "silence" (DD22)'],
+];
+
+/** UK spellings with their US form. */
+export const US_SPELLING = {
+  colour: "color", colours: "colors", favourite: "favorite", favourites: "favorites", centre: "center",
+  centred: "centered", behaviour: "behavior", licence: "license", licences: "licenses", organise: "organize",
+  customise: "customize", customised: "customized", grey: "gray", analyse: "analyze", cancelled: "canceled",
+  programme: "program", optimise: "optimize", personalise: "personalize", recognise: "recognize",
+};
+
+function listingFindings(text) {
+  const problems = findings(text);
+  for (const [pattern, advice] of LISTING_BANS) {
+    if (!advice) continue;
+    for (const m of text.matchAll(pattern)) problems.push(`"${m[0]}": ${advice}`);
+  }
+  for (const word of text.match(/[A-Za-z]+/g) ?? []) {
+    const us = US_SPELLING[word.toLowerCase()];
+    if (us) problems.push(`"${word}": US spelling is "${us}"`);
+  }
+  return problems;
+}
+
+/** A12: App Store listing copy (fastlane/metadata/<locale>/*.txt), line by line. */
+export function checkListing(source, file) {
+  const out = [];
+  source.split("\n").forEach((raw, index) => {
+    const line = raw.trim();
+    if (!line || /^https?:\/\//.test(line)) return;
+    const problems = listingFindings(line);
+    if (problems.length) out.push({ file, line: index + 1, text: line, problems });
+  });
+  return out;
+}
+
+/** A12: the release-notes strings deliver uploads from fastlane/Fastfile. */
+export function checkFastfile(source, file = "fastlane/Fastfile") {
+  const out = [];
+  source.split("\n").forEach((raw, index) => {
+    if (!raw.includes("release_notes")) return;
+    for (const m of raw.matchAll(/=>\s*"([^"]*)"/g)) {
+      const problems = listingFindings(m[1]);
+      if (problems.length) out.push({ file, line: index + 1, text: m[1], problems });
+    }
+  });
+  return out;
+}
+
 function swiftFiles(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {
@@ -172,6 +232,25 @@ export function checkRepo(root) {
     }
   }
   results.push(...checkProjectYml(readFileSync(path.join(root, "project.yml"), "utf8")));
+  // A12: the App Store listing and the release notes.
+  const metadata = path.join(root, "fastlane", "metadata");
+  let locales = [];
+  try {
+    locales = readdirSync(metadata).filter((name) => statSync(path.join(metadata, name)).isDirectory());
+  } catch {
+    locales = [];
+  }
+  for (const locale of locales) {
+    for (const name of readdirSync(path.join(metadata, locale)).filter((n) => n.endsWith(".txt"))) {
+      const file = path.join(metadata, locale, name);
+      results.push(...checkListing(readFileSync(file, "utf8"), path.relative(root, file)));
+    }
+  }
+  try {
+    results.push(...checkFastfile(readFileSync(path.join(root, "fastlane", "Fastfile"), "utf8")));
+  } catch {
+    // no Fastfile: nothing to check
+  }
   return results;
 }
 
