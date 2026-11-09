@@ -140,11 +140,21 @@ final class HomeTopShelfUITests: XCTestCase {
     /// TV wrap-up S-T2: leave the app for Home and return the Home host
     /// that exposes FiestaBoard's icon. The press returns before the app has
     /// left the foreground and before Home's own transition ends, so wait
-    /// for `.runningBackground` first; then, if no host shows the icon
+    /// for the background (`.runningBackground` or, #33 T-N3,
+    /// `.runningBackgroundSuspended`) first; then, if no host shows the icon
     /// within 5 s, press Home once more and look again (one retry).
     private func returnHome(from app: XCUIApplication, pressing button: XCUIRemote.Button) throws -> XCUIApplication {
         XCUIRemote.shared.press(button)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5), "the app must leave the foreground")
+        // #33 T-N3: an app suspended quickly goes straight to
+        // `.runningBackgroundSuspended`, so either background state counts.
+        let backgrounded = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let state = (object as? XCUIApplication)?.state else { return false }
+                return state == .runningBackground || state == .runningBackgroundSuspended
+            },
+            object: app)
+        XCTAssertEqual(XCTWaiter().wait(for: [backgrounded], timeout: 5), .completed,
+                       "the app must leave the foreground")
         let headboard = XCUIApplication(bundleIdentifier: "com.apple.HeadBoard")
         let pineboard = XCUIApplication(bundleIdentifier: "com.apple.PineBoard")
         // Selecting a host from the instantaneous post-press state can lock

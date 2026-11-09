@@ -17,10 +17,12 @@ analytics or tracking data through the native app.
 Your hub's address and display preferences are stored on your Apple TV.
 Supported hubs issue a revocable TV credential stored in the device's
 Keychain. A password entered directly is sent to your hub for sign-in and
-is not retained after that credential is issued. Older hubs can require
-a password retained in the Keychain to reconnect. Plain HTTP connections do
-not encrypt passwords, credentials or hub requests in transit; use trusted
-networks and HTTPS where your hub supports it.
+is not retained after that credential is issued.
+Hubs without TV sign-in use a saved, encrypted password to reconnect: a hub
+too old to offer TV sign-in, or one with it turned off. That password is
+kept in the Keychain. Plain HTTP connections do not encrypt passwords,
+credentials or hub requests in transit; use trusted networks and HTTPS
+where your hub supports it.
 
 ## Home screen previews
 

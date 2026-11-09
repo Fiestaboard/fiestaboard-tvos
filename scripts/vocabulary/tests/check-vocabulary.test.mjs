@@ -195,3 +195,14 @@ test("CLI: a seeded TopShelf literal with 'server' fails the repo check", () => 
   assert.equal(r.status, 1);
   assert.match(r.stderr, /TopShelf\/B\.swift:1/);
 });
+
+test("app copy: one-word literals still meet the listing bans and US spelling (#33 T-N1)", () => {
+  for (const word of ["Server", "Servers", "Quiet", "Licences", "Colour", "Centred", "Cancelled"]) {
+    assert.equal(checkSwift(`Text("${word}")`, "X.swift").length, 1, word);
+  }
+  assert.equal(checkSwift('case quiet = "Quiet"', "X.swift").length, 1);
+  assert.equal(checkProjectYml("        CFBundleDisplayName: Colour\n").length, 1);
+  // "board" alone is still left alone: one-word "board" is a key (`"target": "board"`).
+  assert.deepEqual(checkSwift('let x = ["target": "board", "board_id": id]', "X.swift"), []);
+  assert.deepEqual(checkSwift('let x = "color"', "X.swift"), []);
+});

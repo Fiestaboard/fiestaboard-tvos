@@ -131,7 +131,7 @@ final class TopShelfStatusWiringTests: XCTestCase {
         await app.publishTopShelf(panels: panels)?.value
         await app.topShelfStatusTask?.value
         XCTAssertEqual(statusRequests, 2)
-        XCTAssertEqual(AppModel.topShelfStatusConcurrency, 4, "the same four-at-a-time budget as frames")
+        XCTAssertEqual(AppModel.topShelfStatusConcurrency, 2, "two of the hub budget's four (A7b S1)")
     }
 
     /// A failed fetch leaves no line and is not retried inside the interval.
