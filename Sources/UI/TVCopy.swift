@@ -102,7 +102,7 @@ enum TVCopy {
     }
 
     enum SignIn {
-        static let useAnother = "Use another hub"
+        static let useAnother = "Choose another hub"
     }
 
     enum Viewer {

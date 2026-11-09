@@ -52,6 +52,8 @@ export const ALLOW = [
   "keeps the board bright",
   // A12 App Store listing: the picture a panel draws.
   "split-flap board",
+  // 07b G9 9b `278:138887` Movement › Gentle: OLED care moves the picture.
+  "shifts the board",
 ];
 
 const BOARD = /\bboards?\b/gi;

@@ -57,6 +57,7 @@ test("display-sense board passes through the allow-list", () => {
     "Rotate the board's position?",
     "Night level multiplies board brightness.",
     "Current board content",
+    "Shifts the board a few pixels over 20 min",
   ]) {
     assert.deepEqual(checkSwift(`let x = "${s}"`, "X.swift"), [], s);
   }
