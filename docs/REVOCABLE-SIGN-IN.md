@@ -51,8 +51,7 @@ Keychain abstraction failures, migration and generation races; it does not exerc
 tvOS Keychain entitlement behavior, focus, or actual device rendering.
 
 The sign-in UX regression suite covers denied/expired code cleanup, public-code
-announcements, revoked-token recovery from panel lists, previews and Settings, and rejected
-FiestaBot navigation. `DeviceSignInUITests` retains simulator screenshots for the
+announcements, and revoked-token recovery from panel lists, previews and Settings. `DeviceSignInUITests` retains simulator screenshots for the
 ready QR/manual-code screen and terminal recovery screens. These fixtures verify
 remote navigation and layout; they do not replace a browser-to-TV approval test
 against a running server or a physical VoiceOver/QR-scanning check.

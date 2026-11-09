@@ -74,9 +74,10 @@ HTTP connections transmit passwords and bearer credentials without TLS. The boar
 address and display preferences use UserDefaults. Do not claim passwords never
 leave the device. No credential or private activation code goes to Top Shelf.
 
-Sign out/Forget remove local credentials immediately and attempt server self-revocation.
-When offline, remove the TV remotely in Account → Signed-in devices; local removal
-does not prove remote revocation. TV credentials allow panel viewing and the six
+Sign out/Forget remove local credentials immediately and attempt hub self-revocation.
+When offline, revoke the TV on the phone in Displays › *your TV* › Shown on, or in
+Account → Signed-in devices on the hub's web page; local removal does not prove
+remote revocation. TV credentials allow panel viewing and the six
 approved display fields. Disabling new
 TV enrollment does not revoke existing credentials. Revoked/expired credentials
 never replay an old password. The QR is generated locally with Core Image.

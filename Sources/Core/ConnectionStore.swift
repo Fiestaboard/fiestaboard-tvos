@@ -358,7 +358,7 @@ public final class ConnectionStore: @unchecked Sendable {
             let migrate = try lock.withLock { () -> Bool in
                 try checkCurrentLocked(generation)
                 defaults.removeObject(forKey: legacyMigrationFlag(host))
-                guard deviceSignInEnabled, migrationDue(host) else { return false }
+                guard capability?.isEnabled ?? false, migrationDue(host) else { return false }
                 defaults.set(clock().addingTimeInterval(Self.migrationRetryInterval), forKey: migrationRetryKey(host))
                 return true
             }
