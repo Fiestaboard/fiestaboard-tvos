@@ -1,26 +1,26 @@
 # FiestaBoard for Apple TV privacy
 
-Effective October 24, 2026.
+Effective November 8, 2026.
 
 FiestaBoard for Apple TV is an open-source companion app that connects to a
-FiestaBoard server you choose. It does not include advertising, analytics,
+FiestaBoard hub you choose. It does not include advertising, analytics,
 tracking SDKs, or an account service operated by the app developer.
 
 ## Your hub and connection
 
-The app sends panel, sign-in and control requests to the FiestaBoard server
-at the address you select or enter. That server may run on your local network
+The app sends panel, sign-in and control requests to the FiestaBoard hub
+at the address you select or enter. That hub may run on your local network
 or at a remote address you configure. Its operator controls its data handling.
 The app developer does not receive your board contents, credentials, usage
 analytics or tracking data through the native app.
 
 Your hub's address and display preferences are stored on your Apple TV.
-Supported servers issue a revocable TV credential stored in the device's
+Supported hubs issue a revocable TV credential stored in the device's
 Keychain. A password entered directly is sent to your hub for sign-in and
-is not retained after that credential is issued. Older servers can require
+is not retained after that credential is issued. Older hubs can require
 a password retained in the Keychain to reconnect. Plain HTTP connections do
 not encrypt passwords, credentials or hub requests in transit; use trusted
-networks and HTTPS where your server supports it.
+networks and HTTPS where your hub supports it.
 
 ## Optional AI features
 
@@ -39,16 +39,17 @@ Apple's system keyboard settings and privacy policy.
 ## Home screen previews
 
 Panel names and static board snapshots are cached on this Apple TV and shared
-with its Top Shelf extension so they can appear on the Home screen. No server
+with its Top Shelf extension so they can appear on the Home screen. No hub
 address or sign-in credential is shared with that extension. These caches can
 be removed by the system and are cleared when you sign out or forget a hub.
 
 ## Removing access
 
 Sign out or forget the hub to remove local credentials and cached previews.
-The app also attempts to revoke its TV credential on your server. If the hub
-is offline, revoke access in **Account → Signed-in devices** on the server.
-Removing local information does not delete records retained by your server or
+The app also attempts to revoke its TV credential on your hub. If the hub
+is offline, revoke this TV on your phone in **Displays › *your TV* › Shown on**,
+or in **Account → Signed-in devices** on the hub's web page.
+Removing local information does not delete records retained by your hub or
 AI provider; contact their operator or follow their deletion controls.
 
 ## Questions and support

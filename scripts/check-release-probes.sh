@@ -23,6 +23,10 @@ fi
 # or a DEBUG fixture id (`parity:glass`). Ids stored in a view's property
 # survive into Release even though inlined figmaNode arguments do not.
 pattern='FigmaGeometryRegistry|FigmaNodeModifier|figmaNode|ParityFixture|fiestaboard\.figmaProbeOut|fiestaboard\.parityFixture'
+# A12: the DEBUG timing and review probes A4b-A11 added, and their defaults
+# keys. Each is compiled out with `#if DEBUG`.
+pattern+='|PanelNavigationProbe|RenderPacingProbe|MatrixPreparationProbe|FocusChangeProbe|DrawnPreviewMarker'
+pattern+='|ConnectReviewDiscovery|fiestaboard\.(panelProfile|renderProfile|viewerMaterial)'
 pattern+='|I[0-9]+:[0-9]+;[0-9]+:[0-9]+|(^|[^0-9])[0-9]{2,4}:[0-9]{3,7}([^0-9]|$)|parity:[a-z]+'
 found=0
 while IFS= read -r -d '' binary; do
