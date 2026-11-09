@@ -68,9 +68,26 @@ final class A12AccessibilityTests: XCTestCase {
 
     // MARK: Materials, measured
 
-    /// The measured glass caption over white (4.33 on tvOS 27.2), less a
-    /// margin for the other OS major's glass. A regression floor, not a pass.
-    static let glassCaptionFloor = 4.2
+    /// The overlay subtitle on `material` as drawn: its token at its
+    /// opacity, blended over `ground` (sRGB, as the compositor blends).
+    static func caption(on material: ViewerMaterial, over ground: (r: UInt8, g: UInt8, b: UInt8, a: UInt8)) -> Double {
+        let d = FiestaTokenValues.Dark.self
+        let token = material.captionUsesForeground ? d.foreground : d.mutedForeground
+        let a = material.captionOpacity
+        func mix(_ c: Double, _ g: UInt8) -> Double { a * c + (1 - a) * Double(g) / 255 }
+        return luminance(mix(token.red, ground.r), mix(token.green, ground.g), mix(token.blue, ground.b))
+    }
+
+    /// TV wrap-up S-T3 (G-1): on Liquid Glass the subtitle is --foreground
+    /// at 0.78 (muted measured 4.33:1 over white); muted everywhere else.
+    func testTheGlassCaptionIsForegroundAtSeventyEightPercent() {
+        XCTAssertTrue(ViewerMaterial.liquidGlass.captionUsesForeground)
+        XCTAssertEqual(ViewerMaterial.liquidGlass.captionOpacity, 0.78)
+        for material in [ViewerMaterial.regularMaterial, .opaque] {
+            XCTAssertFalse(material.captionUsesForeground, "\(material) keeps the muted token")
+            XCTAssertEqual(material.captionOpacity, 1)
+        }
+    }
 
     /// One surface in `material`, over `backdrop`, sampled at its centre.
     private func surface(_ material: ViewerMaterial, over backdrop: Color) throws -> (r: UInt8, g: UInt8, b: UInt8, a: UInt8) {
@@ -93,30 +110,18 @@ final class A12AccessibilityTests: XCTestCase {
         var report: [String] = []
         for material in materials {
             for (name, backdrop) in [("white", Color.white), ("black", Color.black)] {
-                let ground = Self.luminance(try surface(material, over: backdrop))
+                let pixel = try surface(material, over: backdrop)
+                let ground = Self.luminance(pixel)
                 let chip = Self.ratio(Self.luminance(d.foreground), ground)
-                let caption = Self.ratio(Self.luminance(d.mutedForeground), ground)
+                let caption = Self.ratio(Self.caption(on: material, over: pixel), ground)
                 let warning = Self.ratio(Self.luminance(d.warning), ground)
                 let success = Self.ratio(Self.luminance(d.success), ground)
                 report.append("\(material) over \(name): chip \(String(format: "%.2f", chip)), caption \(String(format: "%.2f", caption)), "
                               + "warning \(String(format: "%.2f", warning)), success \(String(format: "%.2f", success))")
                 XCTAssertGreaterThanOrEqual(chip, 4.5, "chip text, \(material) over \(name)")
-                if material == .liquidGlass && name == "white" {
-                    // A12 finding G-1: Liquid Glass over a white board measured
-                    // 4.33:1 on tvOS 27.2 against the 4.5:1 bar the regular
-                    // material meets (#23 S3). Not fixed here: the glass tint
-                    // is the designer's token (glass-tint export pending), and
-                    // the goldens it moves are A9's in-flight files. Recorded
-                    // in status/tv-A12.md; the floor stops it getting worse.
-                    XCTAssertGreaterThanOrEqual(caption, Self.glassCaptionFloor, "caption, glass over white: regressed")
-                    let options = XCTExpectedFailure.Options()
-                    options.isStrict = false
-                    XCTExpectFailure("G-1: glass caption over white is below 4.5:1 (designer glass tint)", options: options) {
-                        XCTAssertGreaterThanOrEqual(caption, 4.5, "caption, \(material) over \(name)")
-                    }
-                } else {
-                    XCTAssertGreaterThanOrEqual(caption, 4.5, "caption, \(material) over \(name)")
-                }
+                // G-1 closed (TV wrap-up S-T3): strict on every material,
+                // glass over white included.
+                XCTAssertGreaterThanOrEqual(caption, 4.5, "caption, \(material) over \(name)")
                 XCTAssertGreaterThanOrEqual(warning, 3, "warning icon, \(material) over \(name)")
                 XCTAssertGreaterThanOrEqual(success, 3, "success dot, \(material) over \(name)")
             }

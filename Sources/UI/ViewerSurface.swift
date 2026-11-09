@@ -72,6 +72,20 @@ enum ViewerMaterial: Equatable, Sendable {
     static let regularTintOpacity = 0.82
     static var regularTint: Color { Fiesta.Colors.background.opacity(regularTintOpacity) }
 
+    /// The overlay subtitle (07b `154:8173`) on this material (TV wrap-up
+    /// S-T3, G-1; DD27). Muted over Liquid Glass measured 4.33:1 over a
+    /// pure-white board, under the 4.5:1 bar, so on glass only it draws in
+    /// --foreground at `glassCaptionOpacity`, which stays a step quieter
+    /// than the title. The regular material (6.75) and opaque (7.49) keep
+    /// --muted-foreground. Revisit when the designer's glass-tint token ships:
+    /// if muted then passes on glass, go back to one token.
+    var captionUsesForeground: Bool { self == .liquidGlass }
+    static let glassCaptionOpacity = 0.78
+    var captionOpacity: Double { captionUsesForeground ? Self.glassCaptionOpacity : 1 }
+    var captionColor: Color {
+        captionUsesForeground ? Fiesta.Colors.foreground.opacity(captionOpacity) : Fiesta.Colors.mutedForeground
+    }
+
     #if DEBUG
     /// The 07b `tvOS / Viewer overlay` variant this material is drawn as.
     var overlayVariantNode: String {
