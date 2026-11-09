@@ -145,7 +145,7 @@ final class A12ReleaseReadinessTests: XCTestCase {
     /// the privacy manifest say the same things.
     func testThePublishedPolicyMatchesTheInAppPrivacyText() throws {
         let policy = try Self.text("docs/PRIVACY.md")
-        let inApp = SettingsCopy.privacyBody(tvName: "Living Room", legacySignIn: false)
+        let inApp = SettingsCopy.privacyBody(tvName: "Living Room")
         // Shared facts, each in both.
         let facts: [(inApp: String, policy: String)] = [
             ("no analytics or tracking", "analytics"),
@@ -170,7 +170,7 @@ final class A12ReleaseReadinessTests: XCTestCase {
         // Read from source, so this check survives A9 deleting the branch.
         let appHasAI = try Self.text("Sources/UI/SettingsCopy.swift").contains("AI provider")
         XCTAssertEqual(policy.contains("## Optional AI features"), appHasAI,
-                       "PRIVACY.md and the in-app legacy branch drop FiestaBot together")
+                       "PRIVACY.md and the in-app Privacy page drop FiestaBot together")
         // The listing links the policy; the manifest declares no tracking.
         XCTAssertTrue(try Self.text("fastlane/metadata/en-US/privacy_url.txt").contains("docs/PRIVACY.md"))
         let manifest = try Self.text("Resources/PrivacyInfo.xcprivacy")

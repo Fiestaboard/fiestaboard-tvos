@@ -112,6 +112,25 @@ final class FiestaClientTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.requests.first?.url.path, "/api/panel/1")
     }
 
+    /// Deep-link hardening (#24 S3): a ref is one path segment. A `?` or a
+    /// `..` in it is percent-encoded, so it can't add a query or walk the
+    /// path, even under a cookie session (the bearer allow-list already
+    /// refuses them).
+    func testAPanelRefIsEncodedAsOnePathSegment() async throws {
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/")
+        _ = try? await client.panel(ref: "x?y=1")
+        let first = try XCTUnwrap(StubURLProtocol.requests.first?.url)
+        XCTAssertNil(first.query, first.absoluteString)
+        XCTAssertTrue(first.absoluteString.hasSuffix("/api/panel/x%3Fy%3D1"), first.absoluteString)
+
+        StubURLProtocol.reset()
+        StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/")
+        _ = try? await client.panel(ref: "..")
+        let second = try XCTUnwrap(StubURLProtocol.requests.first?.url)
+        XCTAssertTrue(second.absoluteString.hasSuffix("/api/panel/%2E%2E"), second.absoluteString)
+        XCTAssertEqual(FiestaClient.pathSegment("abc-123_DEF"), "abc-123_DEF", "ordinary ids are unchanged")
+    }
+
     func testFrameDecodesCharactersAndTimestamp() async throws {
         StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame")
         let frame = try await client.frame(ref: "abc123def456")

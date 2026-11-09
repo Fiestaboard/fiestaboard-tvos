@@ -662,7 +662,7 @@ final class SettingsScreenTests: XCTestCase {
     /// elsewhere is worse than no claim at all. The honest scope is servers
     /// and third parties.
     func testThePrivacyStatementDoesNotClaimNothingLeavesTheDevice() {
-        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV")
         XCTAssertFalse(body.contains("leaves this Apple TV"), body)
         XCTAssertFalse(body.lowercased().contains("never leaves"), body)
         XCTAssertFalse(body.lowercased().contains("stays on this apple tv"), body)
@@ -684,7 +684,7 @@ final class SettingsScreenTests: XCTestCase {
         XCTAssertEqual(remote.host(), "board.example.com",
                        "a typed https board is supported and need not be on this network")
 
-        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false).lowercased()
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV").lowercased()
         XCTAssertFalse(body.contains("local network"), body)
         XCTAssertFalse(body.contains("same network"), body)
         XCTAssertFalse(body.contains("this network"), body)
@@ -696,7 +696,7 @@ final class SettingsScreenTests: XCTestCase {
     /// here. A8f dropped the FiestaBot / AI-provider / Siri lines with the
     /// feature's scope on a TV credential (A8SettingsTests pins their absence).
     func testThePrivacyStatementNamesItsOneRecipient() {
-        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV")
         XCTAssertFalse(body.contains("the hub you chose and to no one else"), body)
         XCTAssertTrue(body.contains("the address you typed"),
                       "the typed-address path is one of the two ways to reach a board: \(body)")
@@ -708,7 +708,7 @@ final class SettingsScreenTests: XCTestCase {
     /// Stating storage and saying nothing about transmission is how the old
     /// copy read as "it never travels".
     func testThePrivacyStatementSaysThePasswordIsSentToTheBoard() {
-        let body = SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false)
+        let body = SettingsCopy.privacyBody(tvName: "Living room TV")
         XCTAssertTrue(body.contains("Keychain"), body)
         XCTAssertTrue(body.contains("sent to the hub only to sign in"), body)
     }

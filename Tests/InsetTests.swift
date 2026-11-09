@@ -82,7 +82,7 @@ final class InsetTests: XCTestCase {
     func testTheViewerOverlayBarIsTheA4Frame() throws {
         _ = TVSnapshot.image(ZStack {
             Color.black
-            ViewerOverlay(panelName: "Living room TV", onInteraction: {}, onPanels: {}, onSettings: {}, onFiestaBot: nil)
+            ViewerOverlay(panelName: "Living room TV", onInteraction: {}, onPanels: {}, onSettings: {})
         }, fullBleed: true)
         let bar = try XCTUnwrap(FigmaGeometryRegistry.shared.snapshot()[ViewerOverlay.barNode]?.frame)
         XCTAssertEqual(bar.minX, 80, accuracy: 1)

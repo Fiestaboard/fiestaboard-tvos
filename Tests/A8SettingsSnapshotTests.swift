@@ -73,7 +73,7 @@ final class A8SettingsSnapshotTests: XCTestCase {
 
     /// A8f: the body is one scroll target; title Title 3 48, body 29, footer 23.
     func testThePrivacyDetailPage() async {
-        let image = TVSnapshot.image(SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: "Living room TV", legacySignIn: false),
+        let image = TVSnapshot.image(SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: "Living room TV"),
                                                         footer: SettingsCopy.privacyFooter)
             .frame(width: 1200, height: 860, alignment: .topLeading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing), settle: 0.3)

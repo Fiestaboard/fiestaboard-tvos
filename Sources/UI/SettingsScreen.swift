@@ -268,8 +268,7 @@ struct SettingsScreen: View {
         case .screenProtection:
             SettingsDetailPage(title: "Screen protection", body: SettingsCopy.screenProtectionBody)
         case .privacy:
-            SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: app.deviceName.sent,
-                                                                               legacySignIn: !app.connection.usesDeviceCredential),
+            SettingsDetailPage(title: "Privacy", body: SettingsCopy.privacyBody(tvName: app.deviceName.sent),
                                footer: SettingsCopy.privacyFooter)
         case .licenses:
             SettingsDetailPage(title: "Licenses",
