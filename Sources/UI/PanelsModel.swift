@@ -153,7 +153,12 @@ final class PanelsModel {
         seedPreviews(for: panels)
         let generation = app.topShelfGeneration
         let client = app.connection.client
+        // Opened here, synchronously: `load` publishes the shelf right after
+        // this returns, before the task below has started its batch (S1).
+        let app = app
+        app.beginTopShelfFrameBatch()
         previewTask = Task { [weak self] in
+            defer { app.endTopShelfFrameBatch() }
             guard let self, app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             await refreshPreviews(for: panels)
         }
@@ -199,6 +204,11 @@ final class PanelsModel {
         }
 
         var publication: Task<Void, Never>?
+        // A7b (#24 review S1): the shelf's status fetches wait for this
+        // batch, so frames and statuses never put more than four requests
+        // on the hub at once.
+        app.beginTopShelfFrameBatch()
+        defer { app.endTopShelfFrameBatch() }
         await withTaskGroup(of: (String, PanelPreviewState, Bool).self) { group in
             var pending = targets.makeIterator()
             var started = 0

@@ -225,6 +225,9 @@ public final class AppModel {
     }
 
     public func openPanel(ref: String) {
+        // A7b (#24 review S3): only a reference with the hub's id shape is
+        // opened or remembered.
+        guard PanelRef.isValid(ref) else { return }
         lastViewedPanelRef = ref
         errorMessage = nil
         route = .viewer(ref)
@@ -246,7 +249,7 @@ public final class AppModel {
             if components.isEmpty { showPanels() }
             return
         }
-        guard url.host == "panel", components.count == 1 else { return }
+        guard url.host == "panel", components.count == 1, PanelRef.isValid(String(components[0])) else { return }
         // No republish here. Opening a Top Shelf card brings the app to the
         // foreground, and the foreground hook above already refreshes — doing
         // it again on a cold launch into a default panel fired two panel
@@ -322,8 +325,7 @@ public final class AppModel {
         activePanelsModel = nil
         panelBrowserCache = nil
         topShelfImages.images.removeAll()
-        topShelfStatuses.removeAll()
-        topShelfStatusAttempts.removeAll()
+        resetTopShelfStatuses()
         lastTopShelf = nil
         topShelfClient = nil
         return TopShelfPreviewPublisher.clear(store: topShelfStore, cache: topShelfImages)
@@ -362,8 +364,7 @@ public final class AppModel {
         if topShelfClient !== connection.client {
             topShelfImages.invalidate()
             topShelfImages.images.removeAll()
-            topShelfStatuses.removeAll()
-            topShelfStatusAttempts.removeAll()
+            resetTopShelfStatuses()
         }
         topShelfClient = connection.client
         lastTopShelf = (panels, previews)
@@ -394,8 +395,36 @@ public final class AppModel {
     @ObservationIgnored private(set) var topShelfStatusTask: Task<Void, Never>?
     @ObservationIgnored private(set) var topShelfRepublication: Task<Void, Never>?
 
+    /// A hub switch or sign-out: forget statuses and attempts, and let go of
+    /// an old hub's in-flight fetch so the new hub's starts at once (#24 N2).
+    private func resetTopShelfStatuses() {
+        topShelfStatuses.removeAll()
+        topShelfStatusAttempts.removeAll()
+        topShelfStatusTask?.cancel()
+        topShelfStatusTask = nil
+        topShelfStatusTaskID = nil
+        topShelfStatusesDeferred = false
+    }
+
+    /// A7b (#24 review S1): frames and statuses share the hub's four-request
+    /// budget. While the panel browser's frame batch (four at a time) runs,
+    /// status fetches wait; the batch's end starts them.
+    @ObservationIgnored private var topShelfFrameBatches = 0
+    @ObservationIgnored private var topShelfStatusesDeferred = false
+    @ObservationIgnored private var topShelfStatusTaskID: UUID?
+
+    func beginTopShelfFrameBatch() { topShelfFrameBatches += 1 }
+
+    func endTopShelfFrameBatch() {
+        topShelfFrameBatches = max(0, topShelfFrameBatches - 1)
+        guard topShelfFrameBatches == 0, topShelfStatusesDeferred else { return }
+        topShelfStatusesDeferred = false
+        if let last = lastTopShelf, connection.client === topShelfClient { refreshTopShelfStatuses(for: last.panels) }
+    }
+
     private func refreshTopShelfStatuses(for panels: [Panel]) {
         guard topShelfStatusTask == nil else { return }
+        guard topShelfFrameBatches == 0 else { topShelfStatusesDeferred = true; return }
         let now = Date()
         let due = panels.filter { !$0.boardMissing }.prefix(topShelfStatusLimit).map(\.id).filter {
             topShelfStatusAttempts[$0].map { now.timeIntervalSince($0) >= Self.topShelfStatusInterval } ?? true
@@ -404,16 +433,19 @@ public final class AppModel {
         for id in due { topShelfStatusAttempts[id] = now }
         let client = connection.client
         let connection = connection
+        let taskID = UUID()
+        topShelfStatusTaskID = taskID
         topShelfStatusTask = Task { [weak self] in
-            // nil: the fetch failed, so the previous status (if any) stands.
-            // .some(nil): the hub answered with nothing worth a line.
+            // A missing id: the fetch failed, so the previous status stands.
+            // A nil status: the hub answered with nothing worth a line.
             let results = await Self.fetchTopShelfStatuses(due, connection: connection)
-            guard let self else { return }
+            guard let self, topShelfStatusTaskID == taskID else { return }
             topShelfStatusTask = nil
-            guard connection.client === client, !connection.isSignedOut else { return }
-            let at = Date()
-            for (id, status) in results {
-                topShelfStatuses[id] = status.map { TopShelfStatusReading(status: $0, at: at) }
+            topShelfStatusTaskID = nil
+            guard !Task.isCancelled, connection.client === client, !connection.isSignedOut else { return }
+            // #24 N1: each line is stamped with its own answer's time.
+            for (id, answer) in results {
+                topShelfStatuses[id] = answer.status.map { TopShelfStatusReading(status: $0, at: answer.at) }
             }
             // Re-confirmed lines are renewed on disk without a Home reload
             // (the store tells the two apart); a changed one reloads Home.
@@ -425,23 +457,25 @@ public final class AppModel {
 
     /// Four at a time; a failed fetch is left out of the result.
     nonisolated private static func fetchTopShelfStatuses(_ ids: [String], connection: ConnectionStore)
-        async -> [String: TopShelfStatus?] {
-        await withTaskGroup(of: (String, TopShelfStatus?, Bool).self) { group in
+        async -> [String: (status: TopShelfStatus?, at: Date)] {
+        await withTaskGroup(of: (String, TopShelfStatus?, Date?).self) { group in
             var pending = ids.makeIterator()
             func add(_ id: String) {
                 group.addTask {
-                    guard let reading = try? await connection.authorized({ try await $0.panelReading(ref: id) })
-                    else { return (id, nil, false) }
-                    return (id, TopShelfStatus(reading: reading, receivedAt: Date()), true)
+                    guard !Task.isCancelled,
+                          let reading = try? await connection.authorized({ try await $0.panelReading(ref: id) })
+                    else { return (id, nil, nil) }
+                    let received = Date()
+                    return (id, TopShelfStatus(reading: reading, receivedAt: received), received)
                 }
             }
             for _ in 0..<topShelfStatusConcurrency {
                 guard let id = pending.next() else { break }
                 add(id)
             }
-            var results: [String: TopShelfStatus?] = [:]
-            for await (id, status, ok) in group {
-                if ok { results.updateValue(status, forKey: id) }
+            var results: [String: (status: TopShelfStatus?, at: Date)] = [:]
+            for await (id, status, received) in group {
+                if let received { results[id] = (status, received) }
                 if let next = pending.next() { add(next) }
             }
             return results

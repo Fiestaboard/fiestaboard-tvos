@@ -80,7 +80,15 @@ public final class FiestaClient: @unchecked Sendable {
 
     /// `ref` is a panel id or its short code, so "1" is valid.
     public func panel(ref: String) async throws -> Panel {
-        try await get("/panel/\(ref)")
+        try await get("/panel/\(try Self.segment(ref))")
+    }
+
+    /// A7b (#24 review S3): every path built from a panel id goes through
+    /// here. A malformed id is refused before any request — under a cookie
+    /// session too, which has no device-token allow-list.
+    static func segment(_ ref: String) throws -> String {
+        guard let segment = PanelRef.segment(ref) else { throw FiestaError.notFound("Panel not found") }
+        return segment
     }
 
     /// The panel plus the hub's clock from the same response (A6a).
@@ -90,7 +98,7 @@ public final class FiestaClient: @unchecked Sendable {
     /// that clock, not on a TV whose clock may be minutes out. Nil when the
     /// header is missing or does not parse.
     public func panelReading(ref: String) async throws -> PanelReading {
-        let (data, response) = try await exchange(method: "GET", path: "/panel/\(ref)", body: nil)
+        let (data, response) = try await exchange(method: "GET", path: "/panel/\(try Self.segment(ref))", body: nil)
         do {
             return PanelReading(panel: try decoder.decode(Panel.self, from: data),
                                 hubDate: response.value(forHTTPHeaderField: "Date").flatMap(Self.httpDate))
@@ -109,7 +117,7 @@ public final class FiestaClient: @unchecked Sendable {
     }
 
     public func frame(ref: String) async throws -> PanelFrame {
-        try await get("/panel/\(ref)/frame")
+        try await get("/panel/\(try Self.segment(ref))/frame")
     }
 
     public func updatePanel(id: String,
@@ -139,7 +147,7 @@ public final class FiestaClient: @unchecked Sendable {
     }
 
     private func updatePanel(id: String, body: [String: Any]) async throws -> PanelUpdateResult {
-        let data = try await send(method: "PATCH", path: "/panels/\(id)", body: body)
+        let data = try await send(method: "PATCH", path: "/panels/\(try Self.segment(id))", body: body)
         struct Envelope: Decodable {
             let panel: Panel
             let incompatibleReferences: [IncompatibleReference]?
