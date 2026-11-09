@@ -75,7 +75,17 @@ final class A5GeometryTests: XCTestCase {
     func testPanelsWithTheOfferGolden() async throws {
         let app = await makeApp()
         StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
-        StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame")
+        // A frame the card's "30 × 12" label describes (the fixture panel's grid).
+        var grid = Array(repeating: Array(repeating: 0, count: 30), count: 12)
+        for (row, text) in [(3, "GOOD EVENING MAYA"), (5, "64 CLEAR LO 55"), (8, "MOVIE NIGHT 8 PM")] {
+            for (index, letter) in text.utf8.enumerated() where (65...90).contains(letter) {
+                grid[row][(30 - text.count) / 2 + index] = Int(letter) - 64
+            }
+        }
+        for col in 0..<30 { grid[1][col] = 63 + col / 5; grid[10][col] = 68 - col / 5 }
+        let frame = String(decoding: try JSONSerialization.data(withJSONObject:
+            ["characters": grid, "rows": 12, "cols": 30, "message": "GOOD EVENING MAYA"]), as: UTF8.self)
+        StubURLProtocol.enqueue(.json(frame), for: "/frame")
         let model = PanelsModel(app: app, signage: freshSignage())
         await model.load()
         let panel = try XCTUnwrap(model.panels.first)

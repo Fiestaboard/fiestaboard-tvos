@@ -194,8 +194,8 @@ final class PanelsPresentationTests: XCTestCase {
     }
 
     /// Launch `count` plain split-flap panels named "<prefix> <index>".
-    private func launchPlainFixture(prefix: String, count: Int,
-                                    arguments: [String] = []) throws -> (XCUIApplication, FixtureHTTPServer, [String]) {
+    private func launchPlainFixture(prefix: String, count: Int, arguments: [String] = [],
+                                    fields: [Int: [String: Any]] = [:]) throws -> (XCUIApplication, FixtureHTTPServer, [String]) {
         var panels: [String] = []
         var byID: [String: String] = [:]
         for index in 0..<count {
@@ -203,6 +203,7 @@ final class PanelsPresentationTests: XCTestCase {
             let id = "\(prefix.lowercased())-\(index)"
             object["id"] = id
             object["name"] = "\(prefix) \(index)"
+            object.merge(fields[index] ?? [:]) { _, new in new }
             let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
             panels.append(json)
             byID[id] = json
@@ -267,14 +268,18 @@ final class PanelsPresentationTests: XCTestCase {
         // And it's outside the board: the board band above is unchanged.
     }
 
-    /// A5 (07b A3 `166:149722`): one panel that fits this TV, nothing set to
-    /// open at launch: Panels offers "Always open …?" in the side slot. Not
-    /// now dismisses it for good; Always open sets the panel.
+    /// A5 (07b A3 `166:149722`): exactly one panel fits this TV (its grid is
+    /// close to 16:9; "Only 1" is a 22 × 6 strip), nothing set to open at
+    /// launch: Panels offers "Always open …?" in the side slot. Not now
+    /// dismisses it for good, and focus goes to the card it was about as
+    /// the grid goes back to two columns.
     func testTheOpenAtLaunchOfferIsAskedOnce() throws {
         continueAfterFailure = false
-        let (app, _, _) = try launchPlainFixture(prefix: "Only", count: 1,
-                                                 arguments: ["-fiestaboard.panels.openAtLaunchOffered", "NO"])
+        let (app, _, _) = try launchPlainFixture(prefix: "Only", count: 2,
+                                                 arguments: ["-fiestaboard.panels.openAtLaunchOffered", "NO"],
+                                                 fields: [1: ["rows": 6, "cols": 22]])
         let card = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Only 0,")).firstMatch
+        let strip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Only 1,")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Always open Only 0?"].waitForExistence(timeout: 5))
         let accept = app.buttons["Always open"], dismiss = app.buttons["Not now"]
@@ -289,7 +294,8 @@ final class PanelsPresentationTests: XCTestCase {
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"),
                                              object: app.staticTexts["Always open Only 0?"])
         XCTAssertEqual(XCTWaiter.wait(for: [gone], timeout: 5), .completed, "Not now dismisses the offer")
-        waitForFocus(card, "focus goes back to the card")
+        waitForFocus(card, "focus goes to the card the offer was about")
+        XCTAssertGreaterThan(strip.frame.minX, card.frame.maxX, "two columns again: the strip beside it")
 
         // Asked once: a relaunch (the answer persisted) doesn't ask again.
         app.terminate()

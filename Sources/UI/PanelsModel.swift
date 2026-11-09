@@ -85,13 +85,16 @@ final class PanelsModel {
 
     // MARK: The open-at-launch offer (07b A3 `166:149722`)
 
-    /// A panel "fits this TV" when its board is there and the screen it was
-    /// set up for is this TV's 16:9, within 1 %: then it fills the screen
-    /// with nothing to resize.
+    /// A panel "fits this TV" when its board is there and its grid, drawn,
+    /// is within 25 % of this TV's 16:9: the viewer's own resize-offer rule
+    /// (`BoardLayout.gridSuits`), so the offer never promises a fit the
+    /// viewer then offers to fix. Not the stored screen aspect: the hub
+    /// defaults it to 16:9. LED matrices take the same rule, as on Android
+    /// (G5 `needsResizeOffer`), though the viewer never offers them a resize.
     static func fitsThisTV(_ panel: Panel) -> Bool {
-        guard !panel.boardMissing, panel.screenAspectW > 0, panel.screenAspectH > 0 else { return false }
-        let aspect = panel.screenAspectW / panel.screenAspectH
-        return abs(aspect / (16.0 / 9.0) - 1) <= 0.01
+        guard !panel.boardMissing, let rows = panel.rows, let cols = panel.cols else { return false }
+        return BoardLayout.gridSuits(rows: rows, cols: cols, noteArray: panel.isNoteArray,
+                                     screen: CGSize(width: 1920, height: 1080))
     }
 
     /// "Always open …?": asked once on this TV, when nothing opens at launch

@@ -168,6 +168,19 @@ public struct BoardLayout: Sendable {
                            bezelRadius: NoteArray.radiusRatio * h)
     }
 
+    /// Whether a `rows` × `cols` grid, drawn, is close enough to `screen`'s
+    /// shape that offering to re-fit it would be noise: within 25 % of its
+    /// aspect. Size is what fit absorbs; shape is what it can't. The
+    /// viewer's resize offer and Panels' "fits this TV" both ask this, so
+    /// they can never disagree.
+    public static func gridSuits(rows: Int, cols: Int, noteArray: Bool, screen: CGSize) -> Bool {
+        guard rows > 0, cols > 0, screen.width > 0, screen.height > 0 else { return false }
+        let base = size(rows: rows, cols: cols, tileHeight: 100, noteArray: noteArray)
+        guard base.height > 0 else { return false }
+        let screenAspect = Double(screen.width / screen.height)
+        return abs(base.width / base.height - screenAspect) / screenAspect < 0.25
+    }
+
     /// Lay the board out at whatever tile height makes it meet the screen
     /// the way `mode` asks for.
     public static func fitting(rows: Int, cols: Int, cells: [[BoardCell]],

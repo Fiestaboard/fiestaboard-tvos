@@ -231,14 +231,23 @@ struct PanelsScreen: View {
                 if let offer {
                     OpenAtLaunchOfferCard(panel: offer.name,
                                           hub: app.connection.saved?.displayName ?? "FiestaBoard",
-                                          accept: { model?.acceptOpenAtLaunch() },
-                                          dismiss: { model?.dismissOpenAtLaunch() })
+                                          accept: { answerOffer(offer.id) { model?.acceptOpenAtLaunch() } },
+                                          dismiss: { answerOffer(offer.id) { model?.dismissOpenAtLaunch() } })
                         .figmaNode(Self.a3Slot + ";166:149722")
                         // Level with the first card (A3: both at y 320).
                         .padding(.top, Self.gridTopInset)
                 }
             }
         }
+    }
+
+    /// Answering takes the offer, and the button pressed, off the screen,
+    /// and the grid goes from one column to two: every card changes row.
+    /// Focus goes to the card the offer was about, not wherever the engine
+    /// lands (review #31 N2).
+    private func answerOffer(_ id: String, _ answer: () -> Void) {
+        answer()
+        focusedPanel = id
     }
 
     /// "Always open …?" while it is owed (07b A3 `166:149722`). It takes

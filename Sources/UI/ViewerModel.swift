@@ -262,13 +262,9 @@ final class ViewerModel {
     /// what `fit` already absorbs and shape is what it cannot.
     func gridSuitsScreen(_ screen: CGSize) -> Bool {
         guard snapshot.rows > 0, snapshot.cols > 0, screen.height > 0 else { return true }
-        let base = BoardLayout.size(rows: snapshot.rows, cols: snapshot.cols, tileHeight: 100,
-                                    noteArray: snapshot.panel?.isNoteArray == true)
-        guard base.height > 0 else { return true }
-        let boardAspect = base.width / base.height
-        let screenAspect = Double(screen.width / screen.height)
         // Within 25% is close enough that fit leaves no distracting margin.
-        return abs(boardAspect - screenAspect) / screenAspect < 0.25
+        return BoardLayout.gridSuits(rows: snapshot.rows, cols: snapshot.cols,
+                                     noteArray: snapshot.panel?.isNoteArray == true, screen: screen)
     }
 
     func considerResizeOffer(for screen: CGSize) {
