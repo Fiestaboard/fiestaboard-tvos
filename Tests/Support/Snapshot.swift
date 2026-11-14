@@ -46,6 +46,9 @@ enum TVSnapshot {
     /// screens are laid out inside it, as on the TV. `fullBleed` ignores it,
     /// for what the device also draws edge to edge (the board, fixtures).
     static func image<V: View>(_ view: V, settle: TimeInterval = 0.1, fullBleed: Bool = false) -> UIImage {
+        // Export only nodes laid out by this render; a preview with no tags
+        // must not inherit another screen's registry from an earlier test.
+        FigmaGeometryRegistry.shared.reset()
         let host = UIHostingController(rootView: view
             .environment(\.colorScheme, .dark)
             .preferredColorScheme(.dark)
