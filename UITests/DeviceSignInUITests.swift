@@ -58,6 +58,11 @@ final class DeviceSignInUITests: XCTestCase {
                                  expected: "TV sign-in is disabled.", screenshot: "TV sign-in — enrollment disabled")
     }
 
+    func testExpiredCodeRemovesTheUnusableQRAndCountdown() throws {
+        try checkTerminalFailure(server: FixtureHTTPServer(tvSignInEnabled: true, devicePollError: "expired_token"),
+                                 expected: "expired", screenshot: "TV sign-in — expired")
+    }
+
     func testDeniedCodeRemovesTheUnusableQRAndCountdown() throws {
         try checkTerminalFailure(server: FixtureHTTPServer(tvSignInEnabled: true, devicePollError: "access_denied"),
                                  expected: "This sign-in was denied.", screenshot: "TV sign-in — denied")
@@ -91,10 +96,7 @@ final class DeviceSignInUITests: XCTestCase {
     }
 
     private func capture(_ name: String, app: XCUIApplication) {
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = name
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachMilestoneEvidence(name, app: app)
     }
 
 }

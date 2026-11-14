@@ -13,7 +13,11 @@ final class OLEDCareUITests: XCTestCase {
     }
     private func select(_ label: String, app: XCUIApplication) {
         for _ in 0..<30 {
-            if focused(label, app: app) { XCUIRemote.shared.press(.select); return }
+            if focused(label, app: app) {
+                attachMilestoneEvidence("OLED care — focused \(label)", app: app)
+                XCUIRemote.shared.press(.select)
+                return
+            }
             XCUIRemote.shared.press(.down)
         }
         XCTFail("Remote could not reach \(label)")
@@ -51,7 +55,38 @@ final class OLEDCareUITests: XCTestCase {
         }
         XCTAssertFalse(app.staticTexts["oled.question"].exists, "DD23: no OLED question")
         XCTAssertFalse(app.staticTexts["Preview — app output only"].exists, "DD23: no preview")
+        attachMilestoneEvidence("OLED care — summary focused", app: app)
+        // Each summary row opens a native choice page. Capture before editing,
+        // and return with Menu so this walk does not change local preferences.
+        for (id, title, rightColumn) in [
+            ("oled.movement", "Movement", false),
+            ("oled.night", "Night dimming", false),
+            ("oled.rest", "Scheduled rest", false),
+            ("oled.breaks", "Periodic breaks", true),
+            ("oled.rotation", "Layout rotation", true),
+            ("oled.disconnected", "When disconnected", true),
+            ("oled.screensaver", "Screen saver", true)
+        ] {
+            for _ in 0..<5 { XCUIRemote.shared.press(.up) }
+            XCUIRemote.shared.press(.left)
+            for _ in 0..<5 { XCUIRemote.shared.press(.up) }
+            if rightColumn { XCUIRemote.shared.press(.right) }
+            select(id, app: app)
+            XCTAssertTrue(app.buttons["oled.brightness"].waitForNonExistence(timeout: 5))
+            if id == "oled.movement" {
+                XCTAssertTrue(app.staticTexts["Shifts the board a few pixels over 20 min"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.staticTexts["Larger shifts for long, static days"].exists)
+            }
+            attachMilestoneEvidence("OLED care — \(title) choices focused", app: app)
+            XCUIRemote.shared.press(.menu)
+            XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
+        }
+        for _ in 0..<5 { XCUIRemote.shared.press(.up) }
+        XCUIRemote.shared.press(.left)
+        for _ in 0..<5 { XCUIRemote.shared.press(.up) }
         select("oled.brightness", app: app)
+        XCTAssertTrue(app.buttons["50 %"].waitForExistence(timeout: 5))
+        attachMilestoneEvidence("OLED care — brightness choices focused", app: app)
         select("50 %", app: app)
         XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
         XCTAssertEqual(brightness(app), "50 %")

@@ -43,6 +43,7 @@ final class ViewerStatusUITests: XCTestCase {
         defer { app.terminate() }
         XCTAssertTrue(waitForChip(app, label: "Override, Holds until canceled", timeout: 5),
                       "a new status shows the chip on its own")
+        attachMilestoneEvidence("Viewer status — standalone override", app: app)
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
         XCTAssertTrue(waitForChip(app, label: "Override, Holds until canceled", timeout: 3), "the chip sits in the bar")
@@ -51,6 +52,10 @@ final class ViewerStatusUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.5)
         XCTAssertTrue(app.buttons["Panels"].hasFocus, "read-only: the chip is never a focus target")
         XCTAssertFalse(chip(app).hasFocus)
+        attachMilestoneEvidence("Viewer status — override with Panels focused", app: app)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        attachMilestoneEvidence("Viewer status — override with Settings focused", app: app)
     }
 
     func testAnOutageThenRecovery() throws {
@@ -61,7 +66,9 @@ final class ViewerStatusUITests: XCTestCase {
         XCTAssertTrue(waitForChip(app, label: "Hub unreachable · showing the last update", timeout: 15))
         Thread.sleep(forTimeInterval: 7)
         XCTAssertTrue(chip(app).exists, "hub unreachable persists past the 6 s window")
+        attachMilestoneEvidence("Viewer status — hub unreachable", app: app)
         server?.setDropped(false)
         XCTAssertTrue(waitForChip(app, label: "Reconnected", timeout: 15))
+        attachMilestoneEvidence("Viewer status — reconnected", app: app)
     }
 }

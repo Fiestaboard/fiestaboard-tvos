@@ -105,6 +105,16 @@ enum TVSnapshot {
                                      snapshotDirectory: directory,
                                      file: file, testName: testName, line: line)
         if let failure { XCTFail(failure, file: file, line: line) }
+        // Retain the image rendered by this execution even on a successful
+        // comparison. Expected goldens alone are not current parity evidence.
+        do {
+            try ParityOutput.write(png: image, as: "current-\(name)")
+            try FigmaGeometryRegistry.shared.exportData().write(
+                to: ParityOutput.directory.appendingPathComponent("current-\(name).geometry.json"),
+                options: .atomic)
+        } catch {
+            XCTFail("Could not retain current parity evidence: \(error)", file: file, line: line)
+        }
     }
 }
 

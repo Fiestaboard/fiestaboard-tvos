@@ -169,11 +169,11 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
         Thread.sleep(forTimeInterval: 0.6) // the fade-in and the material settle
 
-        let screenshot = XCUIScreen.main.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        attachMilestoneEvidence("\(name) — Panels focused", app: app)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        attachMilestoneEvidence("\(name) — Settings focused", app: app)
 
         var nodes: [String: CGRect] = [:]
         for _ in 0..<50 {

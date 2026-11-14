@@ -95,6 +95,7 @@ final class SettingsPresentationTests: XCTestCase {
         // its nested accessibility Button can keep hasFocus=false throughout.
         for _ in 0..<24 {
             if rowHasFocus(label, in: app) {
+                attachMilestoneEvidence("Settings — focused \(label)", app: app)
                 XCUIRemote.shared.press(.select)
                 return
             }
@@ -123,10 +124,7 @@ final class SettingsPresentationTests: XCTestCase {
     }
 
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        attachMilestoneEvidence(name, app: app)
     }
 
     func testCategoriesSeparateLocalAndSharedSettings() {
@@ -391,6 +389,7 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(body.waitForExistence(timeout: 3))
         XCTAssertTrue(body.label.contains("FiestaBoard’s servers"), body.label)
         XCTAssertTrue(body.hasFocus, "the scroll body takes focus")
+        attachScreenshot("About — Privacy initial focused body", app: app)
         for _ in 0..<4 { XCUIRemote.shared.press(.down) }
         XCTAssertTrue(body.hasFocus, "Down scrolls the text; it does not leave the page")
         attachScreenshot("About — Privacy (A8f)", app: app)
