@@ -14,7 +14,7 @@ final class ViewerStatusUITests: XCTestCase {
     /// An override with no end, so the copy is fixed: "Holds until canceled".
     private static let override = #"{"mode":"override","schedule_enabled":false,"override_active":true,"override_expires_at":null,"override_started_at":"2026-11-08T02:18:00+00:00","silenced":false,"silenced_until":null,"silence_mode":null,"paused":false,"next_change_at":null,"next_change_reason":null}"#
 
-    private func launch() throws -> XCUIApplication {
+    private func launch(material: String? = nil) throws -> XCUIApplication {
         let frameLoaded = expectation(description: "The viewer requested its frame")
         let server = try FixtureHTTPServer(onFrame: { frameLoaded.fulfill() })
         server.setPanelStatus(Self.override)
@@ -23,6 +23,7 @@ final class ViewerStatusUITests: XCTestCase {
         let saved = #"{"host":"http://127.0.0.1:\#(server.port)","displayName":"Test Board","defaultPanelRef":"1"}"#
         let encoded = Data(saved.utf8).map { String(format: "%02x", $0) }.joined()
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        if let material { app.launchArguments += ["-fiestaboard.viewerMaterial", material] }
         app.launch()
         wait(for: [frameLoaded], timeout: 10)
         return app
@@ -71,4 +72,55 @@ final class ViewerStatusUITests: XCTestCase {
         XCTAssertTrue(waitForChip(app, label: "Reconnected", timeout: 15))
         attachMilestoneEvidence("Viewer status — reconnected", app: app)
     }
+    /// The five A7 states, on native surfaces (offscreen renders omit focus).
+    /// Each material is a separate XCTest so one failed state cannot hide
+    /// the remaining material packets. Fixture updates use the real poll.
+    private func captureMilestoneStates(material: String) throws {
+        continueAfterFailure = false
+        let app = try launch(material: material)
+        defer { app.terminate() }
+        let states: [(String, String)] = [
+            (Self.override, "Override, Holds until canceled"),
+            (#"{"mode":"manual","silenced":true,"silence_mode":"indicator"}"#, "Silenced · showing a message"),
+            (#"{"mode":"manual","paused":true}"#, "Paused · showing the last update"),
+            (#"{"mode":"schedule","schedule_enabled":true}"#, "Schedule")
+        ]
+        for (status, label) in states {
+            server?.setPanelStatus(status)
+            XCTAssertTrue(waitForChip(app, label: label, timeout: 20), label)
+            XCTAssertFalse(chip(app).hasFocus, "A status chip is read-only")
+            attachMilestoneEvidence("Viewer status — \(material) — \(label) standalone", app: app)
+            XCUIRemote.shared.press(.select)
+            XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.buttons["Panels"].hasFocus)
+            attachMilestoneEvidence("Viewer status — \(material) — \(label) — Panels focused", app: app)
+            XCUIRemote.shared.press(.right)
+            XCTAssertTrue(app.buttons["Settings"].hasFocus)
+            attachMilestoneEvidence("Viewer status — \(material) — \(label) — Settings focused", app: app)
+            XCUIRemote.shared.press(.menu)
+            XCTAssertTrue(app.buttons["Panels"].waitForNonExistence(timeout: 3))
+        }
+        server?.setDropped(true)
+        let unreachable = "Hub unreachable · showing the last update"
+        XCTAssertTrue(waitForChip(app, label: unreachable, timeout: 20))
+        attachMilestoneEvidence("Viewer status — \(material) — hub unreachable standalone", app: app)
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        attachMilestoneEvidence("Viewer status — \(material) — hub unreachable — Panels focused", app: app)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        attachMilestoneEvidence("Viewer status — \(material) — hub unreachable — Settings focused", app: app)
+    }
+
+    func testMilestoneStatusStatesOnLiquidGlass() throws {
+        try captureMilestoneStates(material: "glass")
+    }
+    func testMilestoneStatusStatesWithReduceTransparency() throws {
+        try captureMilestoneStates(material: "opaque")
+    }
+    func testMilestoneStatusStatesOnTheRegularMaterialFallback() throws {
+        try captureMilestoneStates(material: "regular")
+    }
+
 }

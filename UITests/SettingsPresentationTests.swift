@@ -63,6 +63,7 @@ final class SettingsPresentationTests: XCTestCase {
             }
             XCUIRemote.shared.press(.select)
             XCTAssertTrue(app.buttons["Living Room"].waitForExistence(timeout: 20))
+            attachMilestoneEvidence("TV sign-in — approved outcome", app: app)
         }
         wait(for: [frameLoaded], timeout: 10)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
@@ -125,6 +126,19 @@ final class SettingsPresentationTests: XCTestCase {
 
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
         attachMilestoneEvidence(name, app: app)
+    }
+
+    func testMilestoneSettingsFocusWalkKeepsEveryControlReachable() {
+        let app = launchSettings(matrixPanel: true)
+        defer { app.terminate() }
+        for category in ["This Apple TV", "Panel appearance", "Connection", "About & help"] {
+            openCategory(category, in: app)
+            attachVerticalFocusWalk("Settings — \(category) control walk", app: app, steps: 18)
+        }
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        XCUIRemote.shared.press(.left)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        attachVerticalFocusWalk("Settings — categories and Done walk", app: app, steps: 8)
     }
 
     func testCategoriesSeparateLocalAndSharedSettings() {

@@ -25,6 +25,7 @@ final class DeviceSignInUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "W D J B")).firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "/activate")).firstMatch.exists)
         capture("TV sign-in — QR and manual code", app: app)
+        attachVerticalFocusWalk("TV sign-in controls", app: app, steps: 8)
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.secureTextFields["Password"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Activation Test Board"].exists)
@@ -66,6 +67,23 @@ final class DeviceSignInUITests: XCTestCase {
     func testDeniedCodeRemovesTheUnusableQRAndCountdown() throws {
         try checkTerminalFailure(server: FixtureHTTPServer(tvSignInEnabled: true, devicePollError: "access_denied"),
                                  expected: "This sign-in was denied.", screenshot: "TV sign-in — denied")
+    }
+
+    func testLegacyPasswordWarningIsVisibleOnTheCompleteSignInScreen() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer(tvSignInEnabled: false)
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Legacy Test Hub\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "YES"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.secureTextFields["Password"].waitForExistence(timeout: 10))
+        let warning = "Your username and password are stored in this Apple TV’s Keychain for this hub’s legacy sign-in."
+        XCTAssertTrue(app.staticTexts[warning].waitForExistence(timeout: 5))
+        attachMilestoneEvidence("Sign in — legacy password warning", app: app)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        attachVerticalFocusWalk("Sign in — legacy controls", app: app, steps: 12)
     }
 
     private func checkTerminalFailure(server: FixtureHTTPServer, expected: String, screenshot: String) throws {

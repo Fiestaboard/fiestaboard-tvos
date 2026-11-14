@@ -50,5 +50,20 @@ final class ConnectPresentationTests: XCTestCase {
         add(screenshot)
         XCTAssertTrue(address.hasFocus, "A Bonjour result must preserve the address field's focus")
         XCTAssertFalse(card.hasFocus, "Discovery must not move the remote to the new board card")
+        attachMilestoneEvidence("Connect — manual address focused", app: app)
+        for _ in 0..<6 {
+            if card.hasFocus { break }
+            XCUIRemote.shared.press(.up)
+        }
+        XCTAssertTrue(card.hasFocus, "The discovered hub must remain reachable from manual entry")
+        attachMilestoneEvidence("Connect — discovered hub focused", app: app)
+        for _ in 0..<6 {
+            if address.hasFocus { break }
+            XCUIRemote.shared.press(.down)
+        }
+        XCTAssertTrue(address.hasFocus)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Connect"].hasFocus)
+        attachMilestoneEvidence("Connect — manual Connect focused", app: app)
     }
 }
