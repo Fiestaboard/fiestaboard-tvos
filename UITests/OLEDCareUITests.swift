@@ -78,6 +78,7 @@ final class OLEDCareUITests: XCTestCase {
                 XCTAssertTrue(app.staticTexts["Larger shifts for long, static days"].exists)
             }
             attachMilestoneEvidence("OLED care — \(title) choices focused", app: app)
+            attachVerticalFocusWalk("OLED care — \(title) controls", app: app, steps: 10)
             XCUIRemote.shared.press(.menu)
             XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
         }
@@ -107,4 +108,39 @@ final class OLEDCareUITests: XCTestCase {
         XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
         XCTAssertEqual(brightness(app), "100 %")
     }
+    func testMenuFromNestedDimLevelAndTimeReturnsOneLevel() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer()
+        defer { server = nil }
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Test Board\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        openCare(app)
+        select("oled.night", app: app)
+        let dimLevel = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Night dim level")).firstMatch
+        XCTAssertTrue(dimLevel.waitForExistence(timeout: 5))
+        select(dimLevel.label, app: app)
+        XCTAssertTrue(app.navigationBars["Night dim level"].waitForExistence(timeout: 5))
+        attachVerticalFocusWalk("OLED care — Night dim level controls", app: app, steps: 6)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(dimLevel.waitForExistence(timeout: 5), "Menu must return to Night dimming, not OLED summary")
+        attachMilestoneEvidence("OLED care — Night dimming after dim-level Back", app: app)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
+        select("oled.rest", app: app)
+        let starts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Rest starts")).firstMatch
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        select(starts.label, app: app)
+        XCTAssertTrue(app.navigationBars["Rest starts"].waitForExistence(timeout: 5))
+        attachVerticalFocusWalk("OLED care — Rest starts time controls", app: app, steps: 4)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(starts.waitForExistence(timeout: 5), "Menu must return to Scheduled rest, not OLED summary")
+        attachMilestoneEvidence("OLED care — Scheduled rest after time Back", app: app)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
+    }
+
 }

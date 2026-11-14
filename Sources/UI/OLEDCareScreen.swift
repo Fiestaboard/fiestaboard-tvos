@@ -70,7 +70,7 @@ struct OLEDCareScreen: View {
     private func row<Destination: View>(_ title: String, _ value: String, id: String,
                                         @ViewBuilder destination: @escaping () -> Destination) -> some View {
         NavigationLink {
-            destination()
+            OLEDDetailPage(content: destination)
         } label: {
             HStack {
                 Text(title).lineLimit(1)
@@ -124,7 +124,9 @@ struct NightDimmingScreen: View {
                         OLEDTimeRow(title: "Night ends", key: \.nightEnd)
                     }
                     NavigationLink {
-                        OLEDChoicePage(title: "Night dim level", options: [10, 25, 35, 50].map { ($0, "\($0) %") }, key: \.nightLevel, footer: Self.footer)
+                        OLEDDetailPage {
+                            OLEDChoicePage(title: "Night dim level", options: [10, 25, 35, 50].map { ($0, "\($0) %") }, key: \.nightLevel, footer: Self.footer)
+                        }
                     } label: {
                         LabeledContent("Night dim level", value: "\(app.oledCare.nightLevel) %")
                     }
@@ -204,15 +206,17 @@ struct OLEDTimeRow: View {
 
     var body: some View {
         NavigationLink {
-            List {
-                Picker("Hour", selection: Binding(get: { app.oledCare[keyPath: key] / 60 }, set: { hour in
-                    var c = app.oledCare; c[keyPath: key] = hour * 60 + c[keyPath: key] % 60; app.saveOLEDCare(c)
-                })) { ForEach(0..<24, id: \.self) { Text(Clock12.label(minutes: $0 * 60)).tag($0) } }
-                Picker("Minute", selection: Binding(get: { app.oledCare[keyPath: key] % 60 }, set: { minute in
-                    var c = app.oledCare; c[keyPath: key] = c[keyPath: key] / 60 * 60 + minute; app.saveOLEDCare(c)
-                })) { ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: ":%02d", $0)).tag($0) } }
+            OLEDDetailPage {
+                List {
+                    Picker("Hour", selection: Binding(get: { app.oledCare[keyPath: key] / 60 }, set: { hour in
+                        var c = app.oledCare; c[keyPath: key] = hour * 60 + c[keyPath: key] % 60; app.saveOLEDCare(c)
+                    })) { ForEach(0..<24, id: \.self) { Text(Clock12.label(minutes: $0 * 60)).tag($0) } }
+                    Picker("Minute", selection: Binding(get: { app.oledCare[keyPath: key] % 60 }, set: { minute in
+                        var c = app.oledCare; c[keyPath: key] = c[keyPath: key] / 60 * 60 + minute; app.saveOLEDCare(c)
+                    })) { ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: ":%02d", $0)).tag($0) } }
+                }
+                .navigationTitle(title)
             }
-            .navigationTitle(title)
         } label: {
             LabeledContent(title, value: Clock12.label(minutes: app.oledCare[keyPath: key]))
         }
@@ -372,5 +376,19 @@ private struct OLEDBinding<T> {
         Binding(get: { app.oledCare[keyPath: key] }, set: { value in
             var c = app.oledCare; c[keyPath: key] = value; app.saveOLEDCare(c)
         })
+    }
+}
+
+/// Destination-style links are not entries in SettingsScreen's typed path.
+/// Handle Menu in the destination's own dismiss environment so it pops one
+/// OLED level rather than letting the outer Settings handler pop the summary.
+private struct OLEDDetailPage<Content: View>: View {
+    @Environment(\.dismiss) private var dismiss
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) { self.content = content() }
+
+    var body: some View {
+        content.onExitCommand { dismiss() }
     }
 }
