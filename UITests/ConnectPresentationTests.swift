@@ -43,8 +43,8 @@ final class ConnectPresentationTests: XCTestCase {
         let alert = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", message)).firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Find your FiestaBoard hub"].exists)
-        // The response inserts the banner and changes the card's in-flight
-        // accessibility identity. Observe the settled native focus without
+        // The response updates the banner and card state. Observe the
+        // settled native focus without
         // sending any remote movement that could hide a genuine focus loss.
         let retainedFocus = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             let currentHub = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
