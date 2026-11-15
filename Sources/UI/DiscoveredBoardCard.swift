@@ -70,7 +70,11 @@ struct DiscoveredBoardCard: View {
                     .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         }
         .buttonStyle(.card)
-        .accessibilityLabel(TVCopy.Connect.hubCardAccessibilityLabel(for: board, address: address, connecting: isConnecting))
+        // The control keeps its name while its connection state changes.
+        // Progress belongs to its value, so assistive technology can update
+        // status without replacing the activated hub's accessible identity.
+        .accessibilityLabel(TVCopy.Connect.hubCardAccessibilityLabel(for: board, address: address))
+        .accessibilityValue(isConnecting ? TVCopy.Connect.hubCardConnectingValue : "")
         .accessibilityHint(TVCopy.Connect.hubCardHint)
     }
 }
