@@ -63,7 +63,7 @@ final class ConnectPresentationTests: XCTestCase {
         }
         XCTAssertTrue(address.hasFocus)
         XCUIRemote.shared.press(.right)
-        XCTAssertTrue(app.buttons["Connect"].hasFocus)
+        XCTAssertTrue(app.buttons["Connect to the address you entered"].hasFocus)
         attachMilestoneEvidence("Connect — manual Connect focused", app: app)
     }
 }

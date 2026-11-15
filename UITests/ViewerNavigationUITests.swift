@@ -162,15 +162,24 @@ final class ViewerNavigationUITests: XCTestCase {
         app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
         app.launch()
         defer { app.terminate() }
-        // The named viewer and loader disappearance establish rendered content.
-        XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 10))
+        // Split-flap arrays can legitimately offer a resize before exposing
+        // their wake target. Prove that expected state, dismiss the real
+        // offer, then require the named viewer and its native focus.
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.buttons[name].exists || app.buttons["Later"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
-        if app.buttons["Later"].waitForExistence(timeout: 2) {
+        if app.buttons["Later"].exists {
+            XCTAssertTrue(app.buttons["Resize for this TV"].hasFocus)
+            attachMilestoneEvidence("\(name) — resize offer focused", app: app)
             XCUIRemote.shared.press(.right)
             XCTAssertTrue(app.buttons["Later"].hasFocus)
+            attachMilestoneEvidence("\(name) — resize Later focused", app: app)
             XCUIRemote.shared.press(.select)
             XCTAssertTrue(app.buttons["Later"].waitForNonExistence(timeout: 3))
         }
+        XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 5))
         let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.buttons[name].hasFocus }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed)
         attachMilestoneEvidence("\(name) — native board focused", app: app)
