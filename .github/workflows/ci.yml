@@ -30,8 +30,9 @@ jobs:
     # 17 min before A0; the Figma parity shots and the SwiftPM resolve for
     # swift-snapshot-testing add a little (PHASE-4-TV-PLAN §2.1 allows ~30).
     # Milestone native focus/choice-page captures retain matching semantics
-    # trees; allow their evidence I/O in addition to the regression suite.
-    timeout-minutes: 45
+    # trees, pixel contrast probes and time-editor persistence across relaunch.
+    # Keep the full sequential suite together while retaining those artifacts.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
