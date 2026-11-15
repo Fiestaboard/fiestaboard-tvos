@@ -43,8 +43,17 @@ final class ConnectPresentationTests: XCTestCase {
         let alert = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", message)).firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Find your FiestaBoard hub"].exists)
-        XCTAssertTrue(card.hasFocus, "A failed connection must leave the hub available to retry")
-        attachMilestoneEvidence("Connect — hub HTTP 500 error — hub focused", app: app)
+        // The response inserts the banner and changes the card's in-flight
+        // accessibility identity. Observe the settled native focus without
+        // sending any remote movement that could hide a genuine focus loss.
+        let retainedFocus = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let currentHub = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+            return currentHub.exists && currentHub.hasFocus
+        }, object: nil)
+        let focusResult = XCTWaiter.wait(for: [retainedFocus], timeout: 5)
+        attachMilestoneEvidence("Connect — hub HTTP 500 error — post-response focus", app: app)
+        XCTAssertEqual(focusResult, .completed, "A failed connection must leave the same hub focused for retry")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch.hasFocus)
     }
 
     /// Release discovery only after the remote is on manual entry. This
