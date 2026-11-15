@@ -269,6 +269,44 @@ final class OLEDCareUITests: XCTestCase {
         XCTAssertTrue(starts.label.contains("10:00 PM") || (starts.value as? String) == "10:00 PM")
     }
 
+    func testRapidMinuteSelectionThenMenuKeepsTheImmediateParent() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer()
+        defer { server = nil }
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Rapid Back Test Hub\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        openCare(app)
+        select("oled.rest", app: app)
+        let starts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Rest starts")).firstMatch
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        select(starts.label, app: app)
+        select("oled.time.minute", app: app)
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        select(":35", app: app)
+        // Reproduce the valid rapid remote sequence: no destination query,
+        // attachment, readiness guard or delay between Select and Menu.
+        XCUIRemote.shared.press(.menu)
+        attachMilestoneEvidence("OLED care — rapid minute Select then Menu", app: app)
+        XCTAssertTrue(app.navigationBars["Scheduled rest"].waitForExistence(timeout: 5))
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        XCTAssertTrue(starts.label.contains(":35") || (starts.value as? String)?.contains(":35") == true)
+        XCTAssertFalse(app.buttons["oled.brightness"].exists, "Menu must not skip to the OLED summary")
+        // Restore the fixture's minute through the same native editor.
+        select(starts.label, app: app)
+        select("oled.time.minute", app: app)
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        select(":00", app: app)
+        XCTAssertTrue(app.navigationBars["Minute"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["oled.time.minute"].waitForExistence(timeout: 5))
+        focusOnly("oled.time.minute", app: app)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+    }
+
     private func assertTimeHubAfterMinuteSelection(_ app: XCUIApplication, hour: String,
                                                    minute: String, context: String) {
         // Selection dismisses the native choice page asynchronously. Send Menu
