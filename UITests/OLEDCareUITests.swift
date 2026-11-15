@@ -80,6 +80,41 @@ final class OLEDCareUITests: XCTestCase {
             }
             attachMilestoneEvidence("OLED care — \(title) choices focused", app: app)
             attachVerticalFocusWalk("OLED care — \(title) controls", app: app, steps: 10)
+            if id == "oled.night" {
+                let previousMode = try XCTUnwrap(["Follow panel", "Never", "Custom"].first {
+                    (app.buttons[$0].value as? String) == "Selected"
+                })
+                focusOnly("Custom", app: app)
+                select("Custom", app: app)
+                for label in ["Night starts", "Night ends"] {
+                    let timeRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", label)).firstMatch
+                    XCTAssertTrue(timeRow.waitForExistence(timeout: 5))
+                    let originalTimeLabel = timeRow.label
+                    let otherLabel = label == "Night starts" ? "Night ends" : "Night starts"
+                    XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", otherLabel)).firstMatch.exists)
+                    XCTAssertEqual(app.buttons["Custom"].value as? String, "Selected")
+                    focusOnly(timeRow.label, app: app)
+                    attachMilestoneEvidence("OLED care — Night dimming — Custom selected — \(label) focused", app: app)
+                    select(timeRow.label, app: app)
+                    XCTAssertTrue(app.navigationBars[label].waitForExistence(timeout: 5))
+                    for control in ["oled.time.hour", "oled.time.minute"] {
+                        focusOnly(control, app: app)
+                        attachMilestoneEvidence("OLED care — Night dimming — \(label) editor — \(control) focused", app: app)
+                    }
+                    XCUIRemote.shared.press(.menu)
+                    XCTAssertTrue(timeRow.waitForExistence(timeout: 5), "Menu must return to Night dimming, not OLED summary")
+                    XCTAssertEqual(timeRow.label, originalTimeLabel, "Opening the editor must preserve the saved time")
+                    XCTAssertFalse(app.buttons["oled.brightness"].exists)
+                    focusOnly(timeRow.label, app: app)
+                    attachMilestoneEvidence("OLED care — Night dimming — \(label) immediate parent after Back", app: app)
+                }
+                focusOnly(previousMode, app: app)
+                select(previousMode, app: app)
+                XCTAssertEqual(app.buttons[previousMode].value as? String, "Selected")
+                if previousMode != "Custom" {
+                    XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Night starts")).firstMatch.waitForNonExistence(timeout: 5))
+                }
+            }
             XCUIRemote.shared.press(.menu)
             XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
         }
