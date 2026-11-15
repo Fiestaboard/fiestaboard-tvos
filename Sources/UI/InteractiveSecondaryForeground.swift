@@ -14,8 +14,27 @@ private struct InteractiveSecondaryForeground: ViewModifier {
     }
 }
 
+/// Keep the platform's passing destructive tint at rest. Its focused pink
+/// is too light on the native white plate; the shared light danger token
+/// keeps the role red and readable without changing the button's semantics.
+private struct InteractiveDestructiveForeground: ViewModifier {
+    @Environment(\.isFocused) private var isFocused
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if isFocused {
+            content.foregroundStyle(Color(token: FiestaTokenValues.Light.destructive))
+        } else {
+            content
+        }
+    }
+}
+
 extension View {
     func interactiveSecondaryForeground() -> some View {
         modifier(InteractiveSecondaryForeground())
+    }
+
+    func interactiveDestructiveForeground() -> some View {
+        modifier(InteractiveDestructiveForeground())
     }
 }

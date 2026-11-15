@@ -170,7 +170,9 @@ struct SettingsScreen: View {
                 // A8d `269:131778`.
                 Section {
                     Button("Sign out") { model?.signOut() }
-                    Button(TVCopy.Settings.forget, role: .destructive) { confirmingForget = true }
+                    Button(role: .destructive) { confirmingForget = true } label: {
+                        Text(TVCopy.Settings.forget).interactiveDestructiveForeground()
+                    }
                 } header: { Text("Sign-in").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 footer: {
                     Text(SettingsCopy.connectionFooter(deviceCredential: app.connection.usesDeviceCredential,

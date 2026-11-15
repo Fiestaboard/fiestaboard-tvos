@@ -262,6 +262,7 @@ struct SignInScreen: View {
                 Text("The connection to this hub isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")
             }
         }
+        .foregroundStyle(Fiesta.Colors.mutedForeground)
         // One passage, not two rows to swipe through.
         .accessibilityElement(children: .combine)
     }
@@ -297,10 +298,13 @@ struct SignInScreen: View {
     /// that says what it costs.
     private var anotherBoardSection: some View {
         Section {
-            Button(TVCopy.SignIn.useAnother, role: .destructive) { model?.useAnotherBoard() }
+            Button(role: .destructive) { model?.useAnotherBoard() } label: {
+                Text(TVCopy.SignIn.useAnother).interactiveDestructiveForeground()
+            }
                 .accessibilityLabel(TVCopy.SignIn.useAnother)
         } footer: {
             Text("Forgets \(boardName) on this Apple TV and looks for another hub.")
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
         }
     }
 
