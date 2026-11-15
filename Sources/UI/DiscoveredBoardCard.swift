@@ -56,6 +56,10 @@ struct DiscoveredBoardCard: View {
             .overlay(alignment: .bottomTrailing) {
                 if isConnecting {
                     TacoLoader(size: .small)
+                        // Progress is the button's value. A second AX element
+                        // here leaks its identifier into the card and changes
+                        // the activated control's identity when it disappears.
+                        .accessibilityHidden(true)
                 }
             }
             .padding(28)
