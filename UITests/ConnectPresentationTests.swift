@@ -17,6 +17,7 @@ final class ConnectPresentationTests: XCTestCase {
         app.launchArguments = ["-fiestaboard.connection", "<>", "-fiestaboard.signedOut", "NO",
                                "-fiestaboard.discoveryFixture",
                                "http://127.0.0.1:\(server.port)/__fixtures/discovery"]
+        app.launchArguments.append("-fiestaboard.connectFocusTrace")
         app.launch()
         defer { app.terminate() }
         let address = app.textFields["FiestaBoard address"]
@@ -52,6 +53,20 @@ final class ConnectPresentationTests: XCTestCase {
         }, object: nil)
         let focusResult = XCTWaiter.wait(for: [retainedFocus], timeout: 5)
         attachMilestoneEvidence("Connect — hub HTTP 500 error — post-response focus", app: app)
+        if focusResult != .completed {
+            // Preserve the original focus failure, then independently record
+            // whether Select can still retry a control with no reported owner.
+            let before = server.authStatusRequestCount
+            XCUIRemote.shared.press(.select)
+            let retried = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                server.authStatusRequestCount > before
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [retried], timeout: 5)
+            let diagnostic = XCTAttachment(string: "Select after missing native owner: result=\(result.rawValue), requestsBefore=\(before), requestsAfter=\(server.authStatusRequestCount)")
+            diagnostic.name = "Connect focus diagnostic — Select after missing owner"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+        }
         XCTAssertEqual(focusResult, .completed, "A failed connection must leave the same hub focused for retry")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch.hasFocus)
         let beforeRetry = server.authStatusRequestCount
@@ -67,6 +82,7 @@ final class ConnectPresentationTests: XCTestCase {
         app.launchArguments = ["-fiestaboard.connection", "<>", "-fiestaboard.signedOut", "NO",
                                "-fiestaboard.discoveryFixture",
                                "http://127.0.0.1:\(server.port)/__fixtures/discovery"]
+        app.launchArguments.append("-fiestaboard.connectFocusTrace")
         app.launch()
         defer { app.terminate() }
         let address = app.textFields["FiestaBoard address"]
@@ -115,6 +131,7 @@ final class ConnectPresentationTests: XCTestCase {
         app.launchArguments = ["-fiestaboard.connection", "<>", "-fiestaboard.signedOut", "NO",
                                "-fiestaboard.discoveryFixture",
                                "http://127.0.0.1:\(server.port)/__fixtures/discovery"]
+        app.launchArguments.append("-fiestaboard.connectFocusTrace")
         app.launch()
         defer { app.terminate() }
 

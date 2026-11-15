@@ -73,15 +73,21 @@ struct ConnectScreen: View {
         }
         .onDisappear { model?.stopScan(); focusRecovery.cancel(); retryFocus = nil }
         .onChange(of: focusedControl) { _, current in
+            traceFocus("focus-change", detail: "current=\(String(describing: current)) connecting=\(model?.isConnecting == true)")
             if model?.isConnecting == true { focusRecovery.focusChanged(to: current) }
-            if current != nil { retryFocus = nil }
+            if current != nil {
+                traceFocus("clear-request-for-owner", detail: "current=\(String(describing: current)) request=\(String(describing: retryFocus))")
+                retryFocus = nil
+            }
         }
         .task(id: retryFocus) {
+            traceFocus("request-task", detail: "request=\(String(describing: retryFocus)) scene=\(scenePhase) route=\(app.route) exists=\(retryFocus.map { focusTargetExists($0.target) } ?? false) canceled=\(Task.isCancelled)")
             guard let request = retryFocus, scenePhase == .active, app.route == .connect,
                   focusTargetExists(request.target),
                   focusedControl == nil || focusedControl == request.target else { return }
             // The failed response and its native preferences are now in the
             // rendered view. Request native focus, without a timing delay.
+            traceFocus("reset-native-scope", detail: "target=\(request.target)")
             resetFocus(in: boardScope)
         }
         .onChange(of: boardIDs) { old, new in
@@ -213,6 +219,7 @@ struct ConnectScreen: View {
         var card = DiscoveredBoardCard(board: board,
                                        address: BoardAddressLabel.text(for: board),
                                        isConnecting: model?.connectInFlight(for: board.id) ?? false) {
+            traceFocus("hub-action", detail: "target=board(\(board.id))")
             Task { await connect(from: .board(board.id)) { await model?.connect(to: board.host, name: board.name) } }
         }
         #if DEBUG
@@ -363,16 +370,44 @@ struct ConnectScreen: View {
 
     @MainActor private func connect(from target: FocusTarget,
                                     perform: @MainActor () async -> Void) async {
+        traceFocus("attempt-enter", detail: "target=\(target)")
         guard let model, !model.isConnecting else { return }
         retryFocus = nil
         let token = focusRecovery.begin(target: target, focused: focusedControl)
+        traceFocus("attempt-begin", detail: "target=\(target) debt=\(String(describing: focusRecovery.target(for: token)))")
         await perform()
         let available = focusRecovery.target(for: token).map(focusTargetExists) ?? false
         let failed = app.route == .connect && (model.errorMessage ?? app.errorMessage) != nil
+        traceFocus("attempt-completed", detail: "failed=\(failed) available=\(available) scene=\(scenePhase) debt=\(String(describing: focusRecovery.target(for: token)))")
         guard let target = focusRecovery.finish(token: token, failed: failed,
                                                 focused: focusedControl, available: available),
               scenePhase == .active else { return }
+        traceFocus("request-created", detail: "target=\(target)")
         retryFocus = FocusRequest(token: token, target: target)
+    }
+
+    /// Opt-in native diagnostics only. No view, accessibility node or focus
+    /// preference is added; CI retains the sandbox file beside xcresult.
+    private func traceFocus(_ event: String, detail: String = "") {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-fiestaboard.connectFocusTrace") else { return }
+        let row: [String: Any] = ["event": event, "detail": detail,
+            "time": Date().timeIntervalSince1970, "pid": ProcessInfo.processInfo.processIdentifier,
+            "focusedControl": String(describing: focusedControl),
+            "request": String(describing: retryFocus)]
+        guard let data = try? JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]),
+              let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let directory = cache.appendingPathComponent("ConnectFocusTrace", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("events.jsonl")
+        if !FileManager.default.fileExists(atPath: file.path) {
+            _ = FileManager.default.createFile(atPath: file.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: file) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data + Data([10]))
+        #endif
     }
 
     // MARK: Bindings
