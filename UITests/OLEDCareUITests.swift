@@ -245,7 +245,10 @@ final class OLEDCareUITests: XCTestCase {
         XCTAssertTrue(starts.waitForExistence(timeout: 5))
         select(starts.label, app: app)
         XCTAssertTrue(app.navigationBars["Rest starts"].waitForExistence(timeout: 5))
-        if app.buttons["oled.time.hour"].exists { select("oled.time.hour", app: app) }
+        if app.buttons["oled.time.hour"].exists {
+            focusOnly("oled.time.hour", app: app)
+            select("oled.time.hour", app: app)
+        }
         let selected = app.buttons["10:00 PM"]
         XCTAssertTrue(selected.waitForExistence(timeout: 5))
         let minimum = ("10:00 PM" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 23)]).width
@@ -291,6 +294,9 @@ final class OLEDCareUITests: XCTestCase {
         focusOnly(starts.label, app: app)
         attachMilestoneEvidence("OLED care — persisted Scheduled rest start after relaunch", app: app)
         select(starts.label, app: app)
+        XCTAssertTrue(app.navigationBars["Rest starts"].waitForExistence(timeout: 5))
+        attachMilestoneEvidence("OLED care — Scheduled rest — Rest starts — restoration editor entry", app: app)
+        focusOnly("oled.time.hour", app: app)
         select("oled.time.hour", app: app)
         for _ in 0..<24 { XCUIRemote.shared.press(.up) }
         select("10:00 PM", app: app)
