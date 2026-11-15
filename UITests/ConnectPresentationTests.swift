@@ -54,6 +54,54 @@ final class ConnectPresentationTests: XCTestCase {
         attachMilestoneEvidence("Connect — hub HTTP 500 error — post-response focus", app: app)
         XCTAssertEqual(focusResult, .completed, "A failed connection must leave the same hub focused for retry")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch.hasFocus)
+        let beforeRetry = server.authStatusRequestCount
+        XCUIRemote.shared.press(.select)
+        waitForAuthRequests(beforeRetry + 1, server: server)
+    }
+
+    func testFailedHubRequestPreservesNewerManualFocus() throws {
+        continueAfterFailure = false
+        let server = try FixtureHTTPServer(failAuthStatus: true, holdAuthStatusFailures: true)
+        self.server = server
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<>", "-fiestaboard.signedOut", "NO",
+                               "-fiestaboard.discoveryFixture",
+                               "http://127.0.0.1:\(server.port)/__fixtures/discovery"]
+        app.launch()
+        defer { app.terminate() }
+        let address = app.textFields["FiestaBoard address"]
+        XCTAssertTrue(address.waitForExistence(timeout: 10))
+        let name = "FiestaBoard Pending Fixture"
+        server.releaseDiscoveredBoard(name: name)
+        let hub = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+        XCTAssertTrue(hub.waitForExistence(timeout: 10))
+        for _ in 0..<6 { if hub.hasFocus { break }; XCUIRemote.shared.press(.up) }
+        XCTAssertTrue(hub.hasFocus)
+        XCUIRemote.shared.press(.select)
+        waitForAuthRequests(1, server: server)
+        for _ in 0..<6 {
+            if address.hasFocus { break }
+            XCUIRemote.shared.press(.down)
+            XCUIRemote.shared.press(.left)
+        }
+        XCTAssertTrue(address.hasFocus)
+        server.releaseAuthStatusFailures()
+        let alert = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@",
+            "Alert. Your FiestaBoard hub answered with an error (HTTP 500). Check its logs.")).firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        let preserved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in address.hasFocus }, object: nil)
+        let result = XCTWaiter.wait(for: [preserved], timeout: 5)
+        attachMilestoneEvidence("Connect — failed hub preserves newer manual focus", app: app)
+        XCTAssertEqual(result, .completed)
+        XCTAssertFalse(hub.hasFocus, "A delayed failure must not take focus back from manual entry")
+    }
+
+    private func waitForAuthRequests(_ count: Int, server: FixtureHTTPServer) {
+        let received = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            server.authStatusRequestCount >= count
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [received], timeout: 5), .completed,
+                       "A real request must reach the same fixture hub")
     }
 
     /// Release discovery only after the remote is on manual entry. This

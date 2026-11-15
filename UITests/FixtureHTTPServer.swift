@@ -21,6 +21,9 @@ final class FixtureHTTPServer {
     private let devicePollError: String
     private let approveDeviceSignIn: Bool
     private let failAuthStatus: Bool
+    private var holdAuthStatusFailures: Bool
+    private var authStatusRequests = 0
+    private var heldAuthStatusFailures: [NWConnection] = []
     private var heldPanelUpdates: [NWConnection] = []
     private var discoveryBody: Data?
     private var heldDiscoveryConnection: NWConnection?
@@ -48,6 +51,7 @@ final class FixtureHTTPServer {
          devicePollError: String = "authorization_pending",
          approveDeviceSignIn: Bool = false,
          failAuthStatus: Bool = false,
+         holdAuthStatusFailures: Bool = false,
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -65,6 +69,7 @@ final class FixtureHTTPServer {
         self.devicePollError = devicePollError
         self.approveDeviceSignIn = approveDeviceSignIn
         self.failAuthStatus = failAuthStatus
+        self.holdAuthStatusFailures = holdAuthStatusFailures
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -83,6 +88,25 @@ final class FixtureHTTPServer {
     }
 
     deinit { listener.cancel() }
+
+    var authStatusRequestCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return authStatusRequests
+    }
+
+    func releaseAuthStatusFailures() {
+        lock.lock()
+        holdAuthStatusFailures = false
+        let pending = heldAuthStatusFailures
+        heldAuthStatusFailures.removeAll()
+        lock.unlock()
+        let body = Data(#"{"detail":"Fixture auth status failure"}"#.utf8)
+        let header = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+        for connection in pending {
+            connection.send(content: Data(header.utf8) + body,
+                            completion: .contentProcessed { _ in connection.cancel() })
+        }
+    }
 
     func releaseDiscoveredBoard(name: String) {
         let host = "http://127.0.0.1:\(port)"
@@ -162,6 +186,14 @@ final class FixtureHTTPServer {
             if drop {
                 connection.cancel()
                 return
+            }
+            if path == "/api/auth/status" {
+                lock.lock()
+                authStatusRequests += 1
+                let held = failAuthStatus && holdAuthStatusFailures
+                if held { heldAuthStatusFailures.append(connection) }
+                lock.unlock()
+                if held { return }
             }
             if path == "/__fixtures/discovery" {
                 lock.lock()
