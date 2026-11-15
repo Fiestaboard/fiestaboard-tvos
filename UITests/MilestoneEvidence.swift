@@ -44,11 +44,16 @@ extension XCTestCase {
     func assertNativeTextContrast(_ label: String, app: XCUIApplication,
                                   context: String, file: StaticString = #filePath, line: UInt = #line) {
         let text = app.staticTexts.matching(NSPredicate(format: "label == %@", label)).firstMatch
-        XCTAssertTrue(text.waitForExistence(timeout: 3), label, file: file, line: line)
+        assertNativeGlyphContrast(text, app: app, minimum: 4.5, context: context, file: file, line: line)
+    }
+
+    func assertNativeGlyphContrast(_ element: XCUIElement, app: XCUIApplication, minimum: Double,
+                                   context: String, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(element.waitForExistence(timeout: 3), context, file: file, line: line)
         Thread.sleep(forTimeInterval: 0.5)
         let screenshot = XCUIScreen.main.screenshot()
         guard let cg = screenshot.image.cgImage else { XCTFail("No native image", file: file, line: line); return }
-        let frame = text.frame
+        let frame = element.frame
         let scale = CGFloat(cg.width) / app.frame.width
         guard let measurement = TextContrastProbe.measure(cg, scale: scale, text: frame,
             background: CGPoint(x: frame.minX - 8, y: frame.midY)) else {
@@ -56,11 +61,11 @@ extension XCTestCase {
         }
         let shot = XCTAttachment(screenshot: screenshot)
         shot.name = "Contrast — \(context)"; shot.lifetime = .keepAlways; add(shot)
-        let probe = XCTAttachment(string: "Text: \(label)\nFrame: \(frame)\n\(measurement.dictionary)\n\n\(app.debugDescription)")
+        let probe = XCTAttachment(string: "Element: \(element.label)\nFrame: \(frame)\n\(measurement.dictionary)\nMinimum: \(minimum)\n\n\(app.debugDescription)")
         probe.name = "Contrast — \(context) — pixel and focus probes"
         probe.lifetime = .keepAlways; add(probe)
-        XCTAssertGreaterThanOrEqual(measurement.ratio, 4.5,
-            "Native text contrast \(context): \(measurement.dictionary)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(measurement.ratio, minimum,
+            "Native glyph contrast \(context): \(measurement.dictionary)", file: file, line: line)
     }
 
 }

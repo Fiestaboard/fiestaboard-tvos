@@ -97,6 +97,11 @@ final class SettingsPresentationTests: XCTestCase {
         for _ in 0..<24 {
             if rowHasFocus(label, in: app) {
                 attachMilestoneEvidence("Settings — focused \(label)", app: app)
+                if label == "Privacy" {
+                    let icon = app.buttons[label].images["chevron.right"].firstMatch
+                    assertNativeGlyphContrast(icon, app: app, minimum: 3,
+                                              context: "Settings Privacy chevron focused")
+                }
                 XCUIRemote.shared.press(.select)
                 return
             }
@@ -413,6 +418,11 @@ final class SettingsPresentationTests: XCTestCase {
     func testHelpKeepsPrivacyReachableAndMenuReturnsToSettings() {
         let app = launchSettings()
         openCategory("About & help", in: app)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        XCTAssertFalse(rowHasFocus("Privacy", in: app), "The first icon measurement must be unfocused")
+        let icon = app.buttons["Privacy"].images["chevron.right"].firstMatch
+        assertNativeGlyphContrast(icon, app: app, minimum: 3,
+                                  context: "Settings Privacy chevron unfocused")
         openRow("Privacy", in: app)
         // DD19 / A8f: the body is one focus target the remote scrolls.
         let body = app.descendants(matching: .any).matching(identifier: "settings.detail.body").firstMatch
