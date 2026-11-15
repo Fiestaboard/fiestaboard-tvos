@@ -91,10 +91,7 @@ final class AccessibilityAuditUITests: XCTestCase {
         } catch {
             XCTFail("\(screen): the audit could not run: \(error)", file: file, line: line)
         }
-        let shot = XCTAttachment(screenshot: app.screenshot())
-        shot.name = "a12-audit-\(screen)"
-        shot.lifetime = .keepAlways
-        add(shot)
+        attachMilestoneEvidence("a12-audit-\(screen)", app: app)
         for finding in findings {
             XCTFail("\(screen): \(finding)", file: file, line: line)
         }
@@ -153,6 +150,8 @@ final class AccessibilityAuditUITests: XCTestCase {
     func testEverySettingsCategory() {
         let app = launch()
         openSettings(app)
+        guard openCategory("This Apple TV", in: app) else { return }
+        XCTAssertEqual(app.buttons["This Apple TV"].value as? String, "Selected")
         audit("settings-this-tv", app)
         for category in ["Panel appearance", "Connection", "About & help"] {
             for _ in 0..<12 { XCUIRemote.shared.press(.up) }
