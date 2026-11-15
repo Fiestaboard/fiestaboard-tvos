@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// A8b (`248:110205`): OLED care is one page of summary rows, each opening its
 /// own choice page (DD23: no OLED question, preview or disclaimer).
@@ -141,6 +142,107 @@ final class OLEDCareUITests: XCTestCase {
         attachMilestoneEvidence("OLED care — Scheduled rest after time Back", app: app)
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.buttons["oled.brightness"].waitForExistence(timeout: 5))
+    }
+
+    private func focusOnly(_ label: String, app: XCUIApplication) {
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        for _ in 0..<12 {
+            if focused(label, app: app) { return }
+            XCUIRemote.shared.press(.down)
+        }
+        XCTFail("Could not focus \(label) without activation")
+    }
+
+    func testFocusedOLEDSecondaryTextKeepsReadableNativeContrast() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer()
+        defer { server = nil }
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Contrast Test Hub\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        openCare(app)
+        focusOnly("oled.movement", app: app)
+        let brightness = app.buttons["oled.brightness"].value as? String ?? "100 %"
+        assertNativeTextContrast(brightness, app: app, context: "OLED summary unfocused value")
+        focusOnly("oled.brightness", app: app)
+        assertNativeTextContrast(brightness, app: app, context: "OLED summary focused value")
+        select("oled.movement", app: app)
+        XCTAssertTrue(app.buttons["Gentle"].waitForExistence(timeout: 5))
+        let gentle = "Shifts the board a few pixels over 20 min"
+        let wider = "Larger shifts for long, static days"
+        assertNativeTextContrast(gentle, app: app, context: "Movement Gentle unfocused")
+        assertNativeTextContrast(wider, app: app, context: "Movement Wider unfocused")
+        focusOnly("Gentle", app: app)
+        assertNativeTextContrast(gentle, app: app, context: "Movement Gentle focused")
+        focusOnly("Wider", app: app)
+        assertNativeTextContrast(wider, app: app, context: "Movement Wider focused")
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.buttons["oled.night"].waitForExistence(timeout: 5))
+        select("oled.night", app: app)
+        XCTAssertTrue(app.buttons["Never"].waitForExistence(timeout: 5))
+        focusOnly("Never", app: app)
+        let follow = "Uses the shared schedule set on your phone"
+        let custom = "Only this TV"
+        assertNativeTextContrast(follow, app: app, context: "Night Follow panel unfocused")
+        assertNativeTextContrast(custom, app: app, context: "Night Custom unfocused")
+        focusOnly("Follow panel", app: app)
+        assertNativeTextContrast(follow, app: app, context: "Night Follow panel focused")
+        focusOnly("Custom", app: app)
+        assertNativeTextContrast(custom, app: app, context: "Night Custom focused")
+    }
+
+    func testNativeTimeEditorKeepsHourPeriodAndMinuteReadableAndPersists() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer()
+        defer { server = nil }
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Time Test Hub\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        openCare(app)
+        select("oled.rest", app: app)
+        let starts = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Rest starts")).firstMatch
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        select(starts.label, app: app)
+        XCTAssertTrue(app.navigationBars["Rest starts"].waitForExistence(timeout: 5))
+        if app.buttons["oled.time.hour"].exists { select("oled.time.hour", app: app) }
+        let selected = app.buttons["10:00 PM"]
+        XCTAssertTrue(selected.waitForExistence(timeout: 5))
+        let minimum = ("10:00 PM" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 23)]).width
+        XCTAssertGreaterThanOrEqual(selected.frame.width, minimum,
+            "The actual native hour control must fit its full hour and AM/PM at the TV type floor")
+        attachMilestoneEvidence("OLED care — selected hour fully readable", app: app)
+        for _ in 0..<24 { XCUIRemote.shared.press(.up) }
+        select("11:00 AM", app: app)
+        XCTAssertTrue(app.buttons["oled.time.minute"].waitForExistence(timeout: 5))
+        select("oled.time.minute", app: app)
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        select(":35", app: app)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        XCTAssertTrue(starts.label.contains("11:35 AM") || (starts.value as? String) == "11:35 AM")
+        attachMilestoneEvidence("OLED care — changed time across AM PM", app: app)
+        app.terminate(); app.launch()
+        openCare(app)
+        select("oled.rest", app: app)
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        XCTAssertTrue(starts.label.contains("11:35 AM") || (starts.value as? String) == "11:35 AM",
+                      "Hour and minute persist across app relaunch")
+        select(starts.label, app: app)
+        select("oled.time.hour", app: app)
+        for _ in 0..<24 { XCUIRemote.shared.press(.up) }
+        select("10:00 PM", app: app)
+        select("oled.time.minute", app: app)
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        select(":00", app: app)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(starts.waitForExistence(timeout: 5))
+        XCTAssertTrue(starts.label.contains("10:00 PM") || (starts.value as? String) == "10:00 PM")
     }
 
 }

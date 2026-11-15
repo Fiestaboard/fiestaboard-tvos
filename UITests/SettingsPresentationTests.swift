@@ -128,6 +128,18 @@ final class SettingsPresentationTests: XCTestCase {
         attachMilestoneEvidence(name, app: app)
     }
 
+    func testNativeSettingsSecondaryValueKeepsContrastWhenFocused() {
+        let app = launchSettings()
+        defer { app.terminate() }
+        openCategory("This Apple TV", in: app)
+        waitForRowFocus("Open at launch", in: app)
+        let value = app.buttons["Open at launch"].value as? String ?? "Panel list"
+        assertNativeTextContrast(value, app: app, context: "Settings Open at launch focused value")
+        XCUIRemote.shared.press(.down)
+        waitForRowFocus("Split-flap size", in: app)
+        assertNativeTextContrast(value, app: app, context: "Settings Open at launch unfocused value")
+    }
+
     func testMilestoneSettingsFocusWalkKeepsEveryControlReachable() {
         let app = launchSettings(matrixPanel: true)
         defer { app.terminate() }
@@ -276,6 +288,10 @@ final class SettingsPresentationTests: XCTestCase {
         openRow("TV size", in: app)
         openRow("55 inches", in: app)
         XCTAssertEqual(app.buttons["TV size"].value as? String, "55 inches")
+        waitForRowFocus("TV size", in: app)
+        assertNativeTextContrast("55 inches", app: app, context: "Settings TV size focused value")
+        XCUIRemote.shared.press(.down)
+        assertNativeTextContrast("55 inches", app: app, context: "Settings TV size unfocused value")
         openRow("LED spacing", in: app)
         openRow("8 mm", in: app)
         XCTAssertEqual(app.buttons["LED spacing"].value as? String, "8 mm")

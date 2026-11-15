@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 
 /// Native window-server captures, with the matching accessibility frame and
 /// focus inventory. This is deliberately separate from offscreen goldens.
@@ -38,6 +39,28 @@ extension XCTestCase {
             }
             XCUIRemote.shared.press(.down)
         }
+    }
+
+    func assertNativeTextContrast(_ label: String, app: XCUIApplication,
+                                  context: String, file: StaticString = #filePath, line: UInt = #line) {
+        let text = app.staticTexts.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 3), label, file: file, line: line)
+        Thread.sleep(forTimeInterval: 0.5)
+        let screenshot = XCUIScreen.main.screenshot()
+        guard let cg = screenshot.image.cgImage else { XCTFail("No native image", file: file, line: line); return }
+        let frame = text.frame
+        let scale = CGFloat(cg.width) / app.frame.width
+        guard let measurement = TextContrastProbe.measure(cg, scale: scale, text: frame,
+            background: CGPoint(x: frame.minX - 8, y: frame.midY)) else {
+            XCTFail("No core glyph pixels for \(context): \(frame)", file: file, line: line); return
+        }
+        let shot = XCTAttachment(screenshot: screenshot)
+        shot.name = "Contrast — \(context)"; shot.lifetime = .keepAlways; add(shot)
+        let probe = XCTAttachment(string: "Text: \(label)\nFrame: \(frame)\n\(measurement.dictionary)\n\n\(app.debugDescription)")
+        probe.name = "Contrast — \(context) — pixel and focus probes"
+        probe.lifetime = .keepAlways; add(probe)
+        XCTAssertGreaterThanOrEqual(measurement.ratio, 4.5,
+            "Native text contrast \(context): \(measurement.dictionary)", file: file, line: line)
     }
 
 }

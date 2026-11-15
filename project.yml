@@ -153,6 +153,7 @@ targets:
       - path: UITests
       - path: Tests/Support/Fixtures.swift
       - path: Tests/Support/GlassProbe.swift
+      - path: Tests/Support/TextContrastProbe.swift
     dependencies:
       - target: FiestaBoardTV
     settings:
