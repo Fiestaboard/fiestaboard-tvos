@@ -253,7 +253,7 @@ struct SettingsScreen: View {
 
     private func helpRow(_ title: String, _ detail: HelpDetail) -> some View {
         Button { helpDetail = detail } label: {
-            HStack { Text(title); Spacer(); Image(systemName: "chevron.right").foregroundStyle(Fiesta.Colors.mutedForeground) }
+            HStack { Text(title); Spacer(); Image(systemName: "chevron.right").interactiveSecondaryForeground() }
         }
         .accessibilityLabel(title)
     }
