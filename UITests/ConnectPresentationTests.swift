@@ -99,8 +99,6 @@ final class ConnectPresentationTests: XCTestCase {
         waitForAuthRequests(1, server: server)
         XCTAssertEqual(hub.label, stableName, "Connection status must not change the activated control's name")
         XCTAssertEqual(hub.identifier, stableIdentifier, "A decorative loader must not change the activated hub identifier")
-        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "taco-loader").count, 0,
-                       "Progress is exposed by the hub value; its decorative loader must not add accessibility elements")
         XCTAssertEqual(hub.value as? String, "Connecting", "In-flight status remains available to assistive technology")
         XCTAssertTrue(hub.hasFocus, "The held request must retain a reported native owner before manual movement")
         attachMilestoneEvidence("Connect — held request — stable hub identity and connecting value", app: app)

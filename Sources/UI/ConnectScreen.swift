@@ -11,7 +11,6 @@ import SwiftUI
 /// what a FiestaBoard is before it asks anyone to choose one.
 struct ConnectScreen: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.resetFocus) private var resetFocus
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConnectModel?
 
@@ -82,13 +81,14 @@ struct ConnectScreen: View {
         }
         .task(id: retryFocus) {
             traceFocus("request-task", detail: "request=\(String(describing: retryFocus)) scene=\(scenePhase) route=\(app.route) exists=\(retryFocus.map { focusTargetExists($0.target) } ?? false) canceled=\(Task.isCancelled)")
-            guard let request = retryFocus, scenePhase == .active, app.route == .connect,
+            guard !Task.isCancelled, let request = retryFocus, scenePhase == .active, app.route == .connect,
                   focusTargetExists(request.target),
                   focusedControl == nil || focusedControl == request.target else { return }
-            // The failed response and its native preferences are now in the
-            // rendered view. Request native focus, without a timing delay.
-            traceFocus("reset-native-scope", detail: "target=\(request.target)")
-            resetFocus(in: boardScope)
+            // The failed response and the cleared binding have now rendered.
+            // Reissue the binding so the native engine gets a real focus
+            // transition even when its old SwiftUI value survived the failure.
+            traceFocus("restore-focus-binding", detail: "target=\(request.target)")
+            focusedControl = request.target
         }
         .onChange(of: boardIDs) { old, new in
             // Only when the first board lands, and only when nothing holds
@@ -383,6 +383,10 @@ struct ConnectScreen: View {
                                                 focused: focusedControl, available: available),
               scenePhase == .active else { return }
         traceFocus("request-created", detail: "target=\(target)")
+        // A retained binding is not proof that the native/AX owner survived
+        // the response update. Clear it before the rendered task reissues the
+        // target; resetFocus alone is a no-op for an already preferred owner.
+        focusedControl = nil
         retryFocus = FocusRequest(token: token, target: target)
     }
 
