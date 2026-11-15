@@ -214,13 +214,25 @@ final class OLEDCareUITests: XCTestCase {
         let selected = app.buttons["10:00 PM"]
         XCTAssertTrue(selected.waitForExistence(timeout: 5))
         let minimum = ("10:00 PM" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 23)]).width
+        focusOnly("10:00 PM", app: app)
         let visibleText = selected.staticTexts["10:00 PM"].firstMatch
+        let cell = app.cells.containing(.button, identifier: "10:00 PM").firstMatch
+        let laidOut = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let glyphs = visibleText.exists ? visibleText.frame : selected.frame
+            return cell.exists && glyphs.width >= minimum
+                && cell.frame.contains(glyphs) && app.frame.contains(glyphs)
+        }, object: nil)
+        let layoutResult = XCTWaiter.wait(for: [laidOut], timeout: 5)
+        attachMilestoneEvidence("OLED care — selected hour native cell layout", app: app)
         let visibleFrame = visibleText.exists ? visibleText.frame : selected.frame
+        XCTAssertEqual(layoutResult, .completed,
+            "Full hour glyphs must fit the actual native cell and viewport: glyphs \(visibleFrame), cell \(cell.frame)")
         XCTAssertGreaterThanOrEqual(visibleFrame.width, minimum,
             "The actual native hour label must fit its full hour and AM/PM at the TV type floor")
-        XCTAssertTrue(selected.frame.contains(visibleFrame))
+        // The accessibility Button reports its label's frame, not the whole
+        // native focused surface; use the owning cell for containment.
+        XCTAssertTrue(cell.frame.contains(visibleFrame))
         XCTAssertTrue(app.frame.contains(visibleFrame))
-        focusOnly("10:00 PM", app: app)
         XCTAssertTrue(selected.isSelected || (selected.value as? String) == "Selected")
         attachMilestoneEvidence("OLED care — selected hour fully readable", app: app)
         for _ in 0..<24 { XCUIRemote.shared.press(.up) }
