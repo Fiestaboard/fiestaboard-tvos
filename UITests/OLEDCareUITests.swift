@@ -241,6 +241,8 @@ final class OLEDCareUITests: XCTestCase {
         select("oled.time.minute", app: app)
         for _ in 0..<12 { XCUIRemote.shared.press(.up) }
         select(":35", app: app)
+        assertTimeHubAfterMinuteSelection(app, hour: "11:00 AM", minute: ":35",
+                                          context: "changed time before Menu")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(starts.waitForExistence(timeout: 5))
         XCTAssertTrue(starts.label.contains("11:35 AM") || (starts.value as? String) == "11:35 AM")
@@ -260,9 +262,27 @@ final class OLEDCareUITests: XCTestCase {
         select("oled.time.minute", app: app)
         for _ in 0..<12 { XCUIRemote.shared.press(.up) }
         select(":00", app: app)
+        assertTimeHubAfterMinuteSelection(app, hour: "10:00 PM", minute: ":00",
+                                          context: "restored time before Menu")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(starts.waitForExistence(timeout: 5))
         XCTAssertTrue(starts.label.contains("10:00 PM") || (starts.value as? String) == "10:00 PM")
+    }
+
+    private func assertTimeHubAfterMinuteSelection(_ app: XCUIApplication, hour: String,
+                                                   minute: String, context: String) {
+        // Selection dismisses the native choice page asynchronously. Send Menu
+        // only after the destination and its actual focused surface are ready.
+        XCTAssertTrue(app.navigationBars["Minute"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Rest starts"].waitForExistence(timeout: 5))
+        let hourRow = app.buttons["oled.time.hour"]
+        let minuteRow = app.buttons["oled.time.minute"]
+        XCTAssertTrue(hourRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(minuteRow.waitForExistence(timeout: 5))
+        XCTAssertEqual(hourRow.value as? String, hour)
+        XCTAssertEqual(minuteRow.value as? String, minute)
+        focusOnly("oled.time.minute", app: app)
+        attachMilestoneEvidence("OLED care — Scheduled rest — Rest starts — " + context, app: app)
     }
 
 }
