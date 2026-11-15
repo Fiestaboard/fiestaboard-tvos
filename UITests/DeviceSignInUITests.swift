@@ -82,8 +82,28 @@ final class DeviceSignInUITests: XCTestCase {
         let warning = "Your username and password are stored in this Apple TV’s Keychain for this hub’s legacy sign-in."
         XCTAssertTrue(app.staticTexts[warning].waitForExistence(timeout: 5))
         attachMilestoneEvidence("Sign in — legacy password warning", app: app)
+        let another = app.buttons["Choose another hub"]
+        let anotherCell = app.cells.containing(.button, identifier: "Choose another hub").firstMatch
+        let footers = [
+            ("credentials footer", warning),
+            ("network footer", "The connection to this hub isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust."),
+            ("forget footer", "Forgets Legacy Test Hub on this Apple TV and looks for another hub.")
+        ]
+        XCTAssertFalse(another.hasFocus || anotherCell.hasFocus)
+        assertNativeGlyphContrast(another, app: app, minimum: 4.5,
+                                  context: "Sign in legacy Choose another hub unfocused")
+        for (name, text) in footers {
+            assertNativeTextContrast(text, app: app, context: "Sign in legacy \(name) unfocused control")
+        }
         for _ in 0..<8 { XCUIRemote.shared.press(.up) }
         attachVerticalFocusWalk("Sign in — legacy controls", app: app, steps: 12)
+        XCTAssertTrue(another.hasFocus || anotherCell.hasFocus)
+        assertNativeGlyphContrast(another, app: app, minimum: 4.5,
+                                  context: "Sign in legacy Choose another hub focused")
+        XCTAssertTrue(another.hasFocus || anotherCell.hasFocus)
+        for (name, text) in footers {
+            assertNativeTextContrast(text, app: app, context: "Sign in legacy \(name) focused control")
+        }
     }
 
     private func checkTerminalFailure(server: FixtureHTTPServer, expected: String, screenshot: String) throws {

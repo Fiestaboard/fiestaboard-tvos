@@ -151,6 +151,21 @@ final class SettingsPresentationTests: XCTestCase {
         for category in ["This Apple TV", "Panel appearance", "Connection", "About & help"] {
             openCategory(category, in: app)
             attachVerticalFocusWalk("Settings — \(category) control walk", app: app, steps: 18)
+            if category == "Connection" {
+                waitForRowFocus("Forget this hub", in: app)
+                assertNativeGlyphContrast(app.buttons["Forget this hub"], app: app, minimum: 4.5,
+                                          context: "Settings Forget this hub focused")
+                XCTAssertTrue(rowHasFocus("Forget this hub", in: app))
+                assertNativeGlyphContrast(app.buttons["Sign out"], app: app, minimum: 4.5,
+                                          context: "Settings Sign out unfocused")
+                XCUIRemote.shared.press(.up)
+                waitForRowFocus("Sign out", in: app)
+                assertNativeGlyphContrast(app.buttons["Forget this hub"], app: app, minimum: 4.5,
+                                          context: "Settings Forget this hub unfocused")
+                assertNativeGlyphContrast(app.buttons["Sign out"], app: app, minimum: 4.5,
+                                          context: "Settings Sign out focused")
+                XCTAssertTrue(rowHasFocus("Sign out", in: app))
+            }
         }
         for _ in 0..<12 { XCUIRemote.shared.press(.up) }
         XCUIRemote.shared.press(.left)
