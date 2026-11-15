@@ -93,8 +93,13 @@ final class ConnectPresentationTests: XCTestCase {
         XCTAssertTrue(hub.waitForExistence(timeout: 10))
         for _ in 0..<6 { if hub.hasFocus { break }; XCUIRemote.shared.press(.up) }
         XCTAssertTrue(hub.hasFocus)
+        let stableName = hub.label
         XCUIRemote.shared.press(.select)
         waitForAuthRequests(1, server: server)
+        XCTAssertEqual(hub.label, stableName, "Connection status must not change the activated control's name")
+        XCTAssertEqual(hub.value as? String, "Connecting", "In-flight status remains available to assistive technology")
+        XCTAssertTrue(hub.hasFocus, "The held request must retain a reported native owner before manual movement")
+        attachMilestoneEvidence("Connect — held request — stable hub identity and connecting value", app: app)
         for _ in 0..<6 {
             if address.hasFocus { break }
             XCUIRemote.shared.press(.down)
