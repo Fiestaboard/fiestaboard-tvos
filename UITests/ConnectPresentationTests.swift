@@ -21,8 +21,14 @@ final class ConnectPresentationTests: XCTestCase {
         defer { app.terminate() }
         let address = app.textFields["FiestaBoard address"]
         XCTAssertTrue(address.waitForExistence(timeout: 10))
+        for _ in 0..<4 {
+            if address.hasFocus { break }
+            XCUIRemote.shared.press(.down)
+            XCUIRemote.shared.press(.left)
+        }
+        XCTAssertTrue(address.hasFocus)
         XCTAssertTrue(app.staticTexts["Looking for FiestaBoard hubs on this network…"].exists)
-        attachMilestoneEvidence("Connect — looking for hubs", app: app)
+        attachMilestoneEvidence("Connect — looking for hubs — manual address focused", app: app)
         let name = "FiestaBoard Error Fixture"
         server.releaseDiscoveredBoard(name: name)
         let card = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
