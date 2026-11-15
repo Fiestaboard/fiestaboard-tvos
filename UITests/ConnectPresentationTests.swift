@@ -9,6 +9,38 @@ final class ConnectPresentationTests: XCTestCase {
         super.tearDown()
     }
 
+    func testLookingThenHubErrorKeepsTheHubReachable() throws {
+        continueAfterFailure = false
+        let server = try FixtureHTTPServer(failAuthStatus: true)
+        self.server = server
+        let app = XCUIApplication()
+        app.launchArguments = ["-fiestaboard.connection", "<>", "-fiestaboard.signedOut", "NO",
+                               "-fiestaboard.discoveryFixture",
+                               "http://127.0.0.1:\(server.port)/__fixtures/discovery"]
+        app.launch()
+        defer { app.terminate() }
+        let address = app.textFields["FiestaBoard address"]
+        XCTAssertTrue(address.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Looking for FiestaBoard hubs on this network…"].exists)
+        attachMilestoneEvidence("Connect — looking for hubs", app: app)
+        let name = "FiestaBoard Error Fixture"
+        server.releaseDiscoveredBoard(name: name)
+        let card = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        for _ in 0..<6 {
+            if card.hasFocus { break }
+            XCUIRemote.shared.press(.up)
+        }
+        XCTAssertTrue(card.hasFocus)
+        XCUIRemote.shared.press(.select)
+        let message = "Alert. Your FiestaBoard hub answered with an error (HTTP 500). Check its logs."
+        let alert = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", message)).firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Find your FiestaBoard hub"].exists)
+        XCTAssertTrue(card.hasFocus, "A failed connection must leave the hub available to retry")
+        attachMilestoneEvidence("Connect — hub HTTP 500 error — hub focused", app: app)
+    }
+
     /// Release discovery only after the remote is on manual entry. This
     /// reproduces a first result arriving while someone uses the fallback.
     func testFirstDiscoveredBoardDoesNotTakeFocusFromTheAddressField() throws {

@@ -20,6 +20,7 @@ final class FixtureHTTPServer {
     private let deviceAuthorizationError: String?
     private let devicePollError: String
     private let approveDeviceSignIn: Bool
+    private let failAuthStatus: Bool
     private var heldPanelUpdates: [NWConnection] = []
     private var discoveryBody: Data?
     private var heldDiscoveryConnection: NWConnection?
@@ -46,6 +47,7 @@ final class FixtureHTTPServer {
          deviceAuthorizationError: String? = nil,
          devicePollError: String = "authorization_pending",
          approveDeviceSignIn: Bool = false,
+         failAuthStatus: Bool = false,
          onFrame: @escaping () -> Void = {},
          onPanels: @escaping () -> Void = {}) throws {
         self.onFrame = onFrame
@@ -62,6 +64,7 @@ final class FixtureHTTPServer {
         self.deviceAuthorizationError = deviceAuthorizationError
         self.devicePollError = devicePollError
         self.approveDeviceSignIn = approveDeviceSignIn
+        self.failAuthStatus = failAuthStatus
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in
@@ -180,7 +183,12 @@ final class FixtureHTTPServer {
             switch path {
             case "/api/auth/status":
                 let authenticated = approveDeviceSignIn && request.lowercased().contains("authorization: bearer fb_tv_ui-settings")
-                body = tvSignInEnabled ? #"{"enabled":true,"setup_required":false,"authenticated":\#(authenticated),"username":null,"mode":"required","first_run":false,"tv_sign_in":{"supported":true,"enabled":true,"protocol_version":1}}"# : Fixtures.authStatusDisabled
+                if failAuthStatus {
+                    status = "500 Internal Server Error"
+                    body = #"{"detail":"Fixture auth status failure"}"#
+                } else {
+                    body = tvSignInEnabled ? #"{"enabled":true,"setup_required":false,"authenticated":\#(authenticated),"username":null,"mode":"required","first_run":false,"tv_sign_in":{"supported":true,"enabled":true,"protocol_version":1}}"# : Fixtures.authStatusDisabled
+                }
             case "/api/auth/device/authorize":
                 if let deviceAuthorizationError {
                     status = "403 Forbidden"
