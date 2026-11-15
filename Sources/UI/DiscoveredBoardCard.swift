@@ -54,13 +54,13 @@ struct DiscoveredBoardCard: View {
             // not reliably come back. The model's `guard !isConnecting` is
             // what stops a second attempt.
             .overlay(alignment: .bottomTrailing) {
-                if isConnecting {
-                    TacoLoader(size: .small)
-                        // Progress is the button's value. A second AX element
-                        // here leaks its identifier into the card and changes
-                        // the activated control's identity when it disappears.
-                        .accessibilityHidden(true)
-                }
+                // Keep the native card label's subtree stable when the
+                // response arrives. Removing this view while its button is
+                // focused leaves tvOS with no reported focus owner.
+                TacoLoader(size: .small, isAnimating: isConnecting)
+                    .opacity(isConnecting ? 1 : 0)
+                    // Progress is exposed once, through the button's value.
+                    .accessibilityHidden(true)
             }
             .padding(28)
             .background(Fiesta.Colors.surface)
