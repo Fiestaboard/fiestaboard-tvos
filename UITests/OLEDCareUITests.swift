@@ -146,7 +146,7 @@ final class OLEDCareUITests: XCTestCase {
 
     private func focusOnly(_ label: String, app: XCUIApplication) {
         for _ in 0..<8 { XCUIRemote.shared.press(.up) }
-        for _ in 0..<12 {
+        for _ in 0..<30 {
             if focused(label, app: app) { return }
             XCUIRemote.shared.press(.down)
         }
@@ -214,8 +214,14 @@ final class OLEDCareUITests: XCTestCase {
         let selected = app.buttons["10:00 PM"]
         XCTAssertTrue(selected.waitForExistence(timeout: 5))
         let minimum = ("10:00 PM" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 23)]).width
-        XCTAssertGreaterThanOrEqual(selected.frame.width, minimum,
-            "The actual native hour control must fit its full hour and AM/PM at the TV type floor")
+        let visibleText = selected.staticTexts["10:00 PM"].firstMatch
+        let visibleFrame = visibleText.exists ? visibleText.frame : selected.frame
+        XCTAssertGreaterThanOrEqual(visibleFrame.width, minimum,
+            "The actual native hour label must fit its full hour and AM/PM at the TV type floor")
+        XCTAssertTrue(selected.frame.contains(visibleFrame))
+        XCTAssertTrue(app.frame.contains(visibleFrame))
+        focusOnly("10:00 PM", app: app)
+        XCTAssertTrue(selected.isSelected || (selected.value as? String) == "Selected")
         attachMilestoneEvidence("OLED care — selected hour fully readable", app: app)
         for _ in 0..<24 { XCUIRemote.shared.press(.up) }
         select("11:00 AM", app: app)
@@ -233,6 +239,8 @@ final class OLEDCareUITests: XCTestCase {
         XCTAssertTrue(starts.waitForExistence(timeout: 5))
         XCTAssertTrue(starts.label.contains("11:35 AM") || (starts.value as? String) == "11:35 AM",
                       "Hour and minute persist across app relaunch")
+        focusOnly(starts.label, app: app)
+        attachMilestoneEvidence("OLED care — persisted Scheduled rest start after relaunch", app: app)
         select(starts.label, app: app)
         select("oled.time.hour", app: app)
         for _ in 0..<24 { XCUIRemote.shared.press(.up) }

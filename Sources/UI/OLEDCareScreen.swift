@@ -75,7 +75,7 @@ struct OLEDCareScreen: View {
             HStack {
                 Text(title).lineLimit(1)
                 Spacer()
-                Text(value).foregroundStyle(Fiesta.Colors.mutedForeground).lineLimit(1)
+                Text(value).interactiveSecondaryForeground().lineLimit(1)
             }
         }
         .accessibilityIdentifier(id)
@@ -155,7 +155,7 @@ struct NightDimmingScreen: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                    if let detail { Text(detail).font(Fiesta.Text.caption).foregroundStyle(Fiesta.Colors.mutedForeground) }
+                    if let detail { Text(detail).font(Fiesta.Text.caption).interactiveSecondaryForeground() }
                 }
                 Spacer()
                 if app.oledCare.nightMode == value { Image(systemName: "checkmark") }
@@ -208,18 +208,86 @@ struct OLEDTimeRow: View {
         NavigationLink {
             OLEDDetailPage {
                 List {
-                    Picker("Hour", selection: Binding(get: { app.oledCare[keyPath: key] / 60 }, set: { hour in
-                        var c = app.oledCare; c[keyPath: key] = hour * 60 + c[keyPath: key] % 60; app.saveOLEDCare(c)
-                    })) { ForEach(0..<24, id: \.self) { Text(Clock12.label(minutes: $0 * 60)).tag($0) } }
-                    Picker("Minute", selection: Binding(get: { app.oledCare[keyPath: key] % 60 }, set: { minute in
-                        var c = app.oledCare; c[keyPath: key] = c[keyPath: key] / 60 * 60 + minute; app.saveOLEDCare(c)
-                    })) { ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: ":%02d", $0)).tag($0) } }
+                    NavigationLink {
+                        OLEDDetailPage {
+                            OLEDTimeChoices(title: "Hour", options: (0..<24).map { ($0, Clock12.label(minutes: $0 * 60)) },
+                                            selection: component(hour: true))
+                        }
+                    } label: {
+                        LabeledContent("Hour", value: Clock12.label(minutes: app.oledCare[keyPath: key] / 60 * 60))
+                    }
+                    .accessibilityIdentifier("oled.time.hour")
+                    .accessibilityLabel("Hour")
+                    .accessibilityValue(Clock12.label(minutes: app.oledCare[keyPath: key] / 60 * 60))
+                    NavigationLink {
+                        OLEDDetailPage {
+                            OLEDTimeChoices(title: "Minute", options: stride(from: 0, to: 60, by: 5).map { ($0, String(format: ":%02d", $0)) },
+                                            selection: component(hour: false))
+                        }
+                    } label: {
+                        LabeledContent("Minute", value: String(format: ":%02d", app.oledCare[keyPath: key] % 60))
+                    }
+                    .accessibilityIdentifier("oled.time.minute")
+                    .accessibilityLabel("Minute")
+                    .accessibilityValue(String(format: ":%02d", app.oledCare[keyPath: key] % 60))
                 }
                 .navigationTitle(title)
             }
         } label: {
             LabeledContent(title, value: Clock12.label(minutes: app.oledCare[keyPath: key]))
         }
+    }
+
+    private func component(hour: Bool) -> Binding<Int> {
+        Binding(get: {
+            let value = app.oledCare[keyPath: key]
+            return hour ? value / 60 : value % 60
+        }, set: { value in
+            var configuration = app.oledCare
+            let previous = configuration[keyPath: key]
+            configuration[keyPath: key] = hour ? value * 60 + previous % 60 : previous / 60 * 60 + value
+            app.saveOLEDCare(configuration)
+        })
+    }
+}
+
+/// A native vertical choice list keeps every hour and AM/PM readable.
+/// Default Picker presentation laid all 24 hours out as narrow segments.
+private struct OLEDTimeChoices: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let options: [(Int, String)]
+    @Binding var selection: Int
+    @FocusState private var focusedChoice: Int?
+
+    var body: some View {
+        ScrollViewReader { scroll in
+            List {
+                ForEach(options, id: \.0) { option in
+                    Button {
+                        selection = option.0
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(option.1).lineLimit(1)
+                            Spacer()
+                            if selection == option.0 { Image(systemName: "checkmark") }
+                        }
+                    }
+                    .accessibilityLabel(option.1)
+                    .accessibilityValue(selection == option.0 ? "Selected" : "")
+                    .focused($focusedChoice, equals: option.0)
+                    .id(option.0)
+                }
+            }
+            .listStyle(.grouped)
+            .defaultFocus($focusedChoice, selection)
+            .task {
+                scroll.scrollTo(selection, anchor: .center)
+                focusedChoice = selection
+            }
+        }
+        .navigationTitle(title)
     }
 }
 
@@ -255,7 +323,7 @@ private struct OLEDMovementPage: View {
                     if let subtitle {
                         Text(subtitle)
                             .font(Fiesta.Text.caption)
-                            .foregroundStyle(Fiesta.Colors.mutedForeground)
+                            .interactiveSecondaryForeground()
                     }
                 }
                 Spacer()

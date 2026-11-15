@@ -202,7 +202,7 @@ struct SettingsScreen: View {
             HStack {
                 Text(title)
                 Spacer()
-                Text(value).foregroundStyle(Fiesta.Colors.mutedForeground)
+                Text(value).interactiveSecondaryForeground()
             }
         }
         .accessibilityLabel(title)
@@ -383,7 +383,7 @@ struct SettingsScreen: View {
                             HStack {
                                 Text("Panel")
                                 Spacer()
-                                Text(panel.name).foregroundStyle(Fiesta.Colors.mutedForeground)
+                                Text(panel.name).interactiveSecondaryForeground()
                             }
                         }
                         .accessibilityIdentifier("settings.panelPicker")

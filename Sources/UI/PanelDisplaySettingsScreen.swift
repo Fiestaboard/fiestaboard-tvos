@@ -141,7 +141,7 @@ struct PanelDisplaySettingsScreen: View {
     }
 
     private func row(_ title: String, value: String) -> some View {
-        HStack { Text(title); Spacer(); Text(value).foregroundStyle(Fiesta.Colors.mutedForeground) }
+        HStack { Text(title); Spacer(); Text(value).interactiveSecondaryForeground() }
             .accessibilityElement(children: .combine)
     }
 
