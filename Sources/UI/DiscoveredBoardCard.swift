@@ -74,6 +74,9 @@ struct DiscoveredBoardCard: View {
                     .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         }
         .buttonStyle(.card)
+        // The hub is one action, not a container of independently accessible
+        // artwork and text. Keep its AX subtree stable as progress appears.
+        .accessibilityElement(children: .ignore)
         // The control keeps its name while its connection state changes.
         // Progress belongs to its value, so assistive technology can update
         // status without replacing the activated hub's accessible identity.
