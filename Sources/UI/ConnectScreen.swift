@@ -11,6 +11,8 @@ import SwiftUI
 /// what a FiestaBoard is before it asks anyone to choose one.
 struct ConnectScreen: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.resetFocus) private var resetFocus
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConnectModel?
 
     private enum FocusTarget: Hashable {
@@ -22,8 +24,10 @@ struct ConnectScreen: View {
 
     /// Track the manual controls too, so discovery cannot steal their focus.
     @FocusState private var focusedControl: FocusTarget?
-    /// The scope `prefersDefaultFocus` is answered in, so the first board is
-    /// the default when focus enters the grid, as on `PanelsScreen`.
+    @State private var focusRecovery = ConnectFocusRecovery<FocusTarget>()
+    private struct FocusRequest: Hashable { let token: UUID; let target: FocusTarget }
+    @State private var retryFocus: FocusRequest?
+    /// One native scope owns both discovery cards and the manual fallback.
     @Namespace private var boardScope
 
     /// Injectable so tests can drive a screen that has boards on it and a
@@ -50,6 +54,7 @@ struct ConnectScreen: View {
         // screen, so its probe covers the safe area and child probes stay
         // relative to the slot, as get_metadata reports them.
         .figmaNode(Self.a1Slot, coversSafeArea: true)
+        .focusScope(boardScope)
         // No `.onExitCommand`: Connect is the app's root — it is where the
         // app opens with no board saved, and where forgetting one lands you.
         // There is nothing behind it, so Menu belongs to the system and
@@ -66,7 +71,19 @@ struct ConnectScreen: View {
                 await model?.startScan()
             }
         }
-        .onDisappear { model?.stopScan() }
+        .onDisappear { model?.stopScan(); focusRecovery.cancel(); retryFocus = nil }
+        .onChange(of: focusedControl) { _, current in
+            if model?.isConnecting == true { focusRecovery.focusChanged(to: current) }
+            if current != nil { retryFocus = nil }
+        }
+        .task(id: retryFocus) {
+            guard let request = retryFocus, scenePhase == .active, app.route == .connect,
+                  focusTargetExists(request.target),
+                  focusedControl == nil || focusedControl == request.target else { return }
+            // The failed response and its native preferences are now in the
+            // rendered view. Request native focus, without a timing delay.
+            resetFocus(in: boardScope)
+        }
         .onChange(of: boardIDs) { old, new in
             // Only when the first board lands, and only when nothing holds
             // focus yet. Once the remote is somewhere, a board appearing
@@ -142,7 +159,6 @@ struct ConnectScreen: View {
             // x 80), not 16 pt inside it.
             .padding(.horizontal, -Self.focusRoom)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .focusScope(boardScope)
             // Two focus sections on this screen — the grid and the address
             // row — so the engine can cross from a card down to the field
             // rather than looking for something directly beneath it.
@@ -197,7 +213,7 @@ struct ConnectScreen: View {
         var card = DiscoveredBoardCard(board: board,
                                        address: BoardAddressLabel.text(for: board),
                                        isConnecting: model?.connectInFlight(for: board.id) ?? false) {
-            Task { await model?.connect(to: board.host, name: board.name) }
+            Task { await connect(from: .board(board.id)) { await model?.connect(to: board.host, name: board.name) } }
         }
         #if DEBUG
         card.figmaTitle = board.id == boardIDs.first ? Self.cardTitleNode : nil
@@ -205,7 +221,7 @@ struct ConnectScreen: View {
         return card
             .figmaNode(Self.a1Slot + ";166:147325", enabled: board.id == boardIDs.first)
             .focused($focusedControl, equals: .board(board.id))
-            .prefersDefaultFocus(board.id == boardIDs.first, in: boardScope)
+            .prefersDefaultFocus(board.id == preferredBoardID, in: boardScope)
     }
 
 
@@ -231,6 +247,7 @@ struct ConnectScreen: View {
             if !isLooking {
                 Button(TVCopy.Connect.searchAgain) { Task { await model?.rescan() } }
                     .focused($focusedControl, equals: .searchAgain)
+                    .prefersDefaultFocus(retryFocus?.target == .searchAgain, in: boardScope)
                     .padding(.top, 12)
             }
         }
@@ -304,15 +321,19 @@ struct ConnectScreen: View {
                     .background(Fiesta.Colors.surfaceRaised, in: Capsule())
                     .accessibilityLabel("FiestaBoard address")
                     .focused($focusedControl, equals: .address)
+                    .prefersDefaultFocus(retryFocus?.target == .address, in: boardScope)
                     .figmaNode(Self.a1Slot + ";166:147347")
 
                 // Not `.disabled` while a connect is in flight: on tvOS
                 // disabling the focused control moves focus off it and it
                 // does not reliably come back. `guard !isConnecting` in the
                 // model is the re-entry guard; this is only the feedback.
-                Button(TVCopy.Connect.connect) { Task { await model?.connectManually() } }
+                Button(TVCopy.Connect.connect) {
+                    Task { await connect(from: .connect) { await model?.connectManually() } }
+                }
                     .accessibilityLabel("Connect to the address you entered")
                     .focused($focusedControl, equals: .connect)
+                    .prefersDefaultFocus(retryFocus?.target == .connect, in: boardScope)
                     .figmaNode(Self.a1Slot + ";166:147351", label: "Connect")
 
                 if model?.manualConnectInFlight ?? false {
@@ -322,6 +343,36 @@ struct ConnectScreen: View {
             }
         }
         .focusSection()
+    }
+
+    private var preferredBoardID: String? {
+        if let request = retryFocus {
+            if case .board(let id) = request.target { return id }
+            return nil
+        }
+        return boardIDs.first
+    }
+
+    private func focusTargetExists(_ target: FocusTarget) -> Bool {
+        switch target {
+        case .board(let id): return boardIDs.contains(id)
+        case .address, .connect: return true
+        case .searchAgain: return boardIDs.isEmpty && !isLooking
+        }
+    }
+
+    @MainActor private func connect(from target: FocusTarget,
+                                    perform: @MainActor () async -> Void) async {
+        guard let model, !model.isConnecting else { return }
+        retryFocus = nil
+        let token = focusRecovery.begin(target: target, focused: focusedControl)
+        await perform()
+        let available = focusRecovery.target(for: token).map(focusTargetExists) ?? false
+        let failed = app.route == .connect && (model.errorMessage ?? app.errorMessage) != nil
+        guard let target = focusRecovery.finish(token: token, failed: failed,
+                                                focused: focusedControl, available: available),
+              scenePhase == .active else { return }
+        retryFocus = FocusRequest(token: token, target: target)
     }
 
     // MARK: Bindings
