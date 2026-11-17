@@ -369,8 +369,11 @@ public struct PanelFrame: Decodable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         message = try c.decodeIfPresent(String.self, forKey: .message)
-        let rawRows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
-        let rawCols = try c.decodeIfPresent(Int.self, forKey: .cols) ?? 0
+        // Geometry is required even for an intentionally blank frame. Treat
+        // malformed replies as decode failures so polling retains the last
+        // good frame instead of publishing a zero-sized live display.
+        let rawRows = try c.decode(Int.self, forKey: .rows)
+        let rawCols = try c.decode(Int.self, forKey: .cols)
         rows = min(max(rawRows, 0), Self.maxDimension)
         cols = min(max(rawCols, 0), Self.maxDimension)
         let rowLimit = rows
