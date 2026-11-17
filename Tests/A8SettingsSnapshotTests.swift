@@ -86,7 +86,7 @@ final class A8SettingsSnapshotTests: XCTestCase {
         c.restEnabled = true; c.restStart = 22 * 60; c.restEnd = 7 * 60
         c.disconnected = .dim
         let app = await app(oled: c)
-        TVSnapshot.assertMatches(TVSnapshot.image(NavigationStack { OLEDCareScreen() }.environment(app), settle: 0.5),
+        TVSnapshot.assertMatches(TVSnapshot.image(NavigationStack { OLEDCareScreen().modifier(SettingsDestinations { _ in EmptyView() }) }.environment(app), settle: 0.5),
                                  named: "settings-oled-care")
     }
 
@@ -94,7 +94,7 @@ final class A8SettingsSnapshotTests: XCTestCase {
         var c = OLEDCareConfiguration()
         c.nightMode = .custom
         let app = await app(oled: c)
-        TVSnapshot.assertMatches(TVSnapshot.image(NavigationStack { NightDimmingScreen() }.environment(app), settle: 0.5),
+        TVSnapshot.assertMatches(TVSnapshot.image(NavigationStack { NightDimmingScreen().modifier(SettingsDestinations { _ in EmptyView() }) }.environment(app), settle: 0.5),
                                  named: "settings-night-dimming")
     }
 }

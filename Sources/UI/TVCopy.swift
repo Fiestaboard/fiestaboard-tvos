@@ -44,10 +44,10 @@ enum TVCopy {
         /// DD8: the advertised Bonjour name, verbatim. Every hub advertises
         /// "FiestaBoard" until H13 PR 3; the host line tells them apart.
         static func hubCardTitle(for hub: DiscoveredBoard) -> String { hub.name }
-        static func hubCardAccessibilityLabel(for hub: DiscoveredBoard, address: String,
-                                              connecting: Bool = false) -> String {
-            connecting ? "\(hub.name), \(address), connecting" : "\(hub.name), \(address)"
+        static func hubCardAccessibilityLabel(for hub: DiscoveredBoard, address: String) -> String {
+            "\(hub.name), \(address)"
         }
+        static let hubCardConnectingValue = "Connecting"
         static let hubCardHint = "Connects this Apple TV to this hub."
         static let invalidAddress = "Enter an address like 192.168.1.20, fiestapi.local, or https://your-hub.example.com"
     }

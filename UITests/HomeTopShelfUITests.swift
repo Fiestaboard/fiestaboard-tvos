@@ -132,6 +132,7 @@ final class HomeTopShelfUITests: XCTestCase {
         XCTAssertTrue(play.waitForExistence(timeout: 5))
         XCUIRemote.shared.press(.down)
         XCTAssertTrue(moreInfo.hasFocus, "Down moves from Play to More Info")
+        attachMilestoneEvidence("Apple TV Home — More Info focused", app: home)
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 10), "More Info must open Panels")
         attach("Top Shelf More Info opened Panels")

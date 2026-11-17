@@ -54,9 +54,13 @@ struct DiscoveredBoardCard: View {
             // not reliably come back. The model's `guard !isConnecting` is
             // what stops a second attempt.
             .overlay(alignment: .bottomTrailing) {
-                if isConnecting {
-                    TacoLoader(size: .small)
-                }
+                // Keep the native card label's subtree stable when the
+                // response arrives. Removing this view while its button is
+                // focused leaves tvOS with no reported focus owner.
+                TacoLoader(size: .small, isAnimating: isConnecting)
+                    .opacity(isConnecting ? 1 : 0)
+                    // Progress is exposed once, through the button's value.
+                    .accessibilityHidden(true)
             }
             .padding(28)
             .background(Fiesta.Colors.surface)
@@ -70,7 +74,11 @@ struct DiscoveredBoardCard: View {
                     .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         }
         .buttonStyle(.card)
-        .accessibilityLabel(TVCopy.Connect.hubCardAccessibilityLabel(for: board, address: address, connecting: isConnecting))
+        // The control keeps its name while its connection state changes.
+        // Progress belongs to its value, so assistive technology can update
+        // status without replacing the activated hub's accessible identity.
+        .accessibilityLabel(TVCopy.Connect.hubCardAccessibilityLabel(for: board, address: address))
+        .accessibilityValue(isConnecting ? TVCopy.Connect.hubCardConnectingValue : "")
         .accessibilityHint(TVCopy.Connect.hubCardHint)
     }
 }

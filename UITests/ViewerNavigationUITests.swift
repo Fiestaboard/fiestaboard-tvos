@@ -56,8 +56,10 @@ final class ViewerNavigationUITests: XCTestCase {
         let later = app.buttons["Later"]
         XCTAssertTrue(resize.waitForExistence(timeout: 10))
         XCTAssertTrue(resize.hasFocus)
+        attachMilestoneEvidence("Viewer — resize offer Resize focused", app: app)
         XCUIRemote.shared.press(.right)
         XCTAssertTrue(later.hasFocus, "Right should focus Later without revealing viewer controls")
+        attachMilestoneEvidence("Viewer — resize offer Later focused", app: app)
         XCTAssertFalse(app.buttons["Panels"].exists)
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(later.waitForNonExistence(timeout: 5))
@@ -133,6 +135,70 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertLessThan(Int(pixel[2]), 20)
     }
 
+    /// Current native board evidence complements the offscreen layer probes.
+    private func captureMilestoneBoard(rows: Int, cols: Int, matrix: Bool, name: String) throws {
+        continueAfterFailure = false
+        var panel = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
+        panel["id"] = "milestone-board"; panel["name"] = name
+        panel["rows"] = rows; panel["cols"] = cols
+        panel["auto_dim"] = ["enabled": false, "start": "22:00", "end": "07:00"]
+        if matrix {
+            panel["render_style"] = "led_matrix"
+            panel["device_model_spec"] = ["geometry": ["kind": "pixels", "width": cols, "height": rows]]
+        } else {
+            panel["notes_wide"] = cols / 15; panel["notes_tall"] = rows / 3
+        }
+        let body = String(decoding: try JSONSerialization.data(withJSONObject: panel), as: UTF8.self)
+        let cells = (0..<rows).map { row in (0..<cols).map { col in 63 + (row + col) % 6 } }
+        let frame = String(decoding: try JSONSerialization.data(withJSONObject: [
+            "characters": cells, "message": "Milestone board", "rows": rows, "cols": cols
+        ]), as: UTF8.self)
+        server = try FixtureHTTPServer(panelsBody: "{\"panels\":[\(body)],\"total\":1}",
+                                       additionalPanels: ["milestone-board": body],
+                                       additionalFrames: ["milestone-board": frame])
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Milestone Hub\",\"defaultPanelRef\":\"milestone-board\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        // Split-flap arrays can legitimately offer a resize before exposing
+        // their wake target. Prove that expected state, dismiss the real
+        // offer, then require the named viewer and its native focus.
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.buttons[name].exists || app.buttons["Later"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
+        if app.buttons["Later"].exists {
+            XCTAssertTrue(app.buttons["Resize for this TV"].hasFocus)
+            attachMilestoneEvidence("\(name) — resize offer focused", app: app)
+            XCUIRemote.shared.press(.right)
+            XCTAssertTrue(app.buttons["Later"].hasFocus)
+            attachMilestoneEvidence("\(name) — resize Later focused", app: app)
+            XCUIRemote.shared.press(.select)
+            XCTAssertTrue(app.buttons["Later"].waitForNonExistence(timeout: 3))
+        }
+        XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 5))
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.buttons[name].hasFocus }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed)
+        attachMilestoneEvidence("\(name) — native board focused", app: app)
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        attachMilestoneEvidence("\(name) — native overlay Panels focused", app: app)
+    }
+
+    func testMilestoneNoteArrayNativeCapture() throws {
+        try captureMilestoneBoard(rows: 6, cols: 30, matrix: false, name: "Viewer note-array 2x2")
+    }
+    func testMilestonePartialNoteArrayNativeCapture() throws {
+        try captureMilestoneBoard(rows: 7, cols: 34, matrix: false, name: "Viewer note-array partial")
+    }
+    func testMilestoneLEDNativeCapture() throws {
+        try captureMilestoneBoard(rows: 64, cols: 64, matrix: true, name: "Viewer LED 64x64")
+    }
+
     // MARK: A4b — the glass overlay
 
     /// Back takes the overlay down first; only a second Back leaves.
@@ -169,11 +235,11 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
         Thread.sleep(forTimeInterval: 0.6) // the fade-in and the material settle
 
-        let screenshot = XCUIScreen.main.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        attachMilestoneEvidence("\(name) — Panels focused", app: app)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        attachMilestoneEvidence("\(name) — Settings focused", app: app)
 
         var nodes: [String: CGRect] = [:]
         for _ in 0..<50 {

@@ -46,6 +46,9 @@ enum TVSnapshot {
     /// screens are laid out inside it, as on the TV. `fullBleed` ignores it,
     /// for what the device also draws edge to edge (the board, fixtures).
     static func image<V: View>(_ view: V, settle: TimeInterval = 0.1, fullBleed: Bool = false) -> UIImage {
+        // Export only nodes laid out by this render; a preview with no tags
+        // must not inherit another screen's registry from an earlier test.
+        FigmaGeometryRegistry.shared.reset()
         let host = UIHostingController(rootView: view
             .environment(\.colorScheme, .dark)
             .preferredColorScheme(.dark)
@@ -105,6 +108,16 @@ enum TVSnapshot {
                                      snapshotDirectory: directory,
                                      file: file, testName: testName, line: line)
         if let failure { XCTFail(failure, file: file, line: line) }
+        // Retain the image rendered by this execution even on a successful
+        // comparison. Expected goldens alone are not current parity evidence.
+        do {
+            try ParityOutput.write(png: image, as: "current-\(name)")
+            try FigmaGeometryRegistry.shared.exportData().write(
+                to: ParityOutput.directory.appendingPathComponent("current-\(name).geometry.json"),
+                options: .atomic)
+        } catch {
+            XCTFail("Could not retain current parity evidence: \(error)", file: file, line: line)
+        }
     }
 }
 

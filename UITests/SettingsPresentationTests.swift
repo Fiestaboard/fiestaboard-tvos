@@ -63,6 +63,7 @@ final class SettingsPresentationTests: XCTestCase {
             }
             XCUIRemote.shared.press(.select)
             XCTAssertTrue(app.buttons["Living Room"].waitForExistence(timeout: 20))
+            attachMilestoneEvidence("TV sign-in — approved outcome", app: app)
         }
         wait(for: [frameLoaded], timeout: 10)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
@@ -95,6 +96,12 @@ final class SettingsPresentationTests: XCTestCase {
         // its nested accessibility Button can keep hasFocus=false throughout.
         for _ in 0..<24 {
             if rowHasFocus(label, in: app) {
+                attachMilestoneEvidence("Settings — focused \(label)", app: app)
+                if label == "Privacy" {
+                    let icon = app.buttons[label].images["chevron.right"].firstMatch
+                    assertNativeGlyphContrast(icon, app: app, minimum: 3,
+                                              context: "Settings Privacy chevron focused")
+                }
                 XCUIRemote.shared.press(.select)
                 return
             }
@@ -123,10 +130,47 @@ final class SettingsPresentationTests: XCTestCase {
     }
 
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        attachMilestoneEvidence(name, app: app)
+    }
+
+    func testNativeSettingsSecondaryValueKeepsContrastWhenFocused() {
+        let app = launchSettings()
+        defer { app.terminate() }
+        openCategory("This Apple TV", in: app)
+        waitForRowFocus("Open at launch", in: app)
+        let value = app.buttons["Open at launch"].value as? String ?? "Panel list"
+        assertNativeTextContrast(value, app: app, context: "Settings Open at launch focused value")
+        XCUIRemote.shared.press(.down)
+        waitForRowFocus("Split-flap size", in: app)
+        assertNativeTextContrast(value, app: app, context: "Settings Open at launch unfocused value")
+    }
+
+    func testMilestoneSettingsFocusWalkKeepsEveryControlReachable() {
+        let app = launchSettings(matrixPanel: true)
+        defer { app.terminate() }
+        for category in ["This Apple TV", "Panel appearance", "Connection", "About & help"] {
+            openCategory(category, in: app)
+            attachVerticalFocusWalk("Settings — \(category) control walk", app: app, steps: 18)
+            if category == "Connection" {
+                waitForRowFocus("Forget this hub", in: app)
+                assertNativeGlyphContrast(app.buttons["Forget this hub"], app: app, minimum: 4.5,
+                                          context: "Settings Forget this hub focused")
+                XCTAssertTrue(rowHasFocus("Forget this hub", in: app))
+                assertNativeGlyphContrast(app.buttons["Sign out"], app: app, minimum: 4.5,
+                                          context: "Settings Sign out unfocused")
+                XCUIRemote.shared.press(.up)
+                waitForRowFocus("Sign out", in: app)
+                assertNativeGlyphContrast(app.buttons["Forget this hub"], app: app, minimum: 4.5,
+                                          context: "Settings Forget this hub unfocused")
+                assertNativeGlyphContrast(app.buttons["Sign out"], app: app, minimum: 4.5,
+                                          context: "Settings Sign out focused")
+                XCTAssertTrue(rowHasFocus("Sign out", in: app))
+            }
+        }
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        XCUIRemote.shared.press(.left)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        attachVerticalFocusWalk("Settings — categories and Done walk", app: app, steps: 8)
     }
 
     func testCategoriesSeparateLocalAndSharedSettings() {
@@ -264,6 +308,10 @@ final class SettingsPresentationTests: XCTestCase {
         openRow("TV size", in: app)
         openRow("55 inches", in: app)
         XCTAssertEqual(app.buttons["TV size"].value as? String, "55 inches")
+        waitForRowFocus("TV size", in: app)
+        assertNativeTextContrast("55 inches", app: app, context: "Settings TV size focused value")
+        XCUIRemote.shared.press(.down)
+        assertNativeTextContrast("55 inches", app: app, context: "Settings TV size unfocused value")
         openRow("LED spacing", in: app)
         openRow("8 mm", in: app)
         XCTAssertEqual(app.buttons["LED spacing"].value as? String, "8 mm")
@@ -385,12 +433,18 @@ final class SettingsPresentationTests: XCTestCase {
     func testHelpKeepsPrivacyReachableAndMenuReturnsToSettings() {
         let app = launchSettings()
         openCategory("About & help", in: app)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        XCTAssertFalse(rowHasFocus("Privacy", in: app), "The first icon measurement must be unfocused")
+        let icon = app.buttons["Privacy"].images["chevron.right"].firstMatch
+        assertNativeGlyphContrast(icon, app: app, minimum: 3,
+                                  context: "Settings Privacy chevron unfocused")
         openRow("Privacy", in: app)
         // DD19 / A8f: the body is one focus target the remote scrolls.
         let body = app.descendants(matching: .any).matching(identifier: "settings.detail.body").firstMatch
         XCTAssertTrue(body.waitForExistence(timeout: 3))
         XCTAssertTrue(body.label.contains("FiestaBoard’s servers"), body.label)
         XCTAssertTrue(body.hasFocus, "the scroll body takes focus")
+        attachScreenshot("About — Privacy initial focused body", app: app)
         for _ in 0..<4 { XCUIRemote.shared.press(.down) }
         XCTAssertTrue(body.hasFocus, "Down scrolls the text; it does not leave the page")
         attachScreenshot("About — Privacy (A8f)", app: app)

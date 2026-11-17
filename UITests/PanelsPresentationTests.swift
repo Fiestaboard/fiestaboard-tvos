@@ -87,6 +87,7 @@ final class PanelsPresentationTests: XCTestCase {
             XCUIRemote.shared.press(.up)
         }
         waitForFocus(app.buttons["Settings"])
+        attachMilestoneEvidence("Panels — Settings focused", app: app)
         let refreshed = panels.reversed().joined(separator: ",").replacingOccurrences(of: "Office", with: "Office updated")
         server.updatePanels("{\"panels\":[\(refreshed)],\"total\":6}")
         XCUIRemote.shared.press(.menu)
@@ -288,8 +289,10 @@ final class PanelsPresentationTests: XCTestCase {
         capture(app, "Panels — open-at-launch offer")
         XCUIRemote.shared.press(.right)
         waitForFocus(accept, "Right from the card reaches the offer")
+        attachMilestoneEvidence("Panels — Always open focused", app: app)
         XCUIRemote.shared.press(.right)
         waitForFocus(dismiss)
+        attachMilestoneEvidence("Panels — Not now focused", app: app)
         XCUIRemote.shared.press(.select)
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == NO"),
                                              object: app.staticTexts["Always open Only 0?"])
@@ -481,9 +484,6 @@ final class PanelsPresentationTests: XCTestCase {
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        attachMilestoneEvidence(name, app: app)
     }
 }

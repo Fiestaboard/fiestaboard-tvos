@@ -29,6 +29,7 @@ for leak in FigmaGeometryRegistry figmaNode FigmaNodeModifier ParityFixtureView 
             "I166:147296;149:182603" "I252:122495;1:2" "166:147344" "154:8169" "parity:glass" \
             `# A12: the markers A4b-A11 added (DEBUG probes, their defaults keys, and their 07b ids)` \
             PanelNavigationProbe RenderPacingProbe MatrixPreparationProbe FocusChangeProbe DrawnPreviewMarker \
+            fiestaboard.connectFocusTrace ConnectFocusTrace \
             ConnectReviewDiscovery fiestaboard.panelProfile fiestaboard.renderProfile fiestaboard.viewerMaterial \
             "I166:191865;149:182603;166:193875" "I166:204936;149:182603;166:206937" "I166:193912;149:182603" \
             "250:110532" "150:7480" "290:139071"; do

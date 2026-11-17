@@ -49,8 +49,9 @@ struct SettingsScreen: View {
         }
     }
 
-    private enum Destination: Hashable {
+    enum Destination: Hashable {
         case oledCare, panelSelection, launchPanel, flapSizing, matrixSizing, matrixTransition
+        case oled(OLEDRoute)
         case matrixDiagonal, matrixPitch, screenDiagonal, displayStyle(String)
         case displaySettings(String), resize(String), calibration(String)
     }
@@ -77,13 +78,16 @@ struct SettingsScreen: View {
             // Let NavigationStack restore the originating row after a choice
             // closes. A default focus request for the first category can win
             // that restoration race and send focus into the left column.
-            .navigationDestination(for: Destination.self) { detail(for: $0) }
+            .modifier(SettingsDestinations { detail(for: $0) })
         }
         .onExitCommand {
             if helpDetail != nil { helpDetail = nil }
             else if path.isEmpty { app.dismissSettings() }
             else { path.removeLast() }
         }
+        .environment(\.settingsBack, {
+            if !path.isEmpty { path.removeLast() }
+        })
         .confirmationDialog(TVCopy.Settings.forgetConfirmTitle, isPresented: $confirmingForget,
                             titleVisibility: .visible) {
             Button(TVCopy.Settings.forget, role: .destructive) { model?.forget() }
@@ -166,7 +170,9 @@ struct SettingsScreen: View {
                 // A8d `269:131778`.
                 Section {
                     Button("Sign out") { model?.signOut() }
-                    Button(TVCopy.Settings.forget, role: .destructive) { confirmingForget = true }
+                    Button(role: .destructive) { confirmingForget = true } label: {
+                        Text(TVCopy.Settings.forget).interactiveDestructiveForeground()
+                    }
                 } header: { Text("Sign-in").foregroundStyle(Fiesta.Colors.mutedForeground) }
                 footer: {
                     Text(SettingsCopy.connectionFooter(deviceCredential: app.connection.usesDeviceCredential,
@@ -202,7 +208,7 @@ struct SettingsScreen: View {
             HStack {
                 Text(title)
                 Spacer()
-                Text(value).foregroundStyle(Fiesta.Colors.mutedForeground)
+                Text(value).interactiveSecondaryForeground()
             }
         }
         .accessibilityLabel(title)
@@ -253,7 +259,7 @@ struct SettingsScreen: View {
 
     private func helpRow(_ title: String, _ detail: HelpDetail) -> some View {
         Button { helpDetail = detail } label: {
-            HStack { Text(title); Spacer(); Image(systemName: "chevron.right").foregroundStyle(Fiesta.Colors.mutedForeground) }
+            HStack { Text(title); Spacer(); Image(systemName: "chevron.right").interactiveSecondaryForeground() }
         }
         .accessibilityLabel(title)
     }
@@ -383,7 +389,7 @@ struct SettingsScreen: View {
                             HStack {
                                 Text("Panel")
                                 Spacer()
-                                Text(panel.name).foregroundStyle(Fiesta.Colors.mutedForeground)
+                                Text(panel.name).interactiveSecondaryForeground()
                             }
                         }
                         .accessibilityIdentifier("settings.panelPicker")
@@ -511,6 +517,8 @@ struct SettingsScreen: View {
             }
         case .oledCare:
             OLEDCareScreen()
+        case .oled(let route):
+            route.destination(app: app)
         }
     }
 
@@ -640,5 +648,22 @@ struct SettingsScreen: View {
     private func styleBinding(for panel: Panel) -> Binding<PanelRenderStyle> {
         Binding(get: { model?.renderStyle(for: panel) ?? panel.renderStyle },
                 set: { style in Task { await model?.setRenderStyle(style, for: panel) } })
+    }
+}
+
+/// One registry for the app and isolated OLED renders. Value links retain
+/// their native appearance in either host and resolve the same destinations.
+struct SettingsDestinations<Fallback: View>: ViewModifier {
+    @Environment(AppModel.self) private var app
+    @ViewBuilder let fallback: (SettingsScreen.Destination) -> Fallback
+
+    func body(content: Content) -> some View {
+        content.navigationDestination(for: SettingsScreen.Destination.self) { destination in
+            switch destination {
+            case .oledCare: OLEDCareScreen()
+            case .oled(let route): route.destination(app: app)
+            default: fallback(destination)
+            }
+        }
     }
 }

@@ -25,6 +25,7 @@ final class DeviceSignInUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "W D J B")).firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "/activate")).firstMatch.exists)
         capture("TV sign-in — QR and manual code", app: app)
+        attachVerticalFocusWalk("TV sign-in controls", app: app, steps: 8)
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.secureTextFields["Password"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Activation Test Board"].exists)
@@ -58,9 +59,51 @@ final class DeviceSignInUITests: XCTestCase {
                                  expected: "TV sign-in is disabled.", screenshot: "TV sign-in — enrollment disabled")
     }
 
+    func testExpiredCodeRemovesTheUnusableQRAndCountdown() throws {
+        try checkTerminalFailure(server: FixtureHTTPServer(tvSignInEnabled: true, devicePollError: "expired_token"),
+                                 expected: "expired", screenshot: "TV sign-in — expired")
+    }
+
     func testDeniedCodeRemovesTheUnusableQRAndCountdown() throws {
         try checkTerminalFailure(server: FixtureHTTPServer(tvSignInEnabled: true, devicePollError: "access_denied"),
                                  expected: "This sign-in was denied.", screenshot: "TV sign-in — denied")
+    }
+
+    func testLegacyPasswordWarningIsVisibleOnTheCompleteSignInScreen() throws {
+        continueAfterFailure = false
+        server = try FixtureHTTPServer(tvSignInEnabled: false)
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Legacy Test Hub\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "YES"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.secureTextFields["Password"].waitForExistence(timeout: 10))
+        let warning = "Your username and password are stored in this Apple TV’s Keychain for this hub’s legacy sign-in."
+        XCTAssertTrue(app.staticTexts[warning].waitForExistence(timeout: 5))
+        attachMilestoneEvidence("Sign in — legacy password warning", app: app)
+        let another = app.buttons["Choose another hub"]
+        let anotherCell = app.cells.containing(.button, identifier: "Choose another hub").firstMatch
+        let footers = [
+            ("credentials footer", warning),
+            ("network footer", "The connection to this hub isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust."),
+            ("forget footer", "Forgets Legacy Test Hub on this Apple TV and looks for another hub.")
+        ]
+        XCTAssertFalse(another.hasFocus || anotherCell.hasFocus)
+        assertNativeGlyphContrast(another, app: app, minimum: 4.5,
+                                  context: "Sign in legacy Choose another hub unfocused")
+        for (name, text) in footers {
+            assertNativeTextContrast(text, app: app, context: "Sign in legacy \(name) unfocused control")
+        }
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        attachVerticalFocusWalk("Sign in — legacy controls", app: app, steps: 12)
+        XCTAssertTrue(another.hasFocus || anotherCell.hasFocus)
+        assertNativeGlyphContrast(another, app: app, minimum: 4.5,
+                                  context: "Sign in legacy Choose another hub focused")
+        XCTAssertTrue(another.hasFocus || anotherCell.hasFocus)
+        for (name, text) in footers {
+            assertNativeTextContrast(text, app: app, context: "Sign in legacy \(name) focused control")
+        }
     }
 
     private func checkTerminalFailure(server: FixtureHTTPServer, expected: String, screenshot: String) throws {
@@ -91,10 +134,7 @@ final class DeviceSignInUITests: XCTestCase {
     }
 
     private func capture(_ name: String, app: XCUIApplication) {
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = name
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        attachMilestoneEvidence(name, app: app)
     }
 
 }
