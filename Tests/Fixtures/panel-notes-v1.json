@@ -1,0 +1,21 @@
+{
+  "$comment": "GET /panel/{id} bodies for note-array layout (PHASE-4-TV-PLAN fact 12, DD5). Authored from FiestaBoard src/panels/routes.py _panel_board_fields (notes_wide = cols // 15, notes_tall = rows // 3, non-null only for a note_array board) and src/devices.py (NOTE_COLS 15, NOTE_ROWS 3); the hub-generated file is pending.",
+  "cases": {
+    "note-array-2x2": {
+      "body": {"id": "lobby-wall", "name": "Lobby wall", "board_id": "b-wall", "device_type": "note_array", "board_missing": false, "rows": 6, "cols": 30, "notes_wide": 2, "notes_tall": 2},
+      "expect": {"note_array": true, "notes_wide": 2, "notes_tall": 2, "note_cols": [15, 15], "note_rows": [3, 3], "cells": 180}
+    },
+    "non-array": {
+      "body": {"id": "living-room", "name": "Living Room", "board_id": "b-flag", "device_type": "flagship", "board_missing": false, "rows": 6, "cols": 22, "notes_wide": null, "notes_tall": null},
+      "expect": {"note_array": false, "notes_wide": null, "notes_tall": null, "cells": 132}
+    },
+    "old-server": {
+      "body": {"id": "old-wall", "name": "Old wall", "board_id": "b-old", "device_type": "note_array", "rows": 6, "cols": 30},
+      "expect": {"note_array": false, "notes_wide": null, "notes_tall": null, "cells": 180}
+    },
+    "partial-note": {
+      "body": {"id": "counter", "name": "Counter", "board_id": "b-counter", "device_type": "note_array", "board_missing": false, "rows": 7, "cols": 34, "notes_wide": 2, "notes_tall": 2},
+      "expect": {"note_array": true, "notes_wide": 2, "notes_tall": 2, "note_cols": [15, 15, 4], "note_rows": [3, 3, 1], "cells": 238}
+    }
+  }
+}

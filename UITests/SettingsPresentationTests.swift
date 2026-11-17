@@ -63,6 +63,7 @@ final class SettingsPresentationTests: XCTestCase {
             }
             XCUIRemote.shared.press(.select)
             XCTAssertTrue(app.buttons["Living Room"].waitForExistence(timeout: 20))
+            attachMilestoneEvidence("TV sign-in — approved outcome", app: app)
         }
         wait(for: [frameLoaded], timeout: 10)
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
@@ -95,6 +96,12 @@ final class SettingsPresentationTests: XCTestCase {
         // its nested accessibility Button can keep hasFocus=false throughout.
         for _ in 0..<24 {
             if rowHasFocus(label, in: app) {
+                attachMilestoneEvidence("Settings — focused \(label)", app: app)
+                if label == "Privacy" {
+                    let icon = app.buttons[label].images["chevron.right"].firstMatch
+                    assertNativeGlyphContrast(icon, app: app, minimum: 3,
+                                              context: "Settings Privacy chevron focused")
+                }
                 XCUIRemote.shared.press(.select)
                 return
             }
@@ -123,10 +130,47 @@ final class SettingsPresentationTests: XCTestCase {
     }
 
     private func attachScreenshot(_ name: String, app: XCUIApplication) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        attachMilestoneEvidence(name, app: app)
+    }
+
+    func testNativeSettingsSecondaryValueKeepsContrastWhenFocused() {
+        let app = launchSettings()
+        defer { app.terminate() }
+        openCategory("This Apple TV", in: app)
+        waitForRowFocus("Open at launch", in: app)
+        let value = app.buttons["Open at launch"].value as? String ?? "Panel list"
+        assertNativeTextContrast(value, app: app, context: "Settings Open at launch focused value")
+        XCUIRemote.shared.press(.down)
+        waitForRowFocus("Split-flap size", in: app)
+        assertNativeTextContrast(value, app: app, context: "Settings Open at launch unfocused value")
+    }
+
+    func testMilestoneSettingsFocusWalkKeepsEveryControlReachable() {
+        let app = launchSettings(matrixPanel: true)
+        defer { app.terminate() }
+        for category in ["This Apple TV", "Panel appearance", "Connection", "About & help"] {
+            openCategory(category, in: app)
+            attachVerticalFocusWalk("Settings — \(category) control walk", app: app, steps: 18)
+            if category == "Connection" {
+                waitForRowFocus("Forget this hub", in: app)
+                assertNativeGlyphContrast(app.buttons["Forget this hub"], app: app, minimum: 4.5,
+                                          context: "Settings Forget this hub focused")
+                XCTAssertTrue(rowHasFocus("Forget this hub", in: app))
+                assertNativeGlyphContrast(app.buttons["Sign out"], app: app, minimum: 4.5,
+                                          context: "Settings Sign out unfocused")
+                XCUIRemote.shared.press(.up)
+                waitForRowFocus("Sign out", in: app)
+                assertNativeGlyphContrast(app.buttons["Forget this hub"], app: app, minimum: 4.5,
+                                          context: "Settings Forget this hub unfocused")
+                assertNativeGlyphContrast(app.buttons["Sign out"], app: app, minimum: 4.5,
+                                          context: "Settings Sign out focused")
+                XCTAssertTrue(rowHasFocus("Sign out", in: app))
+            }
+        }
+        for _ in 0..<12 { XCUIRemote.shared.press(.up) }
+        XCUIRemote.shared.press(.left)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        attachVerticalFocusWalk("Settings — categories and Done walk", app: app, steps: 8)
     }
 
     func testCategoriesSeparateLocalAndSharedSettings() {
@@ -134,14 +178,14 @@ final class SettingsPresentationTests: XCTestCase {
         for category in ["This Apple TV", "Panel appearance", "Connection", "About & help"] {
             XCTAssertTrue(app.buttons[category].exists)
         }
-        XCTAssertTrue(app.staticTexts["Applies only to this Apple TV."].exists)
+        XCTAssertTrue(app.staticTexts["Change what’s showing from the FiestaBoard app on your phone."].exists)
         attachScreenshot("Settings — This Apple TV", app: app)
         // Merely focusing a category must not swap the controls beneath the user.
         XCUIRemote.shared.press(.down)
         XCTAssertTrue(rowHasFocus("Panel appearance", in: app))
-        XCTAssertTrue(app.staticTexts["Applies only to this Apple TV."].exists)
+        XCTAssertTrue(app.staticTexts["Change what’s showing from the FiestaBoard app on your phone."].exists)
         XCUIRemote.shared.press(.select)
-        XCTAssertTrue(app.staticTexts["Applies to every viewer of this panel."].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Shared: changes")).firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.otherElements["settings.panelPreview"].exists)
         let message = NSPredicate(format: "value == %@", "FIESTABOARD")
         expectation(for: message, evaluatedWith: app.otherElements["settings.panelPreview"])
@@ -151,7 +195,7 @@ final class SettingsPresentationTests: XCTestCase {
 
     func testCurrentPanelHasCompleteSharedDisplayControls() {
         let app = launchSettings(matrixPanel: true, localSettings: false)
-        XCTAssertTrue(app.staticTexts["Applies to every viewer of this panel."].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Shared: changes")).firstMatch.waitForExistence(timeout: 3))
         XCUIRemote.shared.press(.right)
         openRow("All display settings", in: app)
         XCTAssertTrue(app.textFields["panelSettings.name"].waitForExistence(timeout: 5))
@@ -165,25 +209,16 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Settings"].exists)
     }
 
+    /// DD20: a device-code TV has no "All display settings" (its scope can't
+    /// edit the night schedule or backdrop, which match Android TV); its
+    /// permitted shared edits stay in Panel appearance.
     func testTVSignInOffersOnlyPermittedDisplayEdits() {
         let app = launchSettings(matrixPanel: true, localSettings: false, deviceCredential: true)
         defer { app.terminate() }
-        XCUIRemote.shared.press(.right)
-        openRow("settings.allDisplaySettings", in: app)
-        XCTAssertTrue(app.textFields["panelSettings.diagonal"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.textFields["panelSettings.name"].exists,
-                       "A TV credential cannot rename panels; offering Name makes Save fail with 403")
+        XCTAssertTrue(app.switches["settings.animationToggle"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["settings.allDisplaySettings"].exists, "DD20: legacy password sign-ins only")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Display style")).firstMatch.exists)
-        XCTAssertTrue(app.switches.matching(NSPredicate(format: "label BEGINSWITH %@", "Animations")).firstMatch.exists)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "board's web page")).firstMatch.exists)
-        openRow("panelSettings.save", in: app)
-        XCTAssertFalse(app.buttons["panelSettings.matrixSizing"].exists)
-        XCTAssertFalse(app.textFields["LED spacing (1–20 mm)"].exists)
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Web viewer backdrop")).firstMatch.exists)
-        XCTAssertFalse(app.textFields["panelSettings.dimStart"].exists)
-        XCTAssertFalse(app.textFields["panelSettings.dimEnd"].exists)
-        XCTAssertTrue(app.textFields["panelSettings.calibration"].exists)
-        attachScreenshot("TV sign-in — permitted display settings", app: app)
+        attachScreenshot("TV sign-in — Panel appearance without All display settings", app: app)
     }
 
     func testSharedDisplaySaveKeepsFocusDuringFailureAndAllowsRetry() {
@@ -252,9 +287,31 @@ final class SettingsPresentationTests: XCTestCase {
         for _ in 0..<3 { XCUIRemote.shared.press(.up) }
         openRow("True LED size", in: app)
         XCTAssertTrue(app.buttons["TV size"].waitForExistence(timeout: 3))
+        // DD19: the rows appear below, and focus stays on Matrix size.
+        waitForRowFocus("settings.matrixSizing", in: app)
+        // S1: with the last row (OLED care) focused, the footer and the
+        // Accessibility note are on screen (a frame check, not `.exists`).
+        // On this layout the live list already shows them; the screen's
+        // scroll-to-end covers taller content above (loading, errors).
+        for _ in 0..<6 {
+            if rowHasFocus("settings.oledCare", in: app) { break }
+            XCUIRemote.shared.press(.down)
+        }
+        XCTAssertTrue(rowHasFocus("settings.oledCare", in: app))
+        let screen = app.windows.firstMatch.frame
+        for caption in [app.staticTexts["settings.thisTVFooter"], app.staticTexts["settings.accessibilityNote"]] {
+            let onScreen = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                caption.exists && screen.contains(caption.frame) }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [onScreen], timeout: 3), .completed, "\(caption) must scroll on screen")
+        }
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
         openRow("TV size", in: app)
         openRow("55 inches", in: app)
         XCTAssertEqual(app.buttons["TV size"].value as? String, "55 inches")
+        waitForRowFocus("TV size", in: app)
+        assertNativeTextContrast("55 inches", app: app, context: "Settings TV size focused value")
+        XCUIRemote.shared.press(.down)
+        assertNativeTextContrast("55 inches", app: app, context: "Settings TV size unfocused value")
         openRow("LED spacing", in: app)
         openRow("8 mm", in: app)
         XCTAssertEqual(app.buttons["LED spacing"].value as? String, "8 mm")
@@ -376,8 +433,21 @@ final class SettingsPresentationTests: XCTestCase {
     func testHelpKeepsPrivacyReachableAndMenuReturnsToSettings() {
         let app = launchSettings()
         openCategory("About & help", in: app)
+        for _ in 0..<8 { XCUIRemote.shared.press(.up) }
+        XCTAssertFalse(rowHasFocus("Privacy", in: app), "The first icon measurement must be unfocused")
+        let icon = app.buttons["Privacy"].images["chevron.right"].firstMatch
+        assertNativeGlyphContrast(icon, app: app, minimum: 3,
+                                  context: "Settings Privacy chevron unfocused")
         openRow("Privacy", in: app)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "FiestaBoard's servers")).firstMatch.waitForExistence(timeout: 3))
+        // DD19 / A8f: the body is one focus target the remote scrolls.
+        let body = app.descendants(matching: .any).matching(identifier: "settings.detail.body").firstMatch
+        XCTAssertTrue(body.waitForExistence(timeout: 3))
+        XCTAssertTrue(body.label.contains("FiestaBoard’s servers"), body.label)
+        XCTAssertTrue(body.hasFocus, "the scroll body takes focus")
+        attachScreenshot("About — Privacy initial focused body", app: app)
+        for _ in 0..<4 { XCUIRemote.shared.press(.down) }
+        XCTAssertTrue(body.hasFocus, "Down scrolls the text; it does not leave the page")
+        attachScreenshot("About — Privacy (A8f)", app: app)
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.buttons["Privacy"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["About & help"].waitForExistence(timeout: 3))

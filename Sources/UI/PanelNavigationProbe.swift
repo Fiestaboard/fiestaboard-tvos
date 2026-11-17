@@ -14,6 +14,11 @@ final class PanelNavigationProbe: NSObject {
     private var frames = 0
     private let recordingID = UUID().uuidString
     static let blankPreviews = UserDefaults.standard.bool(forKey: "fiestaboard.panelProfileBlank")
+    /// While recording, a card whose board picture is drawn says so in its
+    /// accessibility value, so a UI test can tell a drawn picture from the
+    /// model's "Board reads:" text, which every card has.
+    static let marksDrawnPreviews = UserDefaults.standard.bool(forKey: "fiestaboard.panelProfile")
+    static let drawnPreviewValue = "Preview drawn"
 
     func start() {
         guard enabled, link == nil else { return }

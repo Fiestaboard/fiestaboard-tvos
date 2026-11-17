@@ -12,6 +12,13 @@ struct DiscoveredBoardCard: View {
     let address: String
     /// Whether this is the board currently being connected to.
     var isConnecting = false
+    #if DEBUG
+    /// The 07b node this card's title is probed as (the first card on A1).
+    /// DEBUG only: a stored id would ship its literal in Release.
+    var figmaTitle: String? = nil
+    #else
+    private var figmaTitle: String? { nil }
+    #endif
     let action: () -> Void
 
     var body: some View {
@@ -23,10 +30,13 @@ struct DiscoveredBoardCard: View {
 
                 Spacer(minLength: 12)
 
-                Text(board.name)
+                // DD8: the advertised Bonjour name, verbatim.
+                Text(TVCopy.Connect.hubCardTitle(for: board))
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(Fiesta.Colors.foreground)
                     .lineLimit(1)
+                    .figmaNode(figmaTitle ?? "", label: TVCopy.Connect.hubCardTitle(for: board),
+                               enabled: figmaTitle != nil)
 
                 Text(address)
                     .font(.system(size: 24))
@@ -44,9 +54,13 @@ struct DiscoveredBoardCard: View {
             // not reliably come back. The model's `guard !isConnecting` is
             // what stops a second attempt.
             .overlay(alignment: .bottomTrailing) {
-                if isConnecting {
-                    TacoLoader(size: .small)
-                }
+                // Keep the native card label's subtree stable when the
+                // response arrives. Removing this view while its button is
+                // focused leaves tvOS with no reported focus owner.
+                TacoLoader(size: .small, isAnimating: isConnecting)
+                    .opacity(isConnecting ? 1 : 0)
+                    // Progress is exposed once, through the button's value.
+                    .accessibilityHidden(true)
             }
             .padding(28)
             .background(Fiesta.Colors.surface)
@@ -60,8 +74,12 @@ struct DiscoveredBoardCard: View {
                     .strokeBorder(Fiesta.Colors.border, lineWidth: 1))
         }
         .buttonStyle(.card)
-        .accessibilityLabel(isConnecting ? "\(board.name), \(address), connecting" : "\(board.name), \(address)")
-        .accessibilityHint("Connects this Apple TV to this FiestaBoard.")
+        // The control keeps its name while its connection state changes.
+        // Progress belongs to its value, so assistive technology can update
+        // status without replacing the activated hub's accessible identity.
+        .accessibilityLabel(TVCopy.Connect.hubCardAccessibilityLabel(for: board, address: address))
+        .accessibilityValue(isConnecting ? TVCopy.Connect.hubCardConnectingValue : "")
+        .accessibilityHint(TVCopy.Connect.hubCardHint)
     }
 }
 
@@ -76,9 +94,12 @@ struct DiscoveredBoardCard: View {
 /// that motivated showing the port at all.
 enum BoardAddressLabel {
 
+    /// DD12: the resolved address, with the default port hidden. A port
+    /// that isn't the default stays, so two instances on one Pi still read
+    /// differently. "hostname · IP" waits for H13 PR 3's TXT `host=`.
     static func text(for board: DiscoveredBoard) -> String {
         let host = board.host.host() ?? board.host.absoluteString
-        guard let port = board.host.port else { return host }
+        guard let port = board.host.port, port != DiscoveryFilter.defaultPort else { return host }
         return "\(host):\(port)"
     }
 }

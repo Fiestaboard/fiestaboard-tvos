@@ -70,7 +70,9 @@ final class DeviceAuthorizationTests: XCTestCase {
         StubURLProtocol.enqueue(.json(Fixtures.panelsList), for: "/api/panels")
         _ = try await client.panels()
         XCTAssertEqual(StubURLProtocol.requests.last?.authorization, "Bearer fb_tv_test")
-        do { _ = try await client.aiAvailability(); XCTFail("scoped credential cannot access AI") }
+        // A9 removed the chat client; the scope guard still refuses any path
+        // outside the TV allow-list before a request is made.
+        do { _ = try await client.send(method: "GET", path: "/ai/available", body: nil); XCTFail("scoped credential cannot access AI") }
         catch FiestaError.http(403) {}
         XCTAssertEqual(StubURLProtocol.requests.count, 1)
     }

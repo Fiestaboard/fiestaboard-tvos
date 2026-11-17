@@ -80,11 +80,36 @@ public final class FiestaClient: @unchecked Sendable {
 
     /// `ref` is a panel id or its short code, so "1" is valid.
     public func panel(ref: String) async throws -> Panel {
-        try await get("/panel/\(ref)")
+        try await get("/panel/\(Self.pathSegment(ref))")
+    }
+
+    /// The panel plus the hub's clock from the same response (A6a).
+    ///
+    /// `GET /panel/{id}` is sent `Cache-Control: no-store`, so its `Date`
+    /// header is the hub's own: the status chip counts an override down on
+    /// that clock, not on a TV whose clock may be minutes out. Nil when the
+    /// header is missing or does not parse.
+    public func panelReading(ref: String) async throws -> PanelReading {
+        let (data, response) = try await exchange(method: "GET", path: "/panel/\(Self.pathSegment(ref))", body: nil)
+        do {
+            return PanelReading(panel: try decoder.decode(Panel.self, from: data),
+                                hubDate: response.value(forHTTPHeaderField: "Date").flatMap(Self.httpDate))
+        } catch {
+            throw FiestaError.decoding("\(error)")
+        }
+    }
+
+    /// An HTTP `Date` (RFC 9110 IMF-fixdate, e.g. "Sun, 08 Nov 2026 02:18:00 GMT").
+    static func httpDate(_ value: String) -> Date? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f.date(from: value.trimmingCharacters(in: .whitespaces))
     }
 
     public func frame(ref: String) async throws -> PanelFrame {
-        try await get("/panel/\(ref)/frame")
+        try await get("/panel/\(Self.pathSegment(ref))/frame")
     }
 
     public func updatePanel(id: String,
@@ -114,7 +139,7 @@ public final class FiestaClient: @unchecked Sendable {
     }
 
     private func updatePanel(id: String, body: [String: Any]) async throws -> PanelUpdateResult {
-        let data = try await send(method: "PATCH", path: "/panels/\(id)", body: body)
+        let data = try await send(method: "PATCH", path: "/panels/\(Self.pathSegment(id))", body: body)
         struct Envelope: Decodable {
             let panel: Panel
             let incompatibleReferences: [IncompatibleReference]?
@@ -144,6 +169,17 @@ public final class FiestaClient: @unchecked Sendable {
 
     // MARK: Plumbing
 
+    /// Unreserved ASCII only: letters, digits, `-` and `_`.
+    private static let segmentAllowed = CharacterSet(charactersIn:
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+
+    /// One path segment (#24 S3). Anything outside the hub's id alphabet is
+    /// percent-encoded, `.` included, so a ref can't add a query, a fragment,
+    /// another segment or a dot-segment. Hub ids and short codes pass through.
+    static func pathSegment(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: segmentAllowed) ?? ""
+    }
+
     func url(for path: String) -> URL {
         // The Docker/nginx public port proxies /api/* to FastAPI after
         // stripping that prefix. Direct /auth/* URLs reach the web UI.
@@ -161,6 +197,12 @@ public final class FiestaClient: @unchecked Sendable {
 
     @discardableResult
     func send(method: String, path: String, body: [String: Any]?, deviceEndpoint: Bool = false) async throws -> Data {
+        try await exchange(method: method, path: path, body: body, deviceEndpoint: deviceEndpoint).data
+    }
+
+    /// `send`, keeping the response for its headers.
+    func exchange(method: String, path: String, body: [String: Any]?,
+                  deviceEndpoint: Bool = false) async throws -> (data: Data, response: HTTPURLResponse) {
         var request = URLRequest(url: url(for: path))
         request.httpMethod = method
         if let token = deviceToken {
@@ -206,7 +248,7 @@ public final class FiestaClient: @unchecked Sendable {
         }
         switch http.statusCode {
         case 200..<300:
-            return data
+            return (data, http)
         case 401:
             throw FiestaError.unauthorized
         case 404:

@@ -20,3 +20,6 @@ DerivedData/
 # Tooling
 .claude/
 .superpowers/
+
+# Parity comparer dependencies (scripts/parity/package-lock.json pins them)
+scripts/parity/node_modules/

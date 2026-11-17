@@ -11,19 +11,22 @@ public enum BoardCell: Equatable, Sendable {
 public enum BoardColor: String, CaseIterable, Sendable {
     case red, orange, yellow, green, blue, violet, white, black
 
-    public var hex: String {
+    /// The FiestaUI `board.*` token (A1 token bridge). Board black is
+    /// #1a1a1a, never pure black: a real flap reflects light.
+    public var token: TokenColor {
         switch self {
-        case .red:    return "#eb4034"
-        case .orange: return "#f5a623"
-        case .yellow: return "#f8e71c"
-        case .green:  return "#7ed321"
-        case .blue:   return "#4a90d9"
-        case .violet: return "#9b59b6"
-        case .white:  return "#ffffff"
-        // Board black is #1a1a1a, never pure black: a real flap reflects light.
-        case .black:  return "#1a1a1a"
+        case .red:    return FiestaTokenValues.Board.red
+        case .orange: return FiestaTokenValues.Board.orange
+        case .yellow: return FiestaTokenValues.Board.yellow
+        case .green:  return FiestaTokenValues.Board.green
+        case .blue:   return FiestaTokenValues.Board.blue
+        case .violet: return FiestaTokenValues.Board.violet
+        case .white:  return FiestaTokenValues.Board.white
+        case .black:  return FiestaTokenValues.Board.black
         }
     }
+
+    public var hex: String { token.hex }
 
     /// Character codes 63-71. 70 and 71 are both black (71 is "filled").
     public init?(code: Int) {

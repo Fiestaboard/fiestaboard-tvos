@@ -122,4 +122,58 @@ final class TopShelfSnapshotStoreTests: XCTestCase {
         XCTAssertEqual(item.panelID, "one")
         XCTAssertEqual(try Data(contentsOf: store.imageURL(for: item)), Data([1, 2, 3]))
     }
+
+    // MARK: A7 — both scales, the status line, the migration
+
+    func testBothScalesAreStoredAndCleanedUp() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try store.replace([.init(panelID: "one", name: "Kitchen", imageData: Data([1]), imageData2x: Data([2]))])
+        let first = try XCTUnwrap(store.items().first)
+        let twoX = try XCTUnwrap(store.imageURL2x(for: first))
+        XCTAssertEqual(try Data(contentsOf: twoX), Data([2]))
+        try store.replace([.init(panelID: "one", name: "Kitchen", imageData: Data([3]), imageData2x: Data([4]))])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: twoX.path), "the superseded @2x is removed")
+    }
+
+    /// S3: the format the shipping app wrote decodes, with no status line.
+    func testTheCurrentOnDiskManifestDecodes() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(#"[{"panelID":"old","name":"Old","imageFile":"preview-x.png"}]"#.utf8)
+            .write(to: directory.appendingPathComponent("manifest.json"))
+        let item = try XCTUnwrap(store.items().first)
+        XCTAssertEqual(item.panelID, "old")
+        XCTAssertNil(item.imageFile2x)
+        XCTAssertNil(store.statusLine(for: item, now: Date()))
+    }
+
+    func testTheStatusLineExpiresAfterTenMinutes() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        try store.replace([.init(panelID: "one", name: "K", imageData: Data([1]), statusLine: "Paused", statusAt: at)])
+        let item = try XCTUnwrap(store.items().first)
+        XCTAssertEqual(TopShelfSnapshotStore.statusLifetime, 600)
+        XCTAssertEqual(store.statusLine(for: item, now: at.addingTimeInterval(600)), "Paused")
+        XCTAssertNil(store.statusLine(for: item, now: at.addingTimeInterval(600.5)))
+        XCTAssertNil(store.statusLine(for: item, now: at.addingTimeInterval(-120)), "a clock that ran backwards is not fresh")
+    }
+
+    /// A new status reloads Home; re-confirming the same line only renews
+    /// its timestamp on disk.
+    func testOnlyAChangedStatusLineAsksHomeToReload() throws {
+        let (store, directory) = makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        func preview(_ line: String?, _ when: Date) -> TopShelfSnapshotStore.Preview {
+            .init(panelID: "one", name: "K", imageData: Data([1]), statusLine: line, statusAt: when)
+        }
+        XCTAssertTrue(try store.replace([preview("Paused", at)]))
+        XCTAssertFalse(try store.replace([preview("Paused", at.addingTimeInterval(60))]))
+        XCTAssertEqual(store.items().first?.statusAt, at.addingTimeInterval(60), "the renewal is written")
+        XCTAssertTrue(try store.replace([preview("Now showing · Schedule", at.addingTimeInterval(120))]))
+        XCTAssertTrue(try store.replace([preview(nil, at.addingTimeInterval(180))]))
+    }
 }

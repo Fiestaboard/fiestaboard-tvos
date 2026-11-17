@@ -9,7 +9,6 @@ public enum Route: Equatable, Hashable {
     case panels
     case viewer(String)
     case settings
-    case fiestaBot
 }
 
 /// Navigation and app-wide state.
@@ -31,12 +30,7 @@ public final class AppModel {
             return storedRoute
         }
         set {
-            if storedRoute == .fiestaBot && newValue != .fiestaBot { fiestaBot?.stop() }
             withMutation(keyPath: \.route) { storedRoute = newValue }
-            if newValue == .signIn || newValue == .connect {
-                fiestaBot?.stop()
-                fiestaBot = nil
-            }
             applyScreenAwake()
         }
     }
@@ -84,9 +78,6 @@ public final class AppModel {
     var lastViewedPanelRef: String?
     /// Where Settings was opened from, so leaving it goes back there.
     private var routeBeforeSettings: Route?
-    private var routeBeforeBot: Route?
-    var fiestaBot: FiestaBotModel?
-    var botPanelRef: String?
     private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var panelReloadTask: Task<Void, Never>?
     @ObservationIgnored weak var activePanelsModel: PanelsModel?
@@ -101,7 +92,18 @@ public final class AppModel {
     /// Holds the display awake while a board is up. Tests replace its sink.
     @ObservationIgnored let screenAwake: ScreenAwake
 
-    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil, oledStore: OLEDCareStore = OLEDCareStore()) {
+    /// What this TV is called on the hub (A3, DD3). `.fallback` without the
+    /// user-assigned-device-name entitlement (O6, owner-pending).
+    public let deviceName: DeviceNameChoice
+
+    /// A short notice over the current screen, such as "Approved by maya".
+    public private(set) var notice: String?
+    @ObservationIgnored private var noticeTask: Task<Void, Never>?
+
+    public init(connection: ConnectionStore, topShelfStore: TopShelfSnapshotStore? = nil, oledStore: OLEDCareStore = OLEDCareStore(),
+                deviceName: DeviceNameChoice = .fallback) {
+        self.deviceName = deviceName
+        connection.deviceName = deviceName.sent
         self.oledStore = oledStore
         self.oledCare = oledStore.load()
         self.connection = connection
@@ -194,10 +196,35 @@ public final class AppModel {
         else { route = .panels }
     }
 
+    /// Device-code sign-in finished; `approvedBy` is the approving user from
+    /// `GET /auth/status`, or nil (no toast).
+    public func finishSignIn(approvedBy: String?) {
+        finishSignIn()
+        if let approvedBy, !approvedBy.isEmpty { showNotice(TVCopy.DeviceSignIn.approvedBy(approvedBy)) }
+    }
+
+    /// Shows `text` for `duration`, and says it.
+    public func showNotice(_ text: String, for duration: Duration = .seconds(4)) {
+        noticeTask?.cancel()
+        notice = text
+        Announce.say(text)
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self?.notice = nil
+        }
+    }
+
     public func openPanel(ref: String) {
         lastViewedPanelRef = ref
         errorMessage = nil
         route = .viewer(ref)
+    }
+
+    /// The hub's panel id or short-code shape (#24 S3): 1–64 ASCII letters,
+    /// digits, `-` or `_`. A decoded `?`, `/`, `%` or `..` never qualifies.
+    static func isPanelRef(_ ref: String) -> Bool {
+        ref.range(of: "\\A[A-Za-z0-9_-]{1,64}\\z", options: .regularExpression) != nil
     }
 
     /// Opens `fiestaboard://panel/<ref>` from a Top Shelf carousel item.
@@ -205,12 +232,23 @@ public final class AppModel {
     /// Exactly one path component, and only for a board this TV is still
     /// signed in to: the carousel can outlive the connection it was built
     /// from, and Home will happily send a stale link.
+    /// A7: the carousel's More Info sends `fiestaboard://panels`, under the
+    /// same guard.
     public func openTopShelfURL(_ url: URL) {
         let components = url.path.split(separator: "/")
-        guard url.scheme == "fiestaboard", url.host == "panel",
-              components.count == 1,
+        guard url.scheme == "fiestaboard",
               connection.saved != nil, connection.client != nil,
               !connection.isSignedOut else { return }
+        // #24 S3: the carousel sends exactly two shapes. Anything else (a
+        // query, a fragment, a user or port, another host) is refused.
+        guard url.query == nil, url.fragment == nil, url.user == nil,
+              url.password == nil, url.port == nil else { return }
+        if url.host == "panels" {
+            if components.isEmpty { showPanels() }
+            return
+        }
+        guard url.host == "panel", components.count == 1,
+              Self.isPanelRef(String(components[0])) else { return }
         // No republish here. Opening a Top Shelf card brings the app to the
         // foreground, and the foreground hook above already refreshes — doing
         // it again on a cold launch into a default panel fired two panel
@@ -229,25 +267,6 @@ public final class AppModel {
         // Opening Settings twice must not lose the original origin.
         if route != .settings { routeBeforeSettings = route }
         route = .settings
-    }
-
-    @discardableResult
-    func showFiestaBot() -> Bool {
-        guard !connection.usesDeviceCredential else {
-            errorMessage = "FiestaBot is unavailable with this TV sign-in."
-            return false
-        }
-        if route != .fiestaBot { routeBeforeBot = route }
-        if case .viewer(let ref) = route { botPanelRef = ref }
-        else { botPanelRef = lastViewedPanelRef }
-        if fiestaBot?.isCurrentConnection != true { fiestaBot = FiestaBotModel(app: self) }
-        route = .fiestaBot
-        return true
-    }
-
-    func dismissFiestaBot() {
-        route = routeBeforeBot ?? .panels
-        routeBeforeBot = nil
     }
 
     /// Select the panel being watched when Settings opens. References may
@@ -286,6 +305,8 @@ public final class AppModel {
         activePanelsModel = nil
         panelBrowserCache = nil
         topShelfImages.images.removeAll()
+        resetTopShelfStatuses()
+        lastTopShelf = nil
         topShelfClient = nil
         return TopShelfPreviewPublisher.clear(store: topShelfStore, cache: topShelfImages)
     }
@@ -323,11 +344,136 @@ public final class AppModel {
         if topShelfClient !== connection.client {
             topShelfImages.invalidate()
             topShelfImages.images.removeAll()
+            resetTopShelfStatuses()
         }
         topShelfClient = connection.client
-        return TopShelfPreviewPublisher.publish(panels: panels, previews: previews,
+        lastTopShelf = (panels, previews)
+        refreshTopShelfStatuses(for: panels)
+        let now = Date()
+        let fresh = topShelfStatuses.filter { now.timeIntervalSince($0.value.at) <= TopShelfSnapshotStore.statusLifetime }
+        return TopShelfPreviewPublisher.publish(panels: panels, previews: previews, statuses: fresh,
                                          connection: connection,
                                          store: topShelfStore, cache: topShelfImages)
+    }
+
+    // MARK: Top Shelf status (A7, after A6a)
+
+    /// A status younger than this is reused rather than fetched again, so a
+    /// burst of frame publications costs no status requests. Shorter than
+    /// the store's 10-minute rule, so a TV in use keeps its line.
+    static let topShelfStatusInterval: TimeInterval = 300
+    /// A7b (#24 review S1): statuses take at most two of the hub's four
+    /// slots, so frames are never starved by them.
+    static let topShelfStatusConcurrency = 2
+    /// Background requests open at the hub at once, frames and statuses
+    /// together (A7b, #24 review S1). The frame fetcher alone used all four.
+    static let hubRequestBudget = 4
+    /// One budget for the app: frames (`PanelsModel`) and Top Shelf statuses
+    /// both take their slots from it.
+    let hubRequests = HubRequestBudget(limit: AppModel.hubRequestBudget)
+    /// At most this many panels' statuses per refresh: `/panels` carries no
+    /// status, so each one is its own `GET /panel/{id}` against a Pi.
+    var topShelfStatusLimit = 12
+    @ObservationIgnored private var topShelfStatuses: [String: TopShelfStatusReading] = [:]
+    /// When each panel was last asked, successful or not: a failing hub is
+    /// not asked again inside the interval either.
+    @ObservationIgnored private var topShelfStatusAttempts: [String: Date] = [:]
+    @ObservationIgnored private var lastTopShelf: (panels: [Panel], previews: [String: PanelPreviewState])?
+    @ObservationIgnored private(set) var topShelfStatusTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var topShelfRepublication: Task<Void, Never>?
+
+    /// A hub switch or sign-out: forget statuses and attempts, and let go of
+    /// an old hub's in-flight fetch so the new hub's starts at once (#24 N2).
+    private func resetTopShelfStatuses() {
+        topShelfStatuses.removeAll()
+        topShelfStatusAttempts.removeAll()
+        topShelfStatusTask?.cancel()
+        topShelfStatusTask = nil
+        topShelfStatusTaskID = nil
+        topShelfStatusesDeferred = false
+    }
+
+    /// A7b (#24 review S1): frames come first. While the panel browser's
+    /// frame batch runs, status fetches wait and the batch's end starts them;
+    /// `hubRequests` bounds the two together whichever starts first.
+    @ObservationIgnored private var topShelfFrameBatches = 0
+    @ObservationIgnored private var topShelfStatusesDeferred = false
+    @ObservationIgnored private var topShelfStatusTaskID: UUID?
+
+    func beginTopShelfFrameBatch() { topShelfFrameBatches += 1 }
+
+    func endTopShelfFrameBatch() {
+        topShelfFrameBatches = max(0, topShelfFrameBatches - 1)
+        guard topShelfFrameBatches == 0, topShelfStatusesDeferred else { return }
+        topShelfStatusesDeferred = false
+        if let last = lastTopShelf, connection.client === topShelfClient { refreshTopShelfStatuses(for: last.panels) }
+    }
+
+    private func refreshTopShelfStatuses(for panels: [Panel]) {
+        guard topShelfStatusTask == nil else { return }
+        guard topShelfFrameBatches == 0 else { topShelfStatusesDeferred = true; return }
+        let now = Date()
+        // A panel the list carries twice is asked once (S1).
+        var seen = Set<String>()
+        let due = panels.filter { !$0.boardMissing && seen.insert($0.id).inserted }
+            .prefix(topShelfStatusLimit).map(\.id).filter {
+                topShelfStatusAttempts[$0].map { now.timeIntervalSince($0) >= Self.topShelfStatusInterval } ?? true
+            }
+        guard !due.isEmpty else { return }
+        for id in due { topShelfStatusAttempts[id] = now }
+        let client = connection.client
+        let connection = connection
+        let budget = hubRequests
+        let taskID = UUID()
+        topShelfStatusTaskID = taskID
+        topShelfStatusTask = Task { [weak self] in
+            // A missing id: the fetch failed, so the previous status stands.
+            // A nil status: the hub answered with nothing worth a line.
+            let results = await Self.fetchTopShelfStatuses(due, connection: connection, budget: budget)
+            guard let self, topShelfStatusTaskID == taskID else { return }
+            topShelfStatusTask = nil
+            topShelfStatusTaskID = nil
+            guard !Task.isCancelled, connection.client === client, !connection.isSignedOut else { return }
+            // #24 N1: each line is stamped with its own answer's time.
+            for (id, answer) in results {
+                topShelfStatuses[id] = answer.status.map { TopShelfStatusReading(status: $0, at: answer.at) }
+            }
+            // Re-confirmed lines are renewed on disk without a Home reload
+            // (the store tells the two apart); a changed one reloads Home.
+            if !results.isEmpty, let last = lastTopShelf {
+                topShelfRepublication = publishTopShelf(panels: last.panels, previews: last.previews)
+            }
+        }
+    }
+
+    /// Two at a time, inside the hub budget; a failed fetch is left out.
+    nonisolated private static func fetchTopShelfStatuses(_ ids: [String], connection: ConnectionStore,
+                                                          budget: HubRequestBudget)
+        async -> [String: (status: TopShelfStatus?, at: Date)] {
+        await withTaskGroup(of: (String, TopShelfStatus?, Date?).self) { group in
+            var pending = ids.makeIterator()
+            func add(_ id: String) {
+                group.addTask {
+                    guard !Task.isCancelled,
+                          let reading = try? await budget.run({
+                              try await connection.authorized { try await $0.panelReading(ref: id) }
+                          })
+                    else { return (id, nil, nil) }
+                    let received = Date()
+                    return (id, TopShelfStatus(reading: reading, receivedAt: received), received)
+                }
+            }
+            for _ in 0..<topShelfStatusConcurrency {
+                guard let id = pending.next() else { break }
+                add(id)
+            }
+            var results: [String: (status: TopShelfStatus?, at: Date)] = [:]
+            for await (id, status, received) in group {
+                if let received { results[id] = (status, received) }
+                if let next = pending.next() { add(next) }
+            }
+            return results
+        }
     }
 
     /// Fetch the panel list and republish the card row.

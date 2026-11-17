@@ -34,6 +34,11 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     public let boardMissing: Bool
     public let rows: Int?
     public let cols: Int?
+    /// A10 (DD5): the board in whole Notes, hub `notes_wide` / `notes_tall`
+    /// (`cols // 15`, `rows // 3`). Nil unless the hub sends them for a
+    /// note array; an old hub sends neither.
+    public let notesWide: Int?
+    public let notesTall: Int?
     public let boardColor: String?
     public let code62Glyph: Code62Glyph?
     private let rawRenderStyle: String?
@@ -41,6 +46,10 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
     private let rawMatrixSizing: String?
     public let matrixPitchMillimeters: Double?
     public let supportsMatrixSettings: Bool
+    /// What the panel's board is doing, for the viewer's status chip (A6a).
+    /// Nil on an old hub (no key), for a removed display (`status: null`), and
+    /// for a status that does not decode: the chip is never worth the panel.
+    public internal(set) var status: PanelStatus?
     public var matrixSizing: MatrixSizing? { MatrixSizing(serverValue: rawMatrixSizing) }
     public var matrixPresentation: MatrixPresentation? {
         guard renderStyle == .ledMatrix, let mode = MatrixSizing(serverValue: rawMatrixSizing) else { return nil }
@@ -73,12 +82,15 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         case deviceType = "device_type"
         case boardMissing = "board_missing"
         case rows, cols
+        case notesWide = "notes_wide"
+        case notesTall = "notes_tall"
         case boardColor = "board_color"
         case code62Glyph = "code62_glyph"
         case rawRenderStyle = "render_style"
         case deviceModelSpec = "device_model_spec"
         case rawMatrixSizing = "matrix_sizing"
         case matrixPitchMillimeters = "matrix_pitch_mm"
+        case status
     }
 
     public init(from decoder: Decoder) throws {
@@ -98,6 +110,14 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         boardMissing = try c.decodeIfPresent(Bool.self, forKey: .boardMissing) ?? false
         rows = try c.decodeIfPresent(Int.self, forKey: .rows)
         cols = try c.decodeIfPresent(Int.self, forKey: .cols)
+        // Tolerant like `status`: a count the app can't use (a string, a
+        // fraction, a negative) drops to nil and the panel stays one merged
+        // grid. Never a reason to lose the panel on its 10 s poll.
+        func noteCount(_ key: CodingKeys) -> Int? {
+            ((try? c.decodeIfPresent(Int.self, forKey: key)) ?? nil).flatMap { (0...256).contains($0) ? $0 : nil }
+        }
+        notesWide = noteCount(.notesWide)
+        notesTall = noteCount(.notesTall)
         boardColor = try c.decodeIfPresent(String.self, forKey: .boardColor)
         // Decoded as a raw String and mapped, the way `boardColor` above is.
         // `decodeIfPresent` on a RawRepresentable returns nil only for an
@@ -112,6 +132,7 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         supportsMatrixSettings = c.contains(.rawMatrixSizing) && c.contains(.matrixPitchMillimeters)
         rawMatrixSizing = try c.decodeIfPresent(String.self, forKey: .rawMatrixSizing)
         matrixPitchMillimeters = try c.decodeIfPresent(Double.self, forKey: .matrixPitchMillimeters)
+        status = (try? c.decodeIfPresent(PanelStatus.self, forKey: .status)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -131,11 +152,14 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         try c.encodeIfPresent(deviceType, forKey: .deviceType)
         try c.encodeIfPresent(rows, forKey: .rows)
         try c.encodeIfPresent(cols, forKey: .cols)
+        try c.encodeIfPresent(notesWide, forKey: .notesWide)
+        try c.encodeIfPresent(notesTall, forKey: .notesTall)
         try c.encodeIfPresent(boardColor, forKey: .boardColor)
         try c.encodeIfPresent(code62Glyph, forKey: .code62Glyph)
         try c.encodeIfPresent(rawRenderStyle, forKey: .rawRenderStyle)
         try c.encodeIfPresent(deviceModelSpec, forKey: .deviceModelSpec)
         try c.encodeIfPresent(matrixPitchMillimeters, forKey: .matrixPitchMillimeters)
+        try c.encodeIfPresent(status, forKey: .status)
         if supportsMatrixSettings {
             try c.encode(rawMatrixSizing, forKey: .rawMatrixSizing)
         } else {
@@ -148,9 +172,136 @@ public struct Panel: Codable, Equatable, Identifiable, Sendable {
         Code62Glyph.effective(deviceType: deviceType, configured: code62Glyph)
     }
 
+    /// A note array from a hub that sends its Note counts draws as separate
+    /// Notes (DD5); everything else is one merged grid.
+    public var isNoteArray: Bool { deviceType == "note_array" && notesWide != nil && notesTall != nil }
+
     /// Board pigment behind the flaps. Anything unrecognised is black.
     public var backgroundColor: BoardColor {
         boardColor.flatMap { BoardColor(rawValue: $0) } ?? .black
+    }
+}
+
+/// What drives the panel's board (hub `PanelStatus.mode`). Unknown → manual.
+public enum PanelMode: String, Codable, Equatable, Sendable {
+    case override, schedule, manual
+}
+
+/// How a silenced board behaves (hub `silence_mode`): `freeze` keeps the last
+/// frame, `indicator` shows a message, `page` shows the silence page.
+public enum SilenceMode: String, Codable, Equatable, Sendable {
+    case freeze, indicator, page
+}
+
+/// `GET /panel/{id}` → `status` (hub H13 + H1 + H2b): the facts behind the
+/// TV's read-only status chip. The copy is the TV's (`PanelStatusChip`).
+///
+/// Instants are `Date`s, never strings: the hub sends whole-second UTC
+/// (`YYYY-MM-DDTHH:MM:SS+00:00`), but any ISO 8601 offset or fraction reads,
+/// and an instant that does not parse is nil rather than an error. Every
+/// field is decode-tolerant, so a hub that learns a new mode or reason does
+/// not cost the TV its panel.
+public struct PanelStatus: Codable, Equatable, Sendable {
+    public var mode: PanelMode
+    public var scheduleEnabled: Bool
+    public var overrideActive: Bool
+    /// Nil while no override runs, and for one that holds until canceled.
+    public var overrideExpiresAt: Date?
+    /// Identifies one override run (H1).
+    public var overrideStartedAt: Date?
+    public var silenced: Bool
+    public var silencedUntil: Date?
+    /// Nil unless silenced, and for a mode this TV does not know.
+    public var silenceMode: SilenceMode?
+    public var paused: Bool
+    /// When the board next changes by the hub's own rules (H2b); nil while
+    /// paused or when nothing changes within 8 days.
+    public var nextChangeAt: Date?
+    /// `override_ends`, `schedule`, `silence_starts`, `silence_ends`,
+    /// `collection`, or a reason a newer hub adds: kept raw.
+    public var nextChangeReason: String?
+
+    public init(mode: PanelMode, scheduleEnabled: Bool, overrideActive: Bool,
+                overrideExpiresAt: Date?, overrideStartedAt: Date?,
+                silenced: Bool, silencedUntil: Date?, silenceMode: SilenceMode?,
+                paused: Bool, nextChangeAt: Date? = nil, nextChangeReason: String? = nil) {
+        self.mode = mode
+        self.scheduleEnabled = scheduleEnabled
+        self.overrideActive = overrideActive
+        self.overrideExpiresAt = overrideExpiresAt
+        self.overrideStartedAt = overrideStartedAt
+        self.silenced = silenced
+        self.silencedUntil = silencedUntil
+        self.silenceMode = silenceMode
+        self.paused = paused
+        self.nextChangeAt = nextChangeAt
+        self.nextChangeReason = nextChangeReason
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case mode
+        case scheduleEnabled = "schedule_enabled"
+        case overrideActive = "override_active"
+        case overrideExpiresAt = "override_expires_at"
+        case overrideStartedAt = "override_started_at"
+        case silenced
+        case silencedUntil = "silenced_until"
+        case silenceMode = "silence_mode"
+        case paused
+        case nextChangeAt = "next_change_at"
+        case nextChangeReason = "next_change_reason"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func flag(_ key: CodingKeys) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: key)) ?? nil) ?? false }
+        func text(_ key: CodingKeys) -> String? { (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil }
+        func instant(_ key: CodingKeys) -> Date? { text(key).flatMap(Self.parseInstant) }
+        mode = text(.mode).flatMap(PanelMode.init(rawValue:)) ?? .manual
+        scheduleEnabled = flag(.scheduleEnabled)
+        overrideActive = flag(.overrideActive)
+        overrideExpiresAt = instant(.overrideExpiresAt)
+        overrideStartedAt = instant(.overrideStartedAt)
+        silenced = flag(.silenced)
+        silencedUntil = instant(.silencedUntil)
+        silenceMode = text(.silenceMode).flatMap(SilenceMode.init(rawValue:))
+        paused = flag(.paused)
+        nextChangeAt = instant(.nextChangeAt)
+        nextChangeReason = text(.nextChangeReason)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        func instant(_ date: Date?, _ key: CodingKeys) throws {
+            try c.encode(date.map { Self.wholeSeconds.string(from: $0) }, forKey: key)
+        }
+        try c.encode(mode, forKey: .mode)
+        try c.encode(scheduleEnabled, forKey: .scheduleEnabled)
+        try c.encode(overrideActive, forKey: .overrideActive)
+        try instant(overrideExpiresAt, .overrideExpiresAt)
+        try instant(overrideStartedAt, .overrideStartedAt)
+        try c.encode(silenced, forKey: .silenced)
+        try instant(silencedUntil, .silencedUntil)
+        try c.encode(silenceMode, forKey: .silenceMode)
+        try c.encode(paused, forKey: .paused)
+        try instant(nextChangeAt, .nextChangeAt)
+        try c.encode(nextChangeReason, forKey: .nextChangeReason)
+    }
+
+    // ISO8601DateFormatter is documented thread-safe.
+    nonisolated(unsafe) private static let wholeSeconds: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    nonisolated(unsafe) private static let fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    static func parseInstant(_ text: String) -> Date? {
+        wholeSeconds.date(from: text) ?? fractional.date(from: text)
     }
 }
 
@@ -286,6 +437,8 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
     public let mode: String
     public let firstRun: Bool
     public let tvSignIn: TVSignInCapability?
+    /// "tv" when the caller is a TV bearer; nil for a cookie session.
+    public let authKind: String?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -296,6 +449,7 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
         mode = try c.decodeIfPresent(String.self, forKey: .mode) ?? "enabled"
         firstRun = try c.decodeIfPresent(Bool.self, forKey: .firstRun) ?? false
         tvSignIn = try c.decodeIfPresent(TVSignInCapability.self, forKey: .tvSignIn)
+        authKind = try c.decodeIfPresent(String.self, forKey: .authKind)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -303,6 +457,7 @@ public struct AuthStatus: Decodable, Equatable, Sendable {
         case setupRequired = "setup_required"
         case firstRun = "first_run"
         case tvSignIn = "tv_sign_in"
+        case authKind = "auth_kind"
     }
 }
 
@@ -366,7 +521,7 @@ public enum FiestaError: Error, Equatable {
     public var userMessage: String {
         switch self {
         case .transport:
-            return "Couldn't reach your FiestaBoard. Check it's still on and on this network."
+            return "Couldn't reach your FiestaBoard hub. Check it's still on and on this network."
         case .unauthorized:
             return "Your saved sign-in was refused. Sign in again."
         case .setupRequired:
@@ -376,8 +531,8 @@ public enum FiestaError: Error, Equatable {
             // web page. This is the only copy of it: `AppModel` reads it from
             // here, because two spellings of the first sentence a brand-new
             // board's owner ever reads will drift the first time one is edited.
-            return "This FiestaBoard has no account yet. Open your board's web page in a browser "
-                 + "on a phone or computer, create your account there, then choose the board "
+            return "This FiestaBoard hub has no account yet. Open your hub's web page in a browser "
+                 + "on a phone or computer, create your account there, then choose the hub "
                  + "again here."
         case .notFound(let detail):
             return detail
@@ -387,16 +542,16 @@ public enum FiestaError: Error, Equatable {
             // most common failure anyone actually sees, and the 5xx line
             // below sent them to read the logs of a machine that is merely
             // booting.
-            return "Your FiestaBoard is still starting up. This usually takes under a minute."
+            return "Your FiestaBoard hub is still starting up. This usually takes under a minute."
         case .http(429):
-            return "Your FiestaBoard is refusing sign-ins after too many failed attempts. "
+            return "Your FiestaBoard hub is refusing sign-ins after too many failed attempts. "
                  + "Wait a minute, then sign in again."
         case .http(let status) where (500..<600).contains(status):
-            return "Your FiestaBoard answered with an error (HTTP \(status)). Check its logs."
+            return "Your FiestaBoard hub answered with an error (HTTP \(status)). Check its logs."
         case .http(let status):
-            return "Your FiestaBoard refused the request (HTTP \(status))."
+            return "Your FiestaBoard hub refused the request (HTTP \(status))."
         case .decoding:
-            return "Your FiestaBoard replied in a format this app doesn't understand. "
+            return "Your FiestaBoard hub replied in a format this app doesn't understand. "
                  + "It may be running a newer version than this app supports."
         }
     }

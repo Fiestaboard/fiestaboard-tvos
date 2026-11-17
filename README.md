@@ -211,6 +211,8 @@ publishes nothing for a board it is no longer entitled to show. Settings
 carries the same instructions for people who do not read this file.
 
 Release submission steps are in [docs/PUBLISHING.md](docs/PUBLISHING.md).
+The universal TV validation evidence and remaining owner/hardware gates are in
+[docs/RELEASE-HANDOFF.md](docs/RELEASE-HANDOFF.md).
 
 Sources/Core holds board and network logic and is the future Android port
 target, so it must stay free of SwiftUI, UIKit, Combine, `@Observable` and

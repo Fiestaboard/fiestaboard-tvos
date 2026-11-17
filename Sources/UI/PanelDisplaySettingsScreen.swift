@@ -18,7 +18,7 @@ struct PanelDisplaySettingsScreen: View {
                 Section {
                     Text("Changes apply to every viewer of this panel. Save after editing.")
                     if !model.canEditAllDisplaySettings {
-                        Text("To edit the panel name, shared matrix sizing or LED spacing, web viewer backdrop, or dim schedule, open your board's web page on a phone or computer.")
+                        Text("To edit the panel name, shared matrix sizing or LED spacing, web viewer backdrop, or dim schedule, open your hub's web page on a phone or computer.")
                         Text(model.boardAddress)
                     }
                 }
@@ -62,8 +62,9 @@ struct PanelDisplaySettingsScreen: View {
                                              (.some(.fillTV), "Fill TV"), (.some(.fitPanel), "Fit panel"),
                                              (.some(.trueSize), "True LED size")], selection: $draft.matrixSizing)
                                 .accessibilityIdentifier("panelSettings.matrixSizing")
-                            choice("LED spacing presets", value: "\(draft.pitchText) mm",
-                                   options: [2.0, 3, 4, 5, 6, 8, 10, 12, 16, 20].map { (String($0), "\(Int($0)) mm") },
+                            // DD21: the shared presets, in their shortest exact form.
+                            choice("LED spacing presets", value: Double(draft.pitchText).map(LEDSpacing.label) ?? "\(draft.pitchText) mm",
+                                   options: LEDSpacing.presets.map { (String($0), LEDSpacing.label($0)) },
                                    selection: $draft.pitchText)
                             number("LED spacing (1–20 mm)", text: $draft.pitchText)
                         } else {
@@ -140,7 +141,7 @@ struct PanelDisplaySettingsScreen: View {
     }
 
     private func row(_ title: String, value: String) -> some View {
-        HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
+        HStack { Text(title); Spacer(); Text(value).interactiveSecondaryForeground() }
             .accessibilityElement(children: .combine)
     }
 

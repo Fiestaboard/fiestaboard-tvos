@@ -1,0 +1,21 @@
+FiestaBoard for Apple TV
+
+The app's code: MIT License, Copyright (c) 2026 Fiestaboard contributors; see "MIT License" below.
+
+Matrix fonts and icons (led-fonts.json and markup_icons.json, vendored unmodified from FiestaBoard;
+provenance.json records their sources): MIT License, Copyright (c) 2026 Fiestaboard contributors;
+the app bundles this as LICENSE, shown below as "MIT License".
+
+Spline Sans Mono, the board font: SIL Open Font License 1.1; the app bundles it as OFL.txt, shown
+below as "Spline Sans Mono".
+
+Taco artwork © FiestaBoard. All rights reserved. Used in this app with permission.
+This covers the hopping-taco animation (Resources/TacoLoader) and the taco mark drawn by TacoMark
+(the app icon and the Top Shelf image).
+
+Everything else is Apple's: SwiftUI, UIKit, Core Image (the sign-in QR code is generated on this
+Apple TV), CryptoKit, Network and TVServices. The app ships no third-party package.
+swift-snapshot-testing (MIT License, Copyright Point-Free, Inc.) is used only by the test target
+and is not part of the app.
+
+No advertising, analytics or tracking SDK is included.

@@ -10,7 +10,7 @@ final class ViewerNavigationUITests: XCTestCase {
         super.tearDown()
     }
 
-    private func launchLoadedViewer() -> XCUIApplication {
+    private func launchLoadedViewer(extraArguments: [String] = []) -> XCUIApplication {
         let frameLoaded = expectation(description: "The viewer requested its frame")
         let server = try! FixtureHTTPServer(onFrame: { frameLoaded.fulfill() })
         self.server = server
@@ -22,7 +22,7 @@ final class ViewerNavigationUITests: XCTestCase {
             .map { String(format: "%02x", $0) }
             .joined()
         app.launchArguments = ["-fiestaboard.connection", "<\(encodedConnection)>",
-                               "-fiestaboard.signedOut", "NO"]
+                               "-fiestaboard.signedOut", "NO"] + extraArguments
         app.launch()
 
         XCTAssertFalse(app.staticTexts["Panels"].exists, "The saved default panel should start on the viewer")
@@ -56,8 +56,10 @@ final class ViewerNavigationUITests: XCTestCase {
         let later = app.buttons["Later"]
         XCTAssertTrue(resize.waitForExistence(timeout: 10))
         XCTAssertTrue(resize.hasFocus)
+        attachMilestoneEvidence("Viewer — resize offer Resize focused", app: app)
         XCUIRemote.shared.press(.right)
         XCTAssertTrue(later.hasFocus, "Right should focus Later without revealing viewer controls")
+        attachMilestoneEvidence("Viewer — resize offer Later focused", app: app)
         XCTAssertFalse(app.buttons["Panels"].exists)
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(later.waitForNonExistence(timeout: 5))
@@ -86,6 +88,17 @@ final class ViewerNavigationUITests: XCTestCase {
     /// press anywhere wakes the chrome. While the chrome is up that target
     /// must get out of the way, or the focus engine keeps handing focus back
     /// to it and the buttons cannot be reached.
+    /// A9: the overlay holds exactly Panels and Settings (07b A4 `154:8170`);
+    /// the FiestaBot one-off send is retired.
+    func testTheOverlayHoldsOnlyPanelsAndSettings() {
+        let app = launchLoadedViewer()
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Settings"].exists)
+        XCTAssertFalse(app.buttons["FiestaBot"].exists, "FiestaBot is retired on TV")
+    }
+
     func testMovingRightFromPanelsReachesSettings() {
         let app = launchLoadedViewer()
         XCUIRemote.shared.press(.select)
@@ -120,5 +133,141 @@ final class ViewerNavigationUITests: XCTestCase {
         XCTAssertLessThan(Int(pixel[0]), 20, "the empty board should remain OLED black when focused")
         XCTAssertLessThan(Int(pixel[1]), 20)
         XCTAssertLessThan(Int(pixel[2]), 20)
+    }
+
+    /// Current native board evidence complements the offscreen layer probes.
+    private func captureMilestoneBoard(rows: Int, cols: Int, matrix: Bool, name: String) throws {
+        continueAfterFailure = false
+        var panel = try JSONSerialization.jsonObject(with: Data(Fixtures.panelJSON.utf8)) as! [String: Any]
+        panel["id"] = "milestone-board"; panel["name"] = name
+        panel["rows"] = rows; panel["cols"] = cols
+        panel["auto_dim"] = ["enabled": false, "start": "22:00", "end": "07:00"]
+        if matrix {
+            panel["render_style"] = "led_matrix"
+            panel["device_model_spec"] = ["geometry": ["kind": "pixels", "width": cols, "height": rows]]
+        } else {
+            panel["notes_wide"] = cols / 15; panel["notes_tall"] = rows / 3
+        }
+        let body = String(decoding: try JSONSerialization.data(withJSONObject: panel), as: UTF8.self)
+        let cells = (0..<rows).map { row in (0..<cols).map { col in 63 + (row + col) % 6 } }
+        let frame = String(decoding: try JSONSerialization.data(withJSONObject: [
+            "characters": cells, "message": "Milestone board", "rows": rows, "cols": cols
+        ]), as: UTF8.self)
+        server = try FixtureHTTPServer(panelsBody: "{\"panels\":[\(body)],\"total\":1}",
+                                       additionalPanels: ["milestone-board": body],
+                                       additionalFrames: ["milestone-board": frame])
+        let app = XCUIApplication()
+        let connection = "{\"host\":\"http://127.0.0.1:\(server!.port)\",\"displayName\":\"Milestone Hub\",\"defaultPanelRef\":\"milestone-board\"}"
+        let encoded = Data(connection.utf8).map { String(format: "%02x", $0) }.joined()
+        app.launchArguments = ["-fiestaboard.connection", "<\(encoded)>", "-fiestaboard.signedOut", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        // Split-flap arrays can legitimately offer a resize before exposing
+        // their wake target. Prove that expected state, dismiss the real
+        // offer, then require the named viewer and its native focus.
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.buttons[name].exists || app.buttons["Later"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "taco-loader").firstMatch.waitForNonExistence(timeout: 5))
+        if app.buttons["Later"].exists {
+            XCTAssertTrue(app.buttons["Resize for this TV"].hasFocus)
+            attachMilestoneEvidence("\(name) — resize offer focused", app: app)
+            XCUIRemote.shared.press(.right)
+            XCTAssertTrue(app.buttons["Later"].hasFocus)
+            attachMilestoneEvidence("\(name) — resize Later focused", app: app)
+            XCUIRemote.shared.press(.select)
+            XCTAssertTrue(app.buttons["Later"].waitForNonExistence(timeout: 3))
+        }
+        XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 5))
+        let focused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.buttons[name].hasFocus }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed)
+        attachMilestoneEvidence("\(name) — native board focused", app: app)
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        attachMilestoneEvidence("\(name) — native overlay Panels focused", app: app)
+    }
+
+    func testMilestoneNoteArrayNativeCapture() throws {
+        try captureMilestoneBoard(rows: 6, cols: 30, matrix: false, name: "Viewer note-array 2x2")
+    }
+    func testMilestonePartialNoteArrayNativeCapture() throws {
+        try captureMilestoneBoard(rows: 7, cols: 34, matrix: false, name: "Viewer note-array partial")
+    }
+    func testMilestoneLEDNativeCapture() throws {
+        try captureMilestoneBoard(rows: 64, cols: 64, matrix: true, name: "Viewer LED 64x64")
+    }
+
+    // MARK: A4b — the glass overlay
+
+    /// Back takes the overlay down first; only a second Back leaves.
+    func testBackDismissesTheOverlayBeforeLeavingTheViewer() {
+        let app = launchLoadedViewer()
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.buttons["Panels"].waitForNonExistence(timeout: 3), "Back should dismiss the overlay")
+        XCTAssertFalse(app.staticTexts["Panels"].exists, "…and stay on the viewer")
+        XCTAssertEqual(app.state, .runningForeground)
+
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.staticTexts["Panels"].waitForExistence(timeout: 5), "a second Back leaves for Panels")
+    }
+
+    private struct ProbeExport: Decodable {
+        struct Node: Decodable { let id: String; let frame: CGRect }
+        let nodes: [Node]
+    }
+
+    /// XCUIScreen shots of the overlay up, per 07b material (DD4), with the
+    /// bar's registry frame checked against A4 (80, 60, 1760).
+    private func overlayShot(material: String, variant: String, name: String) throws {
+        let probeURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("viewer-probes-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: probeURL) }
+        let app = launchLoadedViewer(extraArguments: ["-fiestaboard.viewerMaterial", material,
+                                                      "-fiestaboard.figmaProbeOut", probeURL.path])
+        defer { app.terminate() }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(app.buttons["Panels"].waitForExistence(timeout: 3))
+        Thread.sleep(forTimeInterval: 0.6) // the fade-in and the material settle
+
+        XCTAssertTrue(app.buttons["Panels"].hasFocus)
+        attachMilestoneEvidence("\(name) — Panels focused", app: app)
+        XCUIRemote.shared.press(.right)
+        XCTAssertTrue(app.buttons["Settings"].hasFocus)
+        attachMilestoneEvidence("\(name) — Settings focused", app: app)
+
+        var nodes: [String: CGRect] = [:]
+        for _ in 0..<50 {
+            if let data = try? Data(contentsOf: probeURL),
+               let export = try? JSONDecoder().decode(ProbeExport.self, from: data) {
+                nodes = Dictionary(export.nodes.map { ($0.id, $0.frame) }, uniquingKeysWith: { $1 })
+                if nodes[variant] != nil { break }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        let bar = try XCTUnwrap(nodes["I166:191865;149:182603;166:193875"], "the overlay bar registered")
+        XCTAssertEqual(bar.minX, 80, accuracy: 1)
+        XCTAssertEqual(bar.minY, 60, accuracy: 1)
+        XCTAssertEqual(bar.width, 1760, accuracy: 1)
+        XCTAssertEqual(nodes[variant], bar, "drawn as 07b \(variant)")
+    }
+
+    func testOverlayShotLiquidGlass() throws {
+        try overlayShot(material: "glass", variant: "154:8170", name: "Viewer overlay — Liquid Glass (154:8170)")
+    }
+
+    /// Reduce Transparency on (forced: the simulator setting can't be
+    /// toggled from XCUITest). Off is the glass shot above.
+    func testOverlayShotReduceTransparency() throws {
+        try overlayShot(material: "opaque", variant: "250:110540", name: "Viewer overlay — Reduce Transparency (250:110540)")
+    }
+
+    func testOverlayShotRegularMaterialFallback() throws {
+        try overlayShot(material: "regular", variant: "250:110532", name: "Viewer overlay — pre-tvOS 26 fallback (250:110532)")
     }
 }

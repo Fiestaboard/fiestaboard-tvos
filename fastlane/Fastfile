@@ -26,7 +26,7 @@ platform :tvos do
       reject_if_possible: false
     }
     if ENV.fetch("RELEASE_VERSION") != "1.0"
-      options[:release_notes] = { "en-US" => "Improvements and fixes for your FiestaBoard displays." }
+      options[:release_notes] = { "en-US" => "Improvements and fixes for your FiestaPanel displays." }
     end
     deliver(**options)
   end

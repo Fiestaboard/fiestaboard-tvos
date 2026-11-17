@@ -40,6 +40,7 @@ public struct BoardCanvas: View {
                 let began = CACurrentMediaTime()
                 #endif
                 let active = animated && !reduceMotion ? transition : nil
+                Self.paintNoteBezels(layout, background: background, in: &context)
                 if let atlas, atlas.key == atlasKey {
                     atlas.paint(layout, transition: active, at: timeline.date, in: &context)
                 } else {
@@ -53,7 +54,9 @@ public struct BoardCanvas: View {
             }
         }
         .frame(width: layout.width, height: layout.height)
-        .background(background == .black ? Color.black : background.swiftUI)
+        // A note array is separate Notes on OLED black: no surround across
+        // the gaps, each Note's bezel is painted in the canvas.
+        .background(background == .black || !layout.notes.isEmpty ? Color.black : background.swiftUI)
         // The flip is announced to VoiceOver by the viewer, not per tile:
         // 810 accessibility elements would make the board unusable to browse.
         .accessibilityHidden(true)
@@ -86,7 +89,7 @@ public struct BoardCanvas: View {
                                   in context: inout GraphicsContext) {
         let white = background == .white
         let unlit = white ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
-        let ink = white ? Color.black : Color(hex: "#f0f0e8")
+        let ink = white ? Color.black : Color(hex: FiestaTokenValues.Board.textOnDark.hex)
         let font = BoardFont.glyph(size: tile.height * BoardLayout.fontSizeRatio)
         var resolved: [Character: GraphicsContext.ResolvedText] = [:]
         if let progress {
@@ -102,6 +105,33 @@ public struct BoardCanvas: View {
         drawSeam(tile: tile, seam: seam(forTileHeight: tile.height), whiteHardware: white, in: &context)
     }
 
+    /// A10 (DD5, 07b `149:184613`): each Note's bezel, in FiestaUI's bezel
+    /// tokens (the light pair on a white board). A trailing partial Note is
+    /// the same bezel cut open: drawn past the cut and clipped there, so its
+    /// open side has neither border nor corner.
+    static func paintNoteBezels(_ layout: BoardLayout, background: BoardColor,
+                                in context: inout GraphicsContext) {
+        guard !layout.notes.isEmpty else { return }
+        let white = background == .white
+        let fill = Color(hex: (white ? FiestaTokenValues.Board.bezelLight : FiestaTokenValues.Board.bezelDark).hex)
+        let edge = Color(hex: (white ? FiestaTokenValues.Board.bezelBorderLight
+                                     : FiestaTokenValues.Board.bezelBorderDark).hex)
+        let border = layout.bezelBorder
+        let radius = layout.bezelRadius
+        let past = radius + border
+        for note in layout.notes {
+            var bezel = context
+            bezel.clip(to: Path(note.rect))
+            var face = note.rect
+            if note.openRight { face.size.width += past }
+            if note.openBottom { face.size.height += past }
+            bezel.fill(Path(roundedRect: face, cornerRadius: radius, style: .circular), with: .color(fill))
+            bezel.stroke(Path(roundedRect: face.insetBy(dx: border / 2, dy: border / 2),
+                              cornerRadius: max(0, radius - border / 2), style: .circular),
+                         with: .color(edge), lineWidth: border)
+        }
+    }
+
     static func paint(_ layout: BoardLayout, background: BoardColor,
                       transition: BoardFlipTransition?, at date: Date,
                       in context: inout GraphicsContext) {
@@ -109,7 +139,7 @@ public struct BoardCanvas: View {
         let whiteHardware = background == .white
         // The face reflects room light; only the hardware gaps are OLED black.
         let unlit = whiteHardware ? Color(hex: "#e8e8e8") : BoardColor.black.swiftUI
-        let ink = whiteHardware ? Color.black : Color(hex: "#f0f0e8")
+        let ink = whiteHardware ? Color.black : Color(hex: FiestaTokenValues.Board.textOnDark.hex)
 
         // Resolve each distinct glyph once, then stamp it.
         var resolved: [Character: GraphicsContext.ResolvedText] = [:]

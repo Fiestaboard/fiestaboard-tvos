@@ -131,6 +131,14 @@ struct SignInScreen: View {
     @Environment(AppModel.self) private var app
     @State private var model: SignInModel?
     @State private var deviceSignInEnabled = false
+    /// The phone path takes focus when it appears (A3): after a 401 the
+    /// remote should land there, not on the username field the capability
+    /// check left it on.
+    @FocusState private var phonePathFocused: Bool
+    /// Where the remote is among the credential controls, and where it was
+    /// when the capability check started (#19 review 7.3).
+    @FocusState private var field: SignInFocusPolicy.Field?
+    @State private var fieldAtCheck: SignInFocusPolicy.Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -140,8 +148,9 @@ struct SignInScreen: View {
                 errorSection
                 if deviceSignInEnabled {
                     Section {
-                        Button("Sign in with a phone or computer") { app.route = .deviceSignIn }
+                        Button(TVCopy.DeviceSignIn.title) { app.route = .deviceSignIn }
                             .accessibilityIdentifier("device-sign-in")
+                            .focused($phonePathFocused)
                     } footer: {
                         Text("Scan a QR code or enter a short code in your browser. You can also use username and password below.")
                     }
@@ -160,11 +169,22 @@ struct SignInScreen: View {
         .onExitCommand { model?.back() }
         .onAppear {
             if model == nil { model = SignInModel(app: app) }
+            fieldAtCheck = field
             deviceSignInEnabled = app.connection.deviceSignInEnabled
         }
         .task {
             try? await app.connection.refreshSignInCapability()
             deviceSignInEnabled = app.connection.deviceSignInEnabled
+        }
+        .onChange(of: deviceSignInEnabled, initial: true) { _, enabled in
+            guard enabled else { return }
+            // A hop, so the row exists before focus is asked for — and only
+            // if the remote hasn't moved since the check started.
+            Task { @MainActor in
+                if SignInFocusPolicy.takePhonePath(enabled: enabled, focusAtCheck: fieldAtCheck, focusNow: field) {
+                    phonePathFocused = true
+                }
+            }
         }
     }
 
@@ -183,10 +203,8 @@ struct SignInScreen: View {
     }
 
     private var header: some View {
-        FiestaScreenHeading(title: "Sign in", subtitle: "Use the account you created on your FiestaBoard.",
+        FiestaScreenHeading(title: "Sign in", subtitle: "Use the account you created on your FiestaBoard hub.",
                             context: boardName)
-        .padding(.horizontal, Fiesta.Metrics.safeInset)
-        .padding(.top, Fiesta.Metrics.safeInset)
         .padding(.bottom, 12)
     }
 
@@ -210,6 +228,7 @@ struct SignInScreen: View {
     private var credentialsSection: some View {
         Section {
             TextField("Username", text: usernameBinding)
+                .focused($field, equals: .username)
                 .textContentType(.username)
                 .autocorrectionDisabled()
                 .accessibilityLabel("Username")
@@ -218,6 +237,7 @@ struct SignInScreen: View {
             // revealed on a sixty-five inch screen in a living room is a
             // worse default than the typing it saves.
             SecureField("Password", text: passwordBinding)
+                .focused($field, equals: .password)
                 .textContentType(.password)
                 .accessibilityLabel("Password")
         } header: {
@@ -236,12 +256,13 @@ struct SignInScreen: View {
         VStack(alignment: .leading, spacing: 8) {
             // Said plainly because it is a real commitment: the credential is
             // kept so a lapsed session never sends anyone back to a remote.
-            Text(deviceSignInEnabled ? "Only a revocable TV credential is stored in this Apple TV’s Keychain. Your account password is not saved." : "Your username and password are stored in this Apple TV’s Keychain for this server’s legacy sign-in.")
+            Text(deviceSignInEnabled ? "Only a revocable TV credential is stored in this Apple TV’s Keychain. Your account password is not saved." : "Your username and password are stored in this Apple TV’s Keychain for this hub’s legacy sign-in.")
 
             if isUnencrypted {
-                Text("The connection to this board isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")
+                Text("The connection to this hub isn't encrypted. That's normal for a device on your own network — it has no certificate to prove who it is — but anyone who can watch that network could read your password. Sign in only on a network you trust.")
             }
         }
+        .foregroundStyle(Fiesta.Colors.mutedForeground)
         // One passage, not two rows to swipe through.
         .accessibilityElement(children: .combine)
     }
@@ -254,6 +275,7 @@ struct SignInScreen: View {
             // reliably bring it back. `SignInModel.submit`'s `guard
             // !isSubmitting` is the re-entrancy guard instead.
             Button("Sign in") { Task { await model?.submit() } }
+                .focused($field, equals: .submit)
                 .accessibilityLabel("Sign in to \(boardName)")
         } footer: {
             submitFooter
@@ -276,10 +298,13 @@ struct SignInScreen: View {
     /// that says what it costs.
     private var anotherBoardSection: some View {
         Section {
-            Button("Use another board", role: .destructive) { model?.useAnotherBoard() }
-                .accessibilityLabel("Use another board")
+            Button(role: .destructive) { model?.useAnotherBoard() } label: {
+                Text(TVCopy.SignIn.useAnother).interactiveDestructiveForeground()
+            }
+                .accessibilityLabel(TVCopy.SignIn.useAnother)
         } footer: {
-            Text("Forgets \(boardName) on this Apple TV and looks for another board.")
+            Text("Forgets \(boardName) on this Apple TV and looks for another hub.")
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
         }
     }
 
@@ -296,5 +321,17 @@ struct SignInScreen: View {
     private var passwordBinding: Binding<String> {
         Binding(get: { model?.password ?? "" },
                 set: { model?.setPassword($0) })
+    }
+}
+
+/// When Sign in may move the remote to "Sign in with your phone" (A3, #19
+/// review 7.3): only once the phone path is enabled, and only if the remote
+/// is still where it was when the capability check started — someone who
+/// has already moved to the password field keeps their place.
+enum SignInFocusPolicy {
+    enum Field: Hashable { case username, password, submit }
+
+    static func takePhonePath(enabled: Bool, focusAtCheck: Field?, focusNow: Field?) -> Bool {
+        enabled && focusNow == focusAtCheck
     }
 }

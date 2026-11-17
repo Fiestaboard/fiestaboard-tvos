@@ -12,6 +12,9 @@ import SwiftUI
 /// these is up the board has given up its full-screen focus target, so the
 /// primary action is what the remote should be holding.
 struct ViewerMessage: View {
+    /// Registry probe on the card (A4a geometry test).
+    static let probe = "tv:viewer-message"
+
     let title: String
     let detail: String
     let primaryTitle: String
@@ -26,6 +29,11 @@ struct ViewerMessage: View {
     }
 
     var body: some View {
+        ViewerGlassContainer { card }
+            .onAppear { primaryFocused = true }
+    }
+
+    private var card: some View {
         VStack(spacing: 16) {
             Text(title)
                 .font(.title)
@@ -34,7 +42,7 @@ struct ViewerMessage: View {
 
             Text(detail)
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Fiesta.Colors.mutedForeground)
                 .multilineTextAlignment(.center)
 
             actions.padding(.top, 16)
@@ -43,12 +51,13 @@ struct ViewerMessage: View {
         .frame(maxWidth: 840)
         .padding(.horizontal, 56)
         .padding(.vertical, 48)
-        .background(.regularMaterial, in: cardShape)
-        .overlay(cardShape.strokeBorder(Fiesta.Colors.border, lineWidth: 1))
+        // A4b: the viewer's material (glass on tvOS 26; DD4 interims).
+        .viewerSurface(in: cardShape)
         // Lifts the card off a live board behind it.
         .shadow(color: .black.opacity(0.7), radius: 40, y: 16)
-        .padding(Fiesta.Metrics.safeInset)
-        .onAppear { primaryFocused = true }
+        .figmaNode(Self.probe)
+        // A4a: the viewer is full-bleed, so title-safe is applied here.
+        .padding(EdgeInsets(top: PlatformTV.safeTopBottom, leading: PlatformTV.safeSide, bottom: PlatformTV.safeTopBottom, trailing: PlatformTV.safeSide))
     }
 
     @ViewBuilder

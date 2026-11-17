@@ -38,8 +38,13 @@ struct ViewerScreen: View {
                     } else {
                         boardLayer(in: proxy.size)
                     }
-                    if model?.snapshot.connection == .stale {
-                        offlineIndicator.opacity(app.oledOutput.brightness)
+                    // A6b: the status chip on its own, with the overlay down.
+                    // It replaced the "Reconnecting" pill: an outage reads
+                    // "Hub unreachable · showing the last update".
+                    if model?.chipStandaloneVisible == true, let chip = model?.statusChip {
+                        StandaloneStatusChip(content: chip)
+                            .opacity(app.oledOutput.brightness)
+                            .transition(.opacity)
                     }
                     if model?.resizeOfferVisible == true { resizeOffer }
                     if model?.overlayVisible == true { overlay }
@@ -53,12 +58,14 @@ struct ViewerScreen: View {
             // app declares never ran at all.
             .animation(.easeInOut(duration: 0.22), value: model?.overlayVisible)
             .animation(.easeOut(duration: 0.28), value: model?.resizeOfferVisible)
+            // Strip `166:206938`: the chip fades over 0.3 s, instantly under Reduce Motion.
+            .animation(Self.chipFade(reduceMotion: reduceMotion), value: model?.chipStandaloneVisible)
             .onChange(of: [model?.snapshot.rows ?? 0, model?.snapshot.cols ?? 0]) { _, _ in
                 model?.considerResizeOffer(for: proxy.size)
             }
             .onChange(of: proxy.size) { _, _ in model?.considerResizeOffer(for: proxy.size) }
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea() // full-bleed: the board fills the TV; overlays apply PlatformTV title-safe
         .onAppear {
             bind(model ?? ViewerModel(app: app, ref: ref))
             // Keeping the TV awake is AppModel's job, not this view's: it
@@ -81,10 +88,22 @@ struct ViewerScreen: View {
         .onDisappear { model?.stop() }
         .onMoveCommand { _ in remoteInteraction() }
         .onPlayPauseCommand { remoteInteraction() }
-        .onExitCommand { if app.interactWithOLED() { model?.showOverlay() } else { model?.stop(); app.showPanels() } }
-        // The indicators are the only sign the board stopped answering, and a
-        // sign is no use to VoiceOver: nothing about them takes focus.
-        .onChange(of: model?.snapshot.connection) { old, new in announce(from: old, to: new) }
+        .onExitCommand { back() }
+    }
+
+    /// Strip `166:206938`: the chip fades over 0.3 s, instantly under Reduce Motion.
+    static func chipFade(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.3)
+    }
+
+    /// A4b: Back wakes a resting screen, then takes the overlay down, and
+    /// only then leaves the viewer.
+    private func back() {
+        switch ViewerBack.action(oledConsumed: app.interactWithOLED(), overlayVisible: model?.overlayVisible == true) {
+        case .wake: model?.showOverlay()
+        case .dismissOverlay: model?.hideOverlay()
+        case .leave: model?.stop(); app.showPanels()
+        }
     }
 
     private func bind(_ fresh: ViewerModel) {
@@ -93,20 +112,6 @@ struct ViewerScreen: View {
                              panelDimmed: fresh.snapshot.dimmed)
         fresh.start()
         onModel?(fresh)
-    }
-
-    private func announce(from old: ConnectionState?, to new: ConnectionState?) {
-        switch (old, new) {
-        case (.stale?, .live?):
-            Announce.say("Reconnected to FiestaBoard.")
-        case (_, .stale?):
-            Announce.say("Disconnected from FiestaBoard. Showing the last message.")
-        // No arm for `.unauthorized`: see the chrome stack in `body`. This
-        // view is gone in the same update that sets the state, so the arm
-        // that used to be here announced from a view nobody was on.
-        default:
-            break
-        }
     }
 
     // MARK: Layers
@@ -215,21 +220,20 @@ struct ViewerScreen: View {
 
     private var overlay: some View {
         ViewerOverlay(panelName: model?.snapshot.panel?.name ?? "Panel",
+                      subtitle: overlaySubtitle,
+                      // DD25: plain content in the bar, which is the glass.
+                      chip: model?.statusChip.map { AnyView(StatusChipView(content: $0, placement: .inBar)) },
                       onInteraction: { model?.keepOverlayAlive() },
                       onPanels: { model?.stop(); app.showPanels() },
-                      onSettings: { model?.stop(); app.showSettings() },
-                      onFiestaBot: app.connection.usesDeviceCredential ? nil : {
-                          if app.showFiestaBot() { model?.stop() }
-                      })
+                      onSettings: { model?.stop(); app.showSettings() })
     }
 
-    /// Amber, and the words say the app is still trying: the frame on the
-    /// flaps is still true, it is only out of date.
-    private var offlineIndicator: some View {
-        BoardStatusPill(title: "Reconnecting",
-                        systemImage: "wifi.exclamationmark",
-                        tint: Fiesta.Colors.offline,
-                        spoken: "Disconnected from FiestaBoard. Showing the last message.")
+    /// 07b `154:8173`: what the panel is, and which hub it is on.
+    private var overlaySubtitle: String? {
+        guard let panel = model?.snapshot.panel else { return nil }
+        let kind = panel.renderStyle == .ledMatrix ? "LED matrix" : "Split-flap"
+        guard let hub = app.connection.saved?.displayName, !hub.isEmpty else { return kind }
+        return "\(kind) · \(hub)"
     }
 
     /// Whether the board is the only thing a press could be aimed at.
@@ -248,8 +252,8 @@ struct ViewerScreen: View {
     /// web page, so that is where the sentence points — see `Models.swift`,
     /// which argues the same rule out for the setup copy.
     private var deletedState: some View {
-        ViewerMessage(title: "This panel no longer exists",
-                      detail: "It was deleted on your board's web page.",
+        ViewerMessage(title: TVCopy.Viewer.deletedTitle,
+                      detail: "It was deleted on your hub's web page.",
                       primaryTitle: "Back to panels",
                       primaryAction: { model?.stop(); app.showPanels() })
     }
@@ -259,9 +263,9 @@ struct ViewerScreen: View {
     /// the recreating happens on the board's web page, not in "the FiestaBoard
     /// app" — which is the icon the person reading this is standing in.
     private var missingBoardState: some View {
-        ViewerMessage(title: "This panel's board was removed",
+        ViewerMessage(title: TVCopy.Viewer.boardMissingTitle,
                       detail: "The virtual board behind this panel was deleted. "
-                            + "Open your board's web page in a browser on a phone or "
+                            + "Open your hub's web page in a browser on a phone or "
                             + "computer to delete and recreate the panel.",
                       primaryTitle: "Back to panels",
                       primaryAction: { model?.stop(); app.showPanels() })
@@ -282,5 +286,20 @@ struct ViewerScreen: View {
         model?.dismissResizeOffer()
         model?.stop()
         app.showSettings()
+    }
+}
+
+/// What Back does in the viewer (A4b).
+enum ViewerBack: Equatable {
+    /// A resting (OLED-care) screen wakes, showing the overlay.
+    case wake
+    /// The overlay goes before the viewer does.
+    case dismissOverlay
+    /// Back to Panels.
+    case leave
+
+    static func action(oledConsumed: Bool, overlayVisible: Bool) -> ViewerBack {
+        if oledConsumed { return .wake }
+        return overlayVisible ? .dismissOverlay : .leave
     }
 }

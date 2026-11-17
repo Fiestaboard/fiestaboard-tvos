@@ -70,6 +70,7 @@ public final class SignageSettings: @unchecked Sendable {
         static let drift = "fiestaboard.signage.driftEnabled"
         static let matrixPresentation = "fiestaboard.matrix.presentation"
         static let matrixTransitionStyle = "fiestaboard.matrix.transitionStyle"
+        static let openAtLaunchOffered = "fiestaboard.panels.openAtLaunchOffered"
     }
 
     private let defaults: UserDefaults
@@ -105,6 +106,14 @@ public final class SignageSettings: @unchecked Sendable {
                 .flatMap(AutoDimOverride.init(rawValue:)) ?? .followPanel
         }
         set { defaults.set(newValue.rawValue, forKey: Key.autoDimOverride) }
+    }
+
+    /// Whether Panels has asked "Always open …?" on this TV (07b A3
+    /// `166:149722`). Asked once: either answer settles it, and Settings ›
+    /// This Apple TV › Open at launch changes it later.
+    public var openAtLaunchOffered: Bool {
+        get { defaults.bool(forKey: Key.openAtLaunchOffered) }
+        set { defaults.set(newValue, forKey: Key.openAtLaunchOffered) }
     }
 
     /// Whether this device opted into gentle image movement. Off by default.

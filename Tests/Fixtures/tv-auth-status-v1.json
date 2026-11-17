@@ -1,0 +1,25 @@
+{
+  "$comment": "GET /api/auth/status as a TV bearer sees it (PHASE-4-TV-PLAN §3.2 item 3, 'tv-auth-status-v1.json'). Authored from the hub's StatusResponse and _request_identity (FiestaBoard src/auth/routes.py @ f5011f221) until the hub publishes tests/fixtures/auth/tv-auth-status-v1.json; replace byte for byte then.",
+  "tv": {
+    "enabled": true,
+    "setup_required": false,
+    "authenticated": true,
+    "username": "maya",
+    "mode": "enabled",
+    "first_run": false,
+    "session_management_supported": true,
+    "auth_kind": "tv",
+    "tv_sign_in": { "supported": true, "enabled": true, "protocol_version": 1 }
+  },
+  "tv_no_username": {
+    "enabled": true,
+    "setup_required": false,
+    "authenticated": false,
+    "username": null,
+    "mode": "enabled",
+    "first_run": false,
+    "session_management_supported": true,
+    "auth_kind": null,
+    "tv_sign_in": { "supported": true, "enabled": true, "protocol_version": 1 }
+  }
+}

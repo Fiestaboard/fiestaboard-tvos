@@ -18,10 +18,17 @@ enum QRCode {
 }
 struct QRCodeView: View {
     let url: URL
+    /// The square the code fills: 07b A2's 348 pt (`166:147625`). Modules
+    /// stay whole points, so the code is the largest integer scale that fits,
+    /// centred.
+    var side: CGFloat = 348
     var body: some View {
-        if let image = QRCode.image(for: url.absoluteString) {
+        if let module = QRCode.image(for: url.absoluteString, scale: 1),
+           let image = QRCode.image(for: url.absoluteString, scale: max(1, Int(side) / max(1, module.width))) {
             Image(decorative: image, scale: 1).interpolation(.none)
-                .frame(width: CGFloat(image.width), height: CGFloat(image.height)).accessibilityHidden(true)
+                .frame(width: CGFloat(image.width), height: CGFloat(image.height))
+                .frame(width: side, height: side)
+                .accessibilityHidden(true)
         }
     }
 }

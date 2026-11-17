@@ -107,7 +107,7 @@ private final class DeviceModelHarness {
         _ = try await store.connect(to: URL(string: "http://board.test")!, displayName: "Board")
     }
     func model(now: @escaping () -> Date = Date.init, sleep: @escaping (TimeInterval) async throws -> Void) -> DeviceSignInModel {
-        DeviceSignInModel(connection: store, now: now, sleep: sleep, onSuccess: {})
+        DeviceSignInModel(connection: store, now: now, sleep: sleep, onSuccess: { _ in })
     }
 }
 private actor PollSleeper {

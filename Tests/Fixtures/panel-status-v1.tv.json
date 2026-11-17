@@ -1,0 +1,59 @@
+{
+  "$comment": "tvOS companion to the hub-generated panel-status-v1.json (vendored byte for byte; see SOURCE.json). The hub file holds only what the hub produces. This file adds, keyed by case name: the chip each hub case reads (DD22 copy, America/Los_Angeles), and the client-only cases (old hub, Date header missing / skewed, override expired by the hub's clock, hub unreachable, reconnected), each derived from a hub case by `from`. `remove` drops body keys, `headers` replaces the hub case's headers, `local_now` is the TV's own clock when the response arrives (default: the hub's Date), and `connection` is the client-side reachability. Same cases as the Android TV twin (G6a, androidtv #19); the copy is DD22's, which Android adopts in G6b. The override ends at 05:00:37, so 2h 42m 37s left reads \"2h 43m left\": the remaining time is cut to whole seconds, then rounded up to minutes (one rule for both TV apps).",
+  "protocol": "panel-status-v1",
+  "fixture": "panel-status-v1.json",
+  "chips": {
+    "manual": null,
+    "schedule": { "kind": "schedule", "badge": null, "text": "Schedule · next change 9:00 PM", "persistent": false },
+    "override-with-expiry": { "kind": "override", "badge": "Override", "text": "2h 43m left · Holds until 9:00 PM", "persistent": false },
+    "override-until-cancelled": { "kind": "override", "badge": "Override", "text": "Holds until canceled", "persistent": false },
+    "silenced-indicator": { "kind": "silenced", "badge": null, "text": "Silenced until 7:00 AM · showing a message", "persistent": true },
+    "silenced-freeze": { "kind": "silenced", "badge": null, "text": "Silenced until 7:00 AM · showing the last update", "persistent": false },
+    "silenced-page": { "kind": "silenced", "badge": null, "text": "Silenced until 7:00 AM · showing the silence page", "persistent": false },
+    "paused": { "kind": "paused", "badge": null, "text": "Paused · showing the last update", "persistent": false },
+    "paused+override": { "kind": "paused", "badge": null, "text": "Paused · showing the last update", "persistent": false },
+    "override+silenced": { "kind": "override", "badge": "Override", "text": "2h 43m left · Holds until 9:00 PM", "persistent": false },
+    "board-missing": null
+  },
+  "client_cases": [
+    {
+      "name": "old-server",
+      "from": "override-with-expiry",
+      "remove": ["status"],
+      "expect_chip": null
+    },
+    {
+      "name": "date-header-missing",
+      "from": "override-with-expiry",
+      "headers": { "Cache-Control": "no-store" },
+      "local_now": "2026-11-08T02:18:00Z",
+      "expect_chip": { "kind": "override", "badge": "Override", "text": "2h 43m left · Holds until 9:00 PM", "persistent": false }
+    },
+    {
+      "name": "date-header-skewed",
+      "from": "override-with-expiry",
+      "headers": { "Date": "Sun, 08 Nov 2026 02:23:00 GMT", "Cache-Control": "no-store" },
+      "local_now": "2026-11-08T02:18:00Z",
+      "expect_chip": { "kind": "override", "badge": "Override", "text": "2h 38m left · Holds until 9:00 PM", "persistent": false }
+    },
+    {
+      "name": "override-expired-by-date-header",
+      "from": "override-with-expiry",
+      "headers": { "Date": "Sun, 08 Nov 2026 05:01:00 GMT", "Cache-Control": "no-store" },
+      "local_now": "2026-11-08T02:18:00Z",
+      "expect_chip": null
+    },
+    {
+      "name": "hub-unreachable",
+      "from": "override-with-expiry",
+      "connection": "unreachable",
+      "expect_chip": { "kind": "hub_unreachable", "badge": null, "text": "Hub unreachable · showing the last update", "persistent": true }
+    },
+    {
+      "name": "reconnected",
+      "from": "schedule",
+      "connection": "reconnected",
+      "expect_chip": { "kind": "reconnected", "badge": null, "text": "Reconnected", "persistent": false }
+    }
+  ]
+}

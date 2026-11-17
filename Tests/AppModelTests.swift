@@ -136,6 +136,56 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    /// Deep-link hardening (#24 S3): only the two routes the carousel sends
+    /// are honoured, and a panel id must have the hub's id / short-code shape.
+    /// A crafted link opens nothing and is not remembered as the last panel.
+    func testCraftedTopShelfLinksAreRefused() async throws {
+        let model = makeModel()
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await model.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        model.showSettings()   // a baseline neither route can produce
+        for rejected in ["fiestaboard://panel/x%3Fy=1",                 // decodes to "x?y=1"
+                         "fiestaboard://panel/%2E%2E",                  // decodes to ".."
+                         "fiestaboard://panel/a%2Fb",                   // decodes to "a/b"
+                         "fiestaboard://panel/a%20b",                   // whitespace
+                         "fiestaboard://panel/abc%0A",                  // a trailing newline
+                         "fiestaboard://panel/" + String(repeating: "a", count: 65),
+                         "fiestaboard://panel/abc123def456?x=1",        // a query
+                         "fiestaboard://panel/abc123def456#frag",       // a fragment
+                         "fiestaboard://panels?x=1",
+                         "fiestaboard://user@panel/abc123def456",
+                         "fiestaboard://panel:99/abc123def456",
+                         "fiestaboard://settings"] {                    // unknown route
+            model.openTopShelfURL(URL(string: rejected)!)
+            XCTAssertEqual(model.route, .settings, rejected)
+            XCTAssertNil(model.lastViewedPanelRef, rejected)
+        }
+        XCTAssertTrue(AppModel.isPanelRef("abc123def456"))
+        XCTAssertTrue(AppModel.isPanelRef("1"))
+        XCTAssertTrue(AppModel.isPanelRef("5f0c-uuid_like-ID"))
+        XCTAssertFalse(AppModel.isPanelRef(""))
+        XCTAssertFalse(AppModel.isPanelRef("é"))
+        model.openTopShelfURL(URL(string: "fiestaboard://panel/" + String(repeating: "a", count: 64))!)
+        XCTAssertEqual(model.route, .viewer(String(repeating: "a", count: 64)), "64 characters is the limit, not past it")
+    }
+
+    /// A7: the carousel's More Info (`displayAction`) opens Panels, under
+    /// the same signed-in guard as a panel link.
+    func testTheMoreInfoLinkOpensPanelsOnlyForAConnectedBoard() async throws {
+        let model = makeModel()
+        let link = URL(string: "fiestaboard://panels")!
+        model.openTopShelfURL(link)
+        XCTAssertEqual(model.route, .connecting)
+        StubURLProtocol.enqueue(.json(Fixtures.authStatusDisabled), for: "/api/auth/status")
+        _ = try await model.connection.connect(to: URL(string: "http://host:4420")!, displayName: "Board")
+        model.openTopShelfURL(URL(string: "fiestaboard://panel/abc123def456")!)
+        XCTAssertEqual(model.route, .viewer("abc123def456"))
+        model.openTopShelfURL(link)
+        XCTAssertEqual(model.route, .panels)
+        model.openTopShelfURL(URL(string: "fiestaboard://panels/extra")!)
+        XCTAssertEqual(model.route, .panels)
+    }
+
     /// The carousel outlives the session it was built from. Home keeps
     /// vending an item after someone signs out of the board, and the link it
     /// sends must not walk straight past the sign-in screen into a panel this
@@ -288,7 +338,12 @@ final class AppModelTests: XCTestCase {
     /// A list the caller already holds needs no second fetch — this is the
     /// entry point the panel list calls, and it is how a TV whose owner never
     /// sets a default panel gets a carousel at all.
-    func testPublishingFromALoadedPanelListAsksTheBoardForNothing() async throws {
+    ///
+    /// A7 changed one thing deliberately: `/panels` carries no status, so the
+    /// carousel's contextTitle costs one `GET /panel/{id}` per panel (bounded
+    /// and reused; `TopShelfStatusWiringTests`). Nothing else: no list, no
+    /// frame.
+    func testPublishingFromALoadedPanelListAsksTheBoardOnlyForStatus() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("topshelf-list-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -304,10 +359,11 @@ final class AppModelTests: XCTestCase {
         StubURLProtocol.reset()
 
         await model.publishTopShelf(panels: [panel])?.value
+        await model.topShelfStatusTask?.value
 
         XCTAssertEqual(store.items().map(\.panelID), [panel.id])
-        XCTAssertTrue(StubURLProtocol.requests.isEmpty,
-                      "made \(StubURLProtocol.requests)")
+        XCTAssertEqual(StubURLProtocol.requests.map(\.url.path), ["/api/panel/\(panel.id)"],
+                       "made \(StubURLProtocol.requests)")
     }
 
     // MARK: A board that still needs its first account

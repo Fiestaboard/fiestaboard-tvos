@@ -60,6 +60,7 @@ struct SettingsPanelPreview: View {
             in: viewport, mode: calibrationScale == nil ? .fit : .trueScale,
             diagonalInches: panel.screenDiagonalInches,
             calibration: calibrationScale ?? panel.calibrationScale,
-            colPitchIn: BoardGeometry.colPitchIn(deviceType: panel.deviceType))
+            colPitchIn: BoardGeometry.colPitchIn(deviceType: panel.deviceType),
+            noteArray: panel.isNoteArray)
     }
 }

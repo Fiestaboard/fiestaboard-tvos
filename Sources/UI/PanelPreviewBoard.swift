@@ -57,6 +57,9 @@ struct PanelPreviewBoard: View {
                                         mode: .fit,
                                         diagonalInches: panel.screenDiagonalInches,
                                         calibration: panel.calibrationScale,
-                                        colPitchIn: pitch)
+                                        colPitchIn: pitch,
+                                        // A10: a note array is separate Notes
+                                        // on the card and the Top Shelf too.
+                                        noteArray: panel.isNoteArray)
     }
 }

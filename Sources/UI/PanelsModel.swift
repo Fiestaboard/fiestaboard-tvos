@@ -63,19 +63,64 @@ final class PanelsModel {
     static let previewConcurrency = 4
 
     private let app: AppModel
+    @ObservationIgnored private let signage: SignageSettings
+    /// Whether the open-at-launch offer has been answered on this TV.
+    private var openAtLaunchAnswered: Bool
     @ObservationIgnored private var previewTask: Task<Void, Never>?
     @ObservationIgnored private var previewGeneration = UUID()
     @ObservationIgnored private var previewClient: FiestaClient?
     @ObservationIgnored private var loadGeneration = UUID()
 
-    init(app: AppModel) {
+    init(app: AppModel, signage: SignageSettings = .shared) {
         self.app = app
+        self.signage = signage
+        openAtLaunchAnswered = signage.openAtLaunchOffered
         if let cached = app.panelBrowserCache, cached.client === app.connection.client,
            !app.connection.isSignedOut {
             panels = cached.panels
             previews = cached.previews
             previewClient = cached.client
         }
+    }
+
+    // MARK: The open-at-launch offer (07b A3 `166:149722`)
+
+    /// A panel "fits this TV" when its board is there and its grid, drawn,
+    /// is within 25 % of this TV's 16:9: the viewer's own resize-offer rule
+    /// (`BoardLayout.gridSuits`), so the offer never promises a fit the
+    /// viewer then offers to fix. Not the stored screen aspect: the hub
+    /// defaults it to 16:9. LED matrices take the same rule, as on Android
+    /// (G5 `needsResizeOffer`), though the viewer never offers them a resize.
+    static func fitsThisTV(_ panel: Panel) -> Bool {
+        guard !panel.boardMissing, let rows = panel.rows, let cols = panel.cols else { return false }
+        return BoardLayout.gridSuits(rows: rows, cols: cols, noteArray: panel.isNoteArray,
+                                     screen: CGSize(width: 1920, height: 1080))
+    }
+
+    /// "Always open …?": asked once on this TV, when nothing opens at launch
+    /// yet and exactly one panel fits. With two candidates there is no
+    /// obvious answer to offer.
+    var openAtLaunchOffer: Panel? {
+        guard !openAtLaunchAnswered, app.connection.saved?.defaultPanelRef == nil else { return nil }
+        let fitting = panels.filter(Self.fitsThisTV)
+        return fitting.count == 1 ? fitting[0] : nil
+    }
+
+    /// "Always open": the offered panel opens whenever the app starts.
+    func acceptOpenAtLaunch() {
+        guard let panel = openAtLaunchOffer else { return }
+        app.connection.setDefaultPanel(ref: panel.id)
+        answerOpenAtLaunch()
+    }
+
+    /// "Not now": remembered; Settings can still set it.
+    func dismissOpenAtLaunch() {
+        answerOpenAtLaunch()
+    }
+
+    private func answerOpenAtLaunch() {
+        signage.openAtLaunchOffered = true
+        openAtLaunchAnswered = true
     }
 
     /// The picture to draw for `panel`, if any.
@@ -153,7 +198,12 @@ final class PanelsModel {
         seedPreviews(for: panels)
         let generation = app.topShelfGeneration
         let client = app.connection.client
+        // Opened here, synchronously: `load` publishes the shelf right after
+        // this returns, before the task below has started its batch (S1).
+        let app = app
+        app.beginTopShelfFrameBatch()
         previewTask = Task { [weak self] in
+            defer { app.endTopShelfFrameBatch() }
             guard let self, app.isCurrentTopShelfUpdate(generation, client: client) else { return }
             await refreshPreviews(for: panels)
         }
@@ -172,8 +222,11 @@ final class PanelsModel {
     func refreshPreviews(for panels: [Panel]) async {
         // A panel with no board has nothing to preview; asking for its
         // frame is a round trip that can only 404.
-        let targets = panels.filter { !$0.boardMissing }
+        // A panel the list carries twice costs one frame (S1).
+        var seen = Set<String>()
+        let targets = panels.filter { !$0.boardMissing && seen.insert($0.id).inserted }
         let connection = app.connection
+        let budget = app.hubRequests
         let client = connection.client
         let generation = app.topShelfGeneration
         let authGeneration = connection.connectionGeneration
@@ -199,11 +252,16 @@ final class PanelsModel {
         }
 
         var publication: Task<Void, Never>?
+        // A7b (#24 review S1): the shelf's status fetches wait for this
+        // batch, and both take their requests from `app.hubRequests`, so
+        // frames and statuses never put more than four on the hub at once.
+        app.beginTopShelfFrameBatch()
+        defer { app.endTopShelfFrameBatch() }
         await withTaskGroup(of: (String, PanelPreviewState, Bool).self) { group in
             var pending = targets.makeIterator()
             var started = 0
             while started < Self.previewConcurrency, let panel = pending.next() {
-                group.addTask { await Self.fetchPreview(for: panel, connection: connection) }
+                group.addTask { await Self.fetchPreview(for: panel, connection: connection, budget: budget) }
                 started += 1
             }
             while let result = await group.next() {
@@ -220,7 +278,7 @@ final class PanelsModel {
                 app.rememberPanelBrowser(panels: panels, previews: previews, client: client)
                 publication = app.publishTopShelf(panels: panels, previews: previews)
                 if let next = pending.next() {
-                    group.addTask { await Self.fetchPreview(for: next, connection: connection) }
+                    group.addTask { await Self.fetchPreview(for: next, connection: connection, budget: budget) }
                 }
                 // Let input and the coalescing shelf worker make progress
                 // while several completed frames are waiting in the group.
@@ -260,10 +318,12 @@ final class PanelsModel {
 
     /// Off the main actor: this is a network round trip per panel.
     private nonisolated static func fetchPreview(
-        for panel: Panel, connection: ConnectionStore
+        for panel: Panel, connection: ConnectionStore, budget: HubRequestBudget
     ) async -> (String, PanelPreviewState, Bool) {
         do {
-            let frame = try await connection.authorized { try await $0.frame(ref: panel.id) }
+            let frame = try await budget.run {
+                try await connection.authorized { try await $0.frame(ref: panel.id) }
+            }
             let preview = PanelPreview.make(from: frame, code62: panel.effectiveCode62)
             return (panel.id, .ready(preview), false)
         } catch FiestaError.unauthorized {

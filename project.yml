@@ -3,6 +3,13 @@ options:
   bundleIdPrefix: com.fiestaboard
   createIntermediateGroups: true
 
+# Test-only. Pinned exactly: snapshot goldens are sensitive to the
+# renderer the library drives, so an upgrade is a deliberate re-record.
+packages:
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    exactVersion: 1.19.7
+
 configFiles:
   Debug: Config/Signing.xcconfig
   Release: Config/Signing.xcconfig
@@ -71,7 +78,7 @@ targets:
         # that POSTs a password to that board. This string is one of four
         # coupled privacy artifacts — see the privacy section of
         # docs/PUBLISHING.md before editing it.
-        NSLocalNetworkUsageDescription: FiestaBoard connects to the board you choose to sign in with a password or device credential, display panels, and send requests. FiestaBot requests also reach the AI provider configured on that board.
+        NSLocalNetworkUsageDescription: FiestaBoard connects to the hub you choose to sign in with a password or device credential and display its panels.
         NSBonjourServices: ["_http._tcp"]
         UIAppFonts: [SplineSansMono.ttf]
         CFBundleURLTypes:
@@ -125,10 +132,15 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: Tests
+        excludes:
+          # Regression goldens are read from the source tree by path, never
+          # from the bundle.
+          - "**/__Snapshots__/**"
       - path: Spec
         type: folder
     dependencies:
       - target: FiestaBoardTV
+      - package: SnapshotTesting
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -140,6 +152,8 @@ targets:
     sources:
       - path: UITests
       - path: Tests/Support/Fixtures.swift
+      - path: Tests/Support/GlassProbe.swift
+      - path: Tests/Support/TextContrastProbe.swift
     dependencies:
       - target: FiestaBoardTV
     settings:

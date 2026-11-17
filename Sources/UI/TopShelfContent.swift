@@ -2,30 +2,44 @@ import Foundation
 import TVServices
 
 /// Builds the same content in the extension and its host-app tests.
+///
+/// A7 (07b A9 `166:207117`, DD2): a full-screen carousel, one item per
+/// panel, in the `.actions` style — the system's own Play and More Info
+/// buttons, the panel's latest frame as the hero, its name as the title,
+/// and its status (only) as the contextTitle. `.actions` hides `summary`,
+/// so nothing else is set.
 enum TopShelfContent {
-    static func make(store: TopShelfSnapshotStore) -> (any TVTopShelfContent)? {
-        let items = store.items().compactMap { saved -> TVTopShelfSectionedItem? in
-            let imageURL = store.imageURL(for: saved)
-            guard FileManager.default.fileExists(atPath: imageURL.path) else { return nil }
-            var actionURL = URLComponents()
-            actionURL.scheme = "fiestaboard"
-            actionURL.host = "panel"
-            actionURL.path = "/\(saved.panelID)"
-            guard let url = actionURL.url else { return nil }
+    /// More Info opens Panels; Play opens the panel's viewer.
+    static let panelsURL = URL(string: "fiestaboard://panels")!
 
-            let item = TVTopShelfSectionedItem(identifier: saved.panelID)
+    static func viewerURL(panelID: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "fiestaboard"
+        components.host = "panel"
+        components.path = "/\(panelID)"
+        return components.url
+    }
+
+    static func make(store: TopShelfSnapshotStore, now: Date = Date()) -> (any TVTopShelfContent)? {
+        let items = store.items().compactMap { saved -> TVTopShelfCarouselItem? in
+            let oneX = store.imageURL(for: saved)
+            guard FileManager.default.fileExists(atPath: oneX.path),
+                  let viewer = viewerURL(panelID: saved.panelID) else { return nil }
+            // The legacy manifest has one image: it serves both scales.
+            let twoX = store.imageURL2x(for: saved).flatMap {
+                FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+            } ?? oneX
+
+            let item = TVTopShelfCarouselItem(identifier: saved.panelID)
             item.title = saved.name
-            item.imageShape = .hdtv
-            item.setImageURL(imageURL, for: [.screenScale1x, .screenScale2x])
-            item.playAction = TVTopShelfAction(url: url)
-            // Select opens a sectioned card through displayAction. A play
-            // action alone only responds to the remote's Play/Pause button.
-            item.displayAction = TVTopShelfAction(url: url)
+            item.contextTitle = store.statusLine(for: saved, now: now)
+            item.setImageURL(oneX, for: .screenScale1x)
+            item.setImageURL(twoX, for: .screenScale2x)
+            item.playAction = TVTopShelfAction(url: viewer)
+            item.displayAction = TVTopShelfAction(url: panelsURL)
             return item
         }
         guard !items.isEmpty else { return nil }
-        let section = TVTopShelfItemCollection(items: items)
-        section.title = "Available panels"
-        return TVTopShelfSectionedContent(sections: [section])
+        return TVTopShelfCarouselContent(style: .actions, items: items)
     }
 }
