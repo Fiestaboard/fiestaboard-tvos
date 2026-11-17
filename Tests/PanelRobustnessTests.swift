@@ -54,6 +54,7 @@ final class PanelRobustnessTests: XCTestCase {
         let deadline = Task {
             try? await Task.sleep(nanoseconds: 10_000_000_000)
             guard !Task.isCancelled else { return }
+            XCTFail("recovery simulation exceeded its deadline")
             replies.continuation.finish()
             store.stop()
         }
@@ -101,6 +102,8 @@ final class PanelRobustnessTests: XCTestCase {
             let code = generation.isMultiple(of: 2) ? 8 : 9
             StubURLProtocol.enqueue(.json("{\"rows\":1,\"cols\":1,\"characters\":[[\(code)]]}"), for: "/frame")
             var store: PanelStore? = PanelStore(client: client(), ref: "1")
+            let deadline = stopAfterDeadline(store!)
+            defer { deadline.cancel() }
             weak var released = store
             var snapshots = store!.snapshots().makeAsyncIterator()
             let next = await snapshots.next()
@@ -112,19 +115,30 @@ final class PanelRobustnessTests: XCTestCase {
             XCTAssertNil(ended)
             store = nil
             XCTAssertNil(released, "generation \(generation) retained its store")
+            released = nil
         }
         XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path.hasSuffix("/frame") }.count, 24)
     }
 
     func testRevokedSessionEndsPollingAfterTheLastGoodFrame() async throws {
+        let replies = AsyncStream<() -> Void>.makeStream()
+        defer { replies.continuation.finish() }
         StubURLProtocol.enqueue(.json(Fixtures.panelJSON), for: "/api/panel/1")
         StubURLProtocol.enqueue(.json(Fixtures.frameJSON), for: "/frame")
-        StubURLProtocol.enqueue(.json("{}", status: 401), for: "/frame")
+        var refused = StubURLProtocol.Stub.json("{}", status: 401)
+        refused.beforeReply = { replies.continuation.yield($0) }
+        StubURLProtocol.enqueue(refused, for: "/frame")
         let store = PanelStore(client: client(), ref: "1", frameInterval: 0.02)
         defer { store.stop() }
+        let deadline = stopAfterDeadline(store) { replies.continuation.finish() }
+        defer { deadline.cancel() }
         var snapshots = store.snapshots().makeAsyncIterator()
         let first = await snapshots.next()
         XCTAssertEqual(first?.connection, .live)
+        var pending = replies.stream.makeAsyncIterator()
+        let nextReply = await pending.next()
+        let reply = try XCTUnwrap(nextReply)
+        reply()
         let revoked = await snapshots.next()
         XCTAssertEqual(revoked?.connection, .unauthorized)
         XCTAssertEqual(revoked?.cells, first?.cells)
@@ -132,5 +146,15 @@ final class PanelRobustnessTests: XCTestCase {
         let ended = await snapshots.next()
         XCTAssertNil(ended, "a rejected session must not keep polling")
         XCTAssertEqual(StubURLProtocol.requests.filter { $0.url.path.hasSuffix("/frame") }.count, 2)
+    }
+
+    private func stopAfterDeadline(_ store: PanelStore, unblock: @escaping () -> Void = {}) -> Task<Void, Never> {
+        Task { [weak store] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard !Task.isCancelled else { return }
+            XCTFail("polling lifecycle exceeded its deadline")
+            unblock()
+            store?.stop()
+        }
     }
 }
